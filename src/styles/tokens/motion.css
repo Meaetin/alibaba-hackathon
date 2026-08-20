@@ -1,0 +1,218 @@
+/*
+ * Argo motion tokens
+ *
+ * Core tokens are intentionally small. Components should consume the semantic
+ * aliases below, not introduce new durations or easing curves inline.
+ */
+:root {
+  /* Core duration scale */
+  --motion-duration-instant: 0ms;
+  --motion-duration-micro: 100ms;
+  --motion-duration-fast: 150ms;
+  --motion-duration-normal: 200ms;
+  --motion-duration-medium: 250ms;
+  --motion-duration-slow: 300ms;
+  --motion-duration-exit: 350ms;
+  --motion-duration-enter: 400ms;
+  --motion-duration-landing: 500ms;
+  --motion-duration-progress: 700ms;
+  --motion-duration-progress-auto: 1500ms;
+  --motion-duration-validation: 1000ms;
+  --motion-duration-selection: 180ms;
+  --motion-duration-selection-rail: 220ms;
+  --motion-duration-decorative-slow: 6000ms;
+  --motion-duration-decorative-medium: 5000ms;
+  --motion-duration-decorative-fast: 4000ms;
+
+  /* Core easing */
+  --motion-ease-standard: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-ease-spatial: cubic-bezier(0.25, 1, 0.5, 1);
+  --motion-ease-linear: linear;
+  --motion-ease-loop: ease-in-out;
+
+  /* Spatial motion */
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+  --motion-distance-lg: 12px;
+  --motion-stagger-offset: 80ms;
+  --motion-stagger-gap: 50ms;
+  --motion-stagger-landing: 120ms;
+  --motion-delay-decorative-medium: 1000ms;
+  --motion-delay-decorative-fast: 500ms;
+
+  /* Semantic aliases */
+  --motion-button-duration: var(--motion-duration-fast);
+  --motion-control-duration: var(--motion-duration-normal);
+  --motion-overlay-duration: var(--motion-duration-slow);
+  --motion-overlay-ease: var(--motion-ease-emphasized);
+  --motion-enter-duration: var(--motion-duration-enter);
+
+  /* Tailwind transition utilities without an explicit duration/ease consume
+     the system defaults instead of silently falling back to framework values. */
+  --default-transition-duration: var(--motion-duration-fast);
+  --default-transition-timing-function: var(--motion-ease-standard);
+}
+
+/* Keep all content available while removing non-essential travel and sequencing. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-micro: 1ms;
+    --motion-duration-fast: 1ms;
+    --motion-duration-normal: 1ms;
+    --motion-duration-medium: 1ms;
+    --motion-duration-slow: 1ms;
+    --motion-duration-exit: 1ms;
+    --motion-duration-enter: 1ms;
+    --motion-duration-landing: 1ms;
+    --motion-duration-progress: 1ms;
+    --motion-duration-progress-auto: 1ms;
+    --motion-duration-validation: 1ms;
+    --motion-duration-selection: 1ms;
+    --motion-duration-selection-rail: 1ms;
+    --motion-duration-decorative-slow: 1ms;
+    --motion-duration-decorative-medium: 1ms;
+    --motion-duration-decorative-fast: 1ms;
+    --motion-distance-sm: 0px;
+    --motion-distance-md: 0px;
+    --motion-distance-lg: 0px;
+    --motion-stagger-offset: 0ms;
+    --motion-stagger-gap: 0ms;
+    --motion-stagger-landing: 0ms;
+    --motion-delay-decorative-medium: 0ms;
+    --motion-delay-decorative-fast: 0ms;
+  }
+
+  .animate-float-slow,
+  .animate-float-medium,
+  .animate-float-fast,
+  .stripe-background-motion,
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Shared overlay motion                                                       */
+/* -------------------------------------------------------------------------- */
+
+@keyframes modal-stagger-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--modal-stagger-y, var(--motion-distance-lg));
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+@keyframes field-validate {
+  0% { transform: translateX(0); box-shadow: 0 0 0 0 var(--action-dark); }
+  8% { transform: translateX(-6px); box-shadow: 0 0 0 2px var(--action-dark); }
+  16% { transform: translateX(6px); box-shadow: 0 0 0 2px var(--action-dark); }
+  24% { transform: translateX(-4px); box-shadow: 0 0 0 2px var(--action-dark); }
+  32% { transform: translateX(4px); box-shadow: 0 0 0 2px var(--action-dark); }
+  40% { transform: translateX(-2px); box-shadow: 0 0 0 2px var(--action-dark); }
+  50% { transform: translateX(0); box-shadow: 0 0 0 2px var(--action-dark); }
+  100% { transform: translateX(0); box-shadow: 0 0 0 0 var(--action-dark); }
+}
+
+.modal-popup-animated[data-open] [data-stagger] > * {
+  animation-name: modal-stagger-in;
+  animation-duration: var(--modal-stagger-duration, var(--motion-overlay-duration));
+  animation-timing-function: var(--modal-stagger-easing, var(--motion-overlay-ease));
+  animation-fill-mode: both;
+}
+
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(1) { animation-delay: calc(var(--motion-stagger-offset) + 0 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(2) { animation-delay: calc(var(--motion-stagger-offset) + 1 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(3) { animation-delay: calc(var(--motion-stagger-offset) + 2 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(4) { animation-delay: calc(var(--motion-stagger-offset) + 3 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(5) { animation-delay: calc(var(--motion-stagger-offset) + 4 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(6) { animation-delay: calc(var(--motion-stagger-offset) + 5 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(7) { animation-delay: calc(var(--motion-stagger-offset) + 6 * var(--motion-stagger-gap)); }
+.modal-popup-animated[data-open] [data-stagger] > *:nth-child(8) { animation-delay: calc(var(--motion-stagger-offset) + 7 * var(--motion-stagger-gap)); }
+
+.modal-backdrop-animated {
+  opacity: var(--modal-backdrop-opacity, 0.5);
+  transition-property: opacity, display;
+  transition-duration: var(--modal-backdrop-duration, var(--motion-overlay-duration));
+  transition-delay: var(--modal-backdrop-delay, 0ms);
+  transition-timing-function: var(--modal-backdrop-easing, var(--motion-ease-standard));
+  transition-behavior: allow-discrete;
+  backdrop-filter: blur(var(--modal-backdrop-blur, 0px));
+}
+
+.modal-backdrop-animated[data-ending-style],
+.modal-backdrop-animated[data-starting-style] {
+  opacity: 0;
+}
+
+.modal-popup-animated {
+  transform-origin: var(--modal-origin, center);
+  transition-property: opacity, scale, translate, rotate, filter, display;
+  transition-duration: var(--modal-duration, var(--motion-overlay-duration));
+  transition-delay: var(--modal-delay, 0ms);
+  transition-timing-function: var(--modal-easing, var(--motion-overlay-ease));
+  transition-behavior: allow-discrete;
+}
+
+.modal-popup-animated[data-starting-style],
+.modal-popup-animated[data-ending-style] {
+  opacity: var(--modal-start-opacity, 0);
+  scale: calc(var(--modal-scale, 0.95) * var(--modal-scale-x, 1)) calc(var(--modal-scale, 0.95) * var(--modal-scale-y, 1));
+  translate: calc(-50% + var(--modal-translate-x, 0px)) calc(-50% + var(--modal-translate-y, var(--motion-distance-md)));
+  rotate: var(--modal-rotate, 0deg);
+  filter: blur(var(--modal-blur, 0px));
+}
+
+/* Desktop dialog exits preserve context with a softer, faster handoff than
+   the entrance. Mobile sheets retain their directional full-height travel. */
+.modal-popup-animated:not([data-mobile-sheet="true"])[data-ending-style] {
+  transition-duration: var(--motion-duration-fast);
+  scale: calc(0.98 * var(--modal-scale-x, 1)) calc(0.98 * var(--modal-scale-y, 1));
+  translate: calc(-50% + var(--modal-translate-x, 0px)) calc(-50% + var(--motion-distance-sm));
+}
+
+.modal-popup-animated[data-mobile-sheet="true"][data-starting-style],
+.modal-popup-animated[data-mobile-sheet="true"][data-ending-style] {
+  opacity: 1;
+  scale: 1;
+  translate: 0 100%;
+  rotate: 0deg;
+  filter: none;
+}
+
+.sheet-popup {
+  transition-property: translate, opacity, display;
+  transition-duration: var(--motion-overlay-duration);
+  transition-timing-function: var(--motion-overlay-ease);
+  transition-behavior: allow-discrete;
+}
+
+.sheet-popup[data-side="bottom"][data-starting-style],
+.sheet-popup[data-side="bottom"][data-ending-style] { translate: 0 100%; }
+.sheet-popup[data-side="right"][data-starting-style],
+.sheet-popup[data-side="right"][data-ending-style] { translate: 100% 0; }
+.sheet-popup[data-side="left"][data-starting-style],
+.sheet-popup[data-side="left"][data-ending-style] { translate: -100% 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-popup {
+    transition-property: opacity, display;
+  }
+
+  .sheet-popup[data-starting-style],
+  .sheet-popup[data-ending-style] {
+    translate: 0 0;
+    opacity: 0;
+  }
+
+  @keyframes field-validate {
+    0% { box-shadow: 0 0 0 0 var(--action-dark); }
+    20% { box-shadow: 0 0 0 2px var(--action-dark); }
+    100% { box-shadow: 0 0 0 0 var(--action-dark); }
+  }
+}

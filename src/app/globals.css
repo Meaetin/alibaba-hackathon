@@ -1,0 +1,1133 @@
+@import "tailwindcss";
+
+@import "tw-animate-css";
+
+@import "../styles/tokens/motion.css";
+
+/* Height breakpoint: viewports too short to fit the 1024px-tall design canvas
+   (laptops with browser chrome ≈ 750-900px). Use `short:` to compact
+   height-critical sections so they fit above the fold. */
+@custom-variant short (@media (max-height: 60rem));
+
+:root {
+  --navbar-height: 72px;
+  /* Standard card height (link/collection/itinerary/location/create cards).
+     Card width is derived from the grid: (1280px container − 4×16px gaps) / 5 cols ≈ 243px. */
+  --card-height: 292px;
+
+  /* ───────────── Semantic Tokens (Option B) — light ─────────────
+     Property-agnostic raw values; registered as --color-* in @theme inline. */
+
+  /* Surface (backgrounds) */
+  --surface: var(--color-white);
+  --surface-alt: var(--color-mist-50);
+  --surface-muted: var(--color-mist-100);
+  --surface-muted-hover: var(--color-mist-200);
+  --surface-muted-active: var(--color-mist-300);
+  --surface-brand: var(--color-brand-50);
+  --surface-brand-muted: var(--color-brand-200);
+  --surface-dark: var(--color-mist-900);
+  --surface-dark-hover: var(--color-mist-700);
+  --surface-error: var(--color-red-500);
+  --surface-error-subtle: var(--color-red-50);
+  --surface-success: var(--color-emerald-600);
+  --surface-success-subtle: var(--color-emerald-50);
+  --surface-warning: var(--color-amber-600);
+  --surface-warning-subtle: var(--color-amber-50);
+  --surface-info: var(--color-blue-500);
+  --surface-info-subtle: var(--color-blue-50);
+  --surface-overlay: rgba(0, 0, 0, 0.4);
+  --surface-overlay-hover: rgba(9, 11, 12, 0.08);
+  --surface-overlay-active: rgba(9, 11, 12, 0.16);
+
+  /* Content (text) */
+  --content: var(--color-mist-950);
+  --content-secondary: var(--color-mist-500);
+  --content-tertiary: var(--color-mist-600);
+  --content-placeholder: var(--color-mist-400);
+  --content-on-brand: var(--color-brand-50);
+  --content-on-dark: var(--color-white);
+  --content-on-info: var(--color-white);
+  --content-brand: var(--color-brand-500);
+  --content-info: var(--color-blue-600);
+  --content-error: var(--color-red-500);
+  --content-success: var(--color-emerald-600);
+  --content-warning: var(--color-amber-600);
+
+  /* Glyph (icons) */
+  --glyph: var(--color-mist-800);
+  --glyph-secondary: var(--color-mist-500);
+  --glyph-disabled: var(--color-mist-400);
+  --glyph-on-brand: var(--color-brand-50);
+  --glyph-on-dark: var(--color-white);
+  --glyph-brand: var(--color-brand-500);
+  --glyph-error: var(--color-red-500);
+  --glyph-success: var(--color-emerald-600);
+  --glyph-warning: var(--color-amber-600);
+
+  /* Edge (borders) */
+  --edge: var(--color-mist-200);
+  --edge-subtle: var(--color-mist-100);
+  --edge-muted: var(--color-mist-300);
+  --edge-strong: var(--color-mist-400);
+  --edge-brand: var(--color-brand-500);
+  --edge-brand-subtle: var(--color-brand-300);
+  --edge-info: var(--color-blue-500);
+  --edge-error: var(--color-red-500);
+  --edge-input: var(--color-mist-400);
+  --edge-input-active: var(--color-brand-400);
+  --edge-input-focus-ring: var(--color-brand-300);
+
+  /* Action (interactive) */
+  --action-brand: var(--color-brand-500);
+  --action-brand-border: var(--color-brand-600);
+  --action-brand-highlight: var(--color-brand-400);
+  --action-brand-hover: var(--color-brand-600);
+  --action-brand-active: var(--color-brand-700);
+  --action-secondary: var(--color-mist-100);
+  --action-secondary-border: var(--color-mist-200);
+  --action-secondary-highlight: var(--color-mist-50);
+  --action-secondary-hover: var(--color-mist-200);
+  --action-secondary-active: var(--color-mist-300);
+  --action-dark: var(--color-mist-900);
+  --action-dark-border: var(--color-mist-800);
+  --action-dark-highlight: var(--color-mist-700);
+  --action-dark-hover-bg: var(--color-mist-800);
+  --action-dark-active: var(--color-mist-700);
+  --action-info: var(--color-blue-500);
+  --action-info-border: var(--color-blue-600);
+  --action-info-highlight: var(--color-blue-400);
+  --action-error: var(--color-red-500);
+  --action-error-highlight: var(--color-red-400);
+  --action-error-hover: var(--color-red-600);
+  --action-error-active: var(--color-red-700);
+  --action-success: var(--color-emerald-600);
+  --action-success-highlight: var(--color-emerald-400);
+  --action-warning: var(--color-amber-600);
+  --action-warning-highlight: var(--color-amber-400);
+
+  /* Category (CategoryBadge, key icons) — replaces --key-icon-* */
+  --category-link: var(--color-blue-500);
+  --category-link-icon: var(--color-blue-400);
+  --category-collection: var(--color-indigo-500);
+  --category-collection-icon: var(--color-indigo-400);
+  --category-itinerary: var(--color-teal-500);
+  --category-itinerary-icon: var(--color-teal-400);
+  --category-location: var(--color-red-500);
+  --category-location-icon: var(--color-red-400);
+  --category-brand: var(--color-brand-500);
+  --category-brand-icon: var(--color-brand-400);
+  --category-neutral: var(--color-mist-500);
+  --category-neutral-icon: var(--color-mist-400);
+  --category-flight: var(--color-sky-600);
+  --category-flight-icon: var(--color-sky-400);
+  --category-accommodation: var(--color-amber-600);
+  --category-accommodation-icon: var(--color-amber-400);
+  --category-expense: var(--color-emerald-600);
+  --category-expense-icon: var(--color-emerald-400);
+  /* -on: glyph colour on top of the category fill (50 shade of the family) */
+  --category-link-on: var(--color-blue-50);
+  --category-collection-on: var(--color-indigo-50);
+  --category-itinerary-on: var(--color-teal-50);
+  --category-location-on: var(--color-red-50);
+  --category-brand-on: var(--color-brand-50);
+  --category-neutral-on: var(--color-mist-50);
+  --category-flight-on: var(--color-sky-50);
+  --category-accommodation-on: var(--color-amber-50);
+  --category-expense-on: var(--color-emerald-50);
+
+  /* Effects / shadows — out of scope, kept as-is */
+  --brand-shadow: #7626271e;
+  --neutral-shadow: #161b1d1e;
+  --input-inner-shadow: #22292b33;
+  --rating: var(--color-yellow-400);
+  --shadow-default: 0px 2px 16px 0px rgba(0, 0, 0, 0.08);
+
+  /* Calendar Day Colors */
+  --cal-blue-bg: var(--color-blue-100);
+  --cal-blue-bg-subtle: var(--color-blue-50);
+  --cal-blue-marker: var(--color-blue-400);
+  --cal-blue-fg: var(--color-blue-900);
+  --cal-orange-bg: var(--color-orange-100);
+  --cal-orange-bg-subtle: var(--color-orange-50);
+  --cal-orange-marker: var(--color-orange-400);
+  --cal-orange-fg: var(--color-orange-900);
+  --cal-red-bg: var(--color-red-100);
+  --cal-red-bg-subtle: var(--color-red-50);
+  --cal-red-marker: var(--color-red-400);
+  --cal-red-fg: var(--color-red-900);
+  --cal-amber-bg: var(--color-amber-100);
+  --cal-amber-bg-subtle: var(--color-amber-50);
+  --cal-amber-marker: var(--color-amber-400);
+  --cal-amber-fg: var(--color-amber-900);
+  --cal-yellow-bg: var(--color-yellow-100);
+  --cal-yellow-bg-subtle: var(--color-yellow-50);
+  --cal-yellow-marker: var(--color-yellow-400);
+  --cal-yellow-fg: var(--color-yellow-900);
+  --cal-lime-bg: var(--color-lime-100);
+  --cal-lime-bg-subtle: var(--color-lime-50);
+  --cal-lime-marker: var(--color-lime-400);
+  --cal-lime-fg: var(--color-lime-900);
+  --cal-green-bg: var(--color-green-100);
+  --cal-green-bg-subtle: var(--color-green-50);
+  --cal-green-marker: var(--color-green-400);
+  --cal-green-fg: var(--color-green-900);
+  --cal-emerald-bg: var(--color-emerald-100);
+  --cal-emerald-bg-subtle: var(--color-emerald-50);
+  --cal-emerald-marker: var(--color-emerald-400);
+  --cal-emerald-fg: var(--color-emerald-900);
+  --cal-teal-bg: var(--color-teal-100);
+  --cal-teal-bg-subtle: var(--color-teal-50);
+  --cal-teal-marker: var(--color-teal-400);
+  --cal-teal-fg: var(--color-teal-900);
+  --cal-cyan-bg: var(--color-cyan-100);
+  --cal-cyan-bg-subtle: var(--color-cyan-50);
+  --cal-cyan-marker: var(--color-cyan-400);
+  --cal-cyan-fg: var(--color-cyan-900);
+  --cal-sky-bg: var(--color-sky-100);
+  --cal-sky-bg-subtle: var(--color-sky-50);
+  --cal-sky-marker: var(--color-sky-400);
+  --cal-sky-fg: var(--color-sky-900);
+  --cal-indigo-bg: var(--color-indigo-100);
+  --cal-indigo-bg-subtle: var(--color-indigo-50);
+  --cal-indigo-marker: var(--color-indigo-400);
+  --cal-indigo-fg: var(--color-indigo-900);
+  --cal-violet-bg: var(--color-violet-100);
+  --cal-violet-bg-subtle: var(--color-violet-50);
+  --cal-violet-marker: var(--color-violet-400);
+  --cal-violet-fg: var(--color-violet-900);
+  --cal-purple-bg: var(--color-purple-100);
+  --cal-purple-bg-subtle: var(--color-purple-50);
+  --cal-purple-marker: var(--color-purple-400);
+  --cal-purple-fg: var(--color-purple-900);
+  --cal-fuchsia-bg: var(--color-fuchsia-100);
+  --cal-fuchsia-bg-subtle: var(--color-fuchsia-50);
+  --cal-fuchsia-marker: var(--color-fuchsia-400);
+  --cal-fuchsia-fg: var(--color-fuchsia-900);
+  --cal-pink-bg: var(--color-pink-100);
+  --cal-pink-bg-subtle: var(--color-pink-50);
+  --cal-pink-marker: var(--color-pink-400);
+  --cal-pink-fg: var(--color-pink-900);
+  --cal-rose-bg: var(--color-rose-100);
+  --cal-rose-bg-subtle: var(--color-rose-50);
+  --cal-rose-marker: var(--color-rose-400);
+  --cal-rose-fg: var(--color-rose-900);
+  --cal-zinc-bg: var(--color-zinc-100);
+  --cal-zinc-bg-subtle: var(--color-zinc-50);
+  --cal-zinc-marker: var(--color-zinc-400);
+  --cal-zinc-fg: var(--color-zinc-900);
+  --cal-taupe-bg: var(--color-taupe-100);
+  --cal-taupe-bg-subtle: var(--color-taupe-50);
+  --cal-taupe-marker: var(--color-taupe-400);
+  --cal-taupe-fg: var(--color-taupe-950);
+  --cal-mauve-bg: var(--color-mauve-100);
+  --cal-mauve-bg-subtle: var(--color-zinc-50);
+  --cal-mauve-marker: var(--color-mauve-400);
+  --cal-mauve-fg: var(--color-mauve-950);
+  --cal-mist-bg: var(--color-mist-100);
+  --cal-mist-bg-subtle: var(--color-mist-50);
+  --cal-mist-marker: var(--color-mist-400);
+  --cal-mist-fg: var(--color-mist-900);
+  --cal-olive-bg: var(--color-olive-100);
+  --cal-olive-bg-subtle: var(--color-olive-50);
+  --cal-olive-marker: var(--color-olive-400);
+  --cal-olive-fg: var(--color-olive-950);
+  --cal-flight-bg: var(--color-blue-100);
+  --cal-flight-bg-subtle: var(--color-blue-50);
+  --cal-flight-marker: var(--color-blue-600);
+  --cal-flight-fg: var(--color-blue-900);
+
+  --chart-1: var(--color-cyan-100);
+  --chart-2: var(--color-cyan-200);
+  --chart-3: var(--color-cyan-300);
+  --chart-4: var(--color-cyan-400);
+  --chart-5: var(--color-cyan-500);
+
+  --sidebar: var(--color-white);
+  --sidebar-foreground: var(--color-zinc-900);
+  --sidebar-primary: var(--color-zinc-900);
+  --sidebar-primary-foreground: var(--color-white);
+  --sidebar-accent: var(--color-zinc-100);
+  --sidebar-accent-foreground: var(--color-zinc-900);
+  --sidebar-border: var(--color-mist-200);
+  --sidebar-ring: var(--color-zinc-400);
+}
+
+.dark {
+  /* ───────────── Semantic Tokens (Option B) — dark ───────────── */
+
+  /* Surface */
+  --surface: var(--color-mist-950);
+  --surface-alt: var(--color-mist-900);
+  --surface-muted: var(--color-mist-800);
+  --surface-muted-hover: var(--color-mist-700);
+  --surface-muted-active: var(--color-mist-800);
+  --surface-brand: var(--color-brand-900);
+  --surface-brand-muted: var(--color-brand-800);
+  --surface-dark: var(--color-mist-100);
+  --surface-dark-hover: var(--color-mist-300);
+  --surface-error: var(--color-red-400);
+  --surface-error-subtle: var(--color-red-900);
+  --surface-success: var(--color-emerald-500);
+  --surface-success-subtle: var(--color-emerald-900);
+  --surface-warning: var(--color-amber-500);
+  --surface-warning-subtle: var(--color-amber-900);
+  --surface-info: var(--color-blue-500);
+  --surface-info-subtle: var(--color-blue-900);
+  --surface-overlay: rgba(0, 0, 0, 0.4);
+  --surface-overlay-hover: rgba(255, 255, 255, 0.08);
+  --surface-overlay-active: rgba(255, 255, 255, 0.16);
+
+  /* Content */
+  --content: var(--color-mist-50);
+  --content-secondary: var(--color-mist-400);
+  --content-tertiary: var(--color-mist-400);
+  --content-placeholder: var(--color-mist-600);
+  --content-on-brand: var(--color-brand-950);
+  --content-on-dark: var(--color-mist-950);
+  --content-on-info: var(--color-white);
+  --content-brand: var(--color-brand-400);
+  --content-info: var(--color-blue-400);
+  --content-error: var(--color-red-400);
+  --content-success: var(--color-emerald-400);
+  --content-warning: var(--color-amber-400);
+
+  /* Glyph */
+  --glyph: var(--color-mist-200);
+  --glyph-secondary: var(--color-mist-400);
+  --glyph-disabled: var(--color-mist-600);
+  --glyph-on-brand: var(--color-brand-950);
+  --glyph-on-dark: var(--color-mist-950);
+  --glyph-brand: var(--color-brand-400);
+  --glyph-error: var(--color-red-400);
+  --glyph-success: var(--color-emerald-400);
+  --glyph-warning: var(--color-amber-400);
+
+  /* Edge */
+  --edge: var(--color-mist-800);
+  --edge-subtle: var(--color-mist-900);
+  --edge-muted: var(--color-mist-700);
+  --edge-strong: var(--color-mist-600);
+  --edge-brand: var(--color-brand-400);
+  --edge-brand-subtle: var(--color-brand-700);
+  --edge-info: var(--color-blue-400);
+  --edge-error: var(--color-red-400);
+  --edge-input: var(--color-mist-700);
+  --edge-input-active: var(--color-brand-600);
+  --edge-input-focus-ring: var(--color-brand-700);
+
+  /* Action */
+  --action-brand: var(--color-brand-400);
+  --action-brand-border: var(--color-brand-500);
+  --action-brand-highlight: var(--color-brand-300);
+  --action-brand-hover: var(--color-brand-300);
+  --action-brand-active: var(--color-brand-500);
+  --action-secondary: var(--color-mist-800);
+  --action-secondary-border: var(--color-mist-700);
+  --action-secondary-highlight: var(--color-mist-900);
+  --action-secondary-hover: var(--color-mist-700);
+  --action-secondary-active: var(--color-mist-600);
+  --action-dark: var(--color-mist-100);
+  --action-dark-border: var(--color-mist-200);
+  --action-dark-highlight: var(--color-mist-300);
+  --action-dark-hover-bg: var(--color-mist-200);
+  --action-dark-active: var(--color-mist-300);
+  --action-info: var(--color-blue-500);
+  --action-info-border: var(--color-blue-600);
+  --action-info-highlight: var(--color-blue-400);
+  --action-error: var(--color-red-400);
+  --action-error-highlight: var(--color-red-300);
+  --action-error-hover: var(--color-red-300);
+  --action-error-active: var(--color-red-500);
+  --action-success: var(--color-emerald-500);
+  --action-success-highlight: var(--color-emerald-300);
+  --action-warning: var(--color-amber-500);
+  --action-warning-highlight: var(--color-amber-300);
+
+  /* Category — uniform across themes */
+  --category-link: var(--color-blue-500);
+  --category-link-icon: var(--color-blue-400);
+  --category-collection: var(--color-indigo-500);
+  --category-collection-icon: var(--color-indigo-400);
+  --category-itinerary: var(--color-teal-500);
+  --category-itinerary-icon: var(--color-teal-400);
+  --category-location: var(--color-red-500);
+  --category-location-icon: var(--color-red-400);
+  --category-brand: var(--color-brand-500);
+  --category-brand-icon: var(--color-brand-400);
+  --category-neutral: var(--color-mist-500);
+  --category-neutral-icon: var(--color-mist-400);
+  --category-flight: var(--color-sky-600);
+  --category-flight-icon: var(--color-sky-400);
+  --category-accommodation: var(--color-amber-600);
+  --category-accommodation-icon: var(--color-amber-400);
+  --category-expense: var(--color-emerald-600);
+  --category-expense-icon: var(--color-emerald-400);
+  /* -on: glyph colour on top of the category fill (50 shade of the family) */
+  --category-link-on: var(--color-blue-50);
+  --category-collection-on: var(--color-indigo-50);
+  --category-itinerary-on: var(--color-teal-50);
+  --category-location-on: var(--color-red-50);
+  --category-brand-on: var(--color-brand-50);
+  --category-neutral-on: var(--color-mist-50);
+  --category-flight-on: var(--color-sky-50);
+  --category-accommodation-on: var(--color-amber-50);
+  --category-expense-on: var(--color-emerald-50);
+
+  /* Effects / shadows — out of scope, kept as-is */
+  --brand-shadow: rgba(118, 38, 39, 0.24);
+  --neutral-shadow: rgba(22, 27, 29, 0.24);
+  --input-inner-shadow: #e3e7e833;
+  --rating: var(--color-yellow-400);
+  --shadow-default: 0px 2px 16px 0px rgba(0, 0, 0, 0.24);
+
+  /* Calendar Day Colors — Dark Mode */
+  --cal-blue-bg: var(--color-blue-800);
+  --cal-blue-bg-subtle: var(--color-blue-900);
+  --cal-blue-marker: var(--color-blue-400);
+  --cal-blue-fg: var(--color-blue-50);
+  --cal-orange-bg: var(--color-orange-800);
+  --cal-orange-bg-subtle: var(--color-orange-900);
+  --cal-orange-marker: var(--color-orange-400);
+  --cal-orange-fg: var(--color-orange-50);
+  --cal-red-bg: var(--color-red-800);
+  --cal-red-bg-subtle: var(--color-red-900);
+  --cal-red-marker: var(--color-red-400);
+  --cal-red-fg: var(--color-red-50);
+  --cal-amber-bg: var(--color-amber-800);
+  --cal-amber-bg-subtle: var(--color-amber-900);
+  --cal-amber-marker: var(--color-amber-400);
+  --cal-amber-fg: var(--color-amber-50);
+  --cal-yellow-bg: var(--color-yellow-800);
+  --cal-yellow-bg-subtle: var(--color-yellow-900);
+  --cal-yellow-marker: var(--color-yellow-400);
+  --cal-yellow-fg: var(--color-yellow-50);
+  --cal-lime-bg: var(--color-lime-800);
+  --cal-lime-bg-subtle: var(--color-lime-900);
+  --cal-lime-marker: var(--color-lime-400);
+  --cal-lime-fg: var(--color-lime-50);
+  --cal-green-bg: var(--color-green-800);
+  --cal-green-bg-subtle: var(--color-green-900);
+  --cal-green-marker: var(--color-green-400);
+  --cal-green-fg: var(--color-green-50);
+  --cal-emerald-bg: var(--color-emerald-800);
+  --cal-emerald-bg-subtle: var(--color-emerald-900);
+  --cal-emerald-marker: var(--color-emerald-400);
+  --cal-emerald-fg: var(--color-emerald-50);
+  --cal-teal-bg: var(--color-teal-800);
+  --cal-teal-bg-subtle: var(--color-teal-900);
+  --cal-teal-marker: var(--color-teal-400);
+  --cal-teal-fg: var(--color-teal-50);
+  --cal-cyan-bg: var(--color-cyan-800);
+  --cal-cyan-bg-subtle: var(--color-cyan-900);
+  --cal-cyan-marker: var(--color-cyan-400);
+  --cal-cyan-fg: var(--color-cyan-50);
+  --cal-sky-bg: var(--color-sky-800);
+  --cal-sky-bg-subtle: var(--color-sky-900);
+  --cal-sky-marker: var(--color-sky-400);
+  --cal-sky-fg: var(--color-sky-50);
+  --cal-indigo-bg: var(--color-indigo-800);
+  --cal-indigo-bg-subtle: var(--color-indigo-900);
+  --cal-indigo-marker: var(--color-indigo-400);
+  --cal-indigo-fg: var(--color-indigo-50);
+  --cal-violet-bg: var(--color-violet-800);
+  --cal-violet-bg-subtle: var(--color-violet-900);
+  --cal-violet-marker: var(--color-violet-400);
+  --cal-violet-fg: var(--color-violet-50);
+  --cal-purple-bg: var(--color-purple-800);
+  --cal-purple-bg-subtle: var(--color-purple-900);
+  --cal-purple-marker: var(--color-purple-400);
+  --cal-purple-fg: var(--color-purple-50);
+  --cal-fuchsia-bg: var(--color-fuchsia-800);
+  --cal-fuchsia-bg-subtle: var(--color-fuchsia-900);
+  --cal-fuchsia-marker: var(--color-fuchsia-400);
+  --cal-fuchsia-fg: var(--color-fuchsia-50);
+  --cal-pink-bg: var(--color-pink-800);
+  --cal-pink-bg-subtle: var(--color-pink-900);
+  --cal-pink-marker: var(--color-pink-400);
+  --cal-pink-fg: var(--color-pink-50);
+  --cal-rose-bg: var(--color-rose-800);
+  --cal-rose-bg-subtle: var(--color-rose-900);
+  --cal-rose-marker: var(--color-rose-400);
+  --cal-rose-fg: var(--color-rose-50);
+  --cal-zinc-bg: var(--color-zinc-800);
+  --cal-zinc-bg-subtle: var(--color-zinc-900);
+  --cal-zinc-marker: var(--color-zinc-400);
+  --cal-zinc-fg: var(--color-zinc-50);
+  --cal-taupe-bg: var(--color-taupe-800);
+  --cal-taupe-bg-subtle: var(--color-taupe-950);
+  --cal-taupe-marker: var(--color-taupe-400);
+  --cal-taupe-fg: var(--color-taupe-50);
+  --cal-mauve-bg: var(--color-mauve-800);
+  --cal-mauve-bg-subtle: var(--color-mauve-950);
+  --cal-mauve-marker: var(--color-mauve-400);
+  --cal-mauve-fg: var(--color-zinc-50);
+  --cal-mist-bg: var(--color-mist-800);
+  --cal-mist-bg-subtle: var(--color-mist-900);
+  --cal-mist-marker: var(--color-mist-400);
+  --cal-mist-fg: var(--color-mist-50);
+  --cal-olive-bg: var(--color-olive-800);
+  --cal-olive-bg-subtle: var(--color-olive-950);
+  --cal-olive-marker: var(--color-olive-400);
+  --cal-olive-fg: var(--color-olive-50);
+  --cal-flight-bg: var(--color-blue-950);
+  --cal-flight-bg-subtle: var(--color-blue-900);
+  --cal-flight-marker: var(--color-blue-400);
+  --cal-flight-fg: var(--color-blue-100);
+
+  --chart-1: var(--color-cyan-100);
+  --chart-2: var(--color-cyan-200);
+  --chart-3: var(--color-cyan-300);
+  --chart-4: var(--color-cyan-400);
+  --chart-5: var(--color-cyan-500);
+
+  --sidebar: var(--color-zinc-900);
+  --sidebar-foreground: var(--color-zinc-50);
+  --sidebar-primary: var(--color-brand-500);
+  --sidebar-primary-foreground: var(--color-white);
+  --sidebar-accent: var(--color-zinc-800);
+  --sidebar-accent-foreground: var(--color-zinc-50);
+  --sidebar-border: var(--color-mist-800);
+  --sidebar-ring: var(--color-brand-500);
+}
+
+@theme inline {
+  --font-primary: "Switzer", system-ui, sans-serif;
+  --font-secondary: var(--font-lora), "Lora", Georgia, serif;
+
+  /* Brand color scale — only custom scale, all others are built-in Tailwind v4 */
+  --color-brand-50: #fdf3f3;
+  --color-brand-100: #fce4e4;
+  --color-brand-200: #f9cfd0;
+  --color-brand-300: #f4adae;
+  --color-brand-400: #ec7d7f;
+  --color-brand-500: #e05254;
+  --color-brand-600: #cc3638;
+  --color-brand-700: #ab2a2c;
+  --color-brand-800: #8e2627;
+  --color-brand-900: #762627;
+  --color-brand-950: #521a1a;
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+
+  /* Calendar color aliases */
+  --color-cal-blue-bg: var(--cal-blue-bg);
+  --color-cal-blue-bg-subtle: var(--cal-blue-bg-subtle);
+  --color-cal-blue-marker: var(--cal-blue-marker);
+  --color-cal-blue-fg: var(--cal-blue-fg);
+  --color-cal-orange-bg: var(--cal-orange-bg);
+  --color-cal-orange-bg-subtle: var(--cal-orange-bg-subtle);
+  --color-cal-orange-marker: var(--cal-orange-marker);
+  --color-cal-orange-fg: var(--cal-orange-fg);
+  --color-cal-red-bg: var(--cal-red-bg);
+  --color-cal-red-bg-subtle: var(--cal-red-bg-subtle);
+  --color-cal-red-marker: var(--cal-red-marker);
+  --color-cal-red-fg: var(--cal-red-fg);
+  --color-cal-amber-bg: var(--cal-amber-bg);
+  --color-cal-amber-bg-subtle: var(--cal-amber-bg-subtle);
+  --color-cal-amber-marker: var(--cal-amber-marker);
+  --color-cal-amber-fg: var(--cal-amber-fg);
+  --color-cal-yellow-bg: var(--cal-yellow-bg);
+  --color-cal-yellow-bg-subtle: var(--cal-yellow-bg-subtle);
+  --color-cal-yellow-marker: var(--cal-yellow-marker);
+  --color-cal-yellow-fg: var(--cal-yellow-fg);
+  --color-cal-lime-bg: var(--cal-lime-bg);
+  --color-cal-lime-bg-subtle: var(--cal-lime-bg-subtle);
+  --color-cal-lime-marker: var(--cal-lime-marker);
+  --color-cal-lime-fg: var(--cal-lime-fg);
+  --color-cal-green-bg: var(--cal-green-bg);
+  --color-cal-green-bg-subtle: var(--cal-green-bg-subtle);
+  --color-cal-green-marker: var(--cal-green-marker);
+  --color-cal-green-fg: var(--cal-green-fg);
+  --color-cal-emerald-bg: var(--cal-emerald-bg);
+  --color-cal-emerald-bg-subtle: var(--cal-emerald-bg-subtle);
+  --color-cal-emerald-marker: var(--cal-emerald-marker);
+  --color-cal-emerald-fg: var(--cal-emerald-fg);
+  --color-cal-teal-bg: var(--cal-teal-bg);
+  --color-cal-teal-bg-subtle: var(--cal-teal-bg-subtle);
+  --color-cal-teal-marker: var(--cal-teal-marker);
+  --color-cal-teal-fg: var(--cal-teal-fg);
+  --color-cal-cyan-bg: var(--cal-cyan-bg);
+  --color-cal-cyan-bg-subtle: var(--cal-cyan-bg-subtle);
+  --color-cal-cyan-marker: var(--cal-cyan-marker);
+  --color-cal-cyan-fg: var(--cal-cyan-fg);
+  --color-cal-sky-bg: var(--cal-sky-bg);
+  --color-cal-sky-bg-subtle: var(--cal-sky-bg-subtle);
+  --color-cal-sky-marker: var(--cal-sky-marker);
+  --color-cal-sky-fg: var(--cal-sky-fg);
+  --color-cal-indigo-bg: var(--cal-indigo-bg);
+  --color-cal-indigo-bg-subtle: var(--cal-indigo-bg-subtle);
+  --color-cal-indigo-marker: var(--cal-indigo-marker);
+  --color-cal-indigo-fg: var(--cal-indigo-fg);
+  --color-cal-violet-bg: var(--cal-violet-bg);
+  --color-cal-violet-bg-subtle: var(--cal-violet-bg-subtle);
+  --color-cal-violet-marker: var(--cal-violet-marker);
+  --color-cal-violet-fg: var(--cal-violet-fg);
+  --color-cal-purple-bg: var(--cal-purple-bg);
+  --color-cal-purple-bg-subtle: var(--cal-purple-bg-subtle);
+  --color-cal-purple-marker: var(--cal-purple-marker);
+  --color-cal-purple-fg: var(--cal-purple-fg);
+  --color-cal-fuchsia-bg: var(--cal-fuchsia-bg);
+  --color-cal-fuchsia-bg-subtle: var(--cal-fuchsia-bg-subtle);
+  --color-cal-fuchsia-marker: var(--cal-fuchsia-marker);
+  --color-cal-fuchsia-fg: var(--cal-fuchsia-fg);
+  --color-cal-pink-bg: var(--cal-pink-bg);
+  --color-cal-pink-bg-subtle: var(--cal-pink-bg-subtle);
+  --color-cal-pink-marker: var(--cal-pink-marker);
+  --color-cal-pink-fg: var(--cal-pink-fg);
+  --color-cal-rose-bg: var(--cal-rose-bg);
+  --color-cal-rose-bg-subtle: var(--cal-rose-bg-subtle);
+  --color-cal-rose-marker: var(--cal-rose-marker);
+  --color-cal-rose-fg: var(--cal-rose-fg);
+  --color-cal-zinc-bg: var(--cal-zinc-bg);
+  --color-cal-zinc-bg-subtle: var(--cal-zinc-bg-subtle);
+  --color-cal-zinc-marker: var(--cal-zinc-marker);
+  --color-cal-zinc-fg: var(--cal-zinc-fg);
+  --color-cal-taupe-bg: var(--cal-taupe-bg);
+  --color-cal-taupe-bg-subtle: var(--cal-taupe-bg-subtle);
+  --color-cal-taupe-marker: var(--cal-taupe-marker);
+  --color-cal-taupe-fg: var(--cal-taupe-fg);
+  --color-cal-mauve-bg: var(--cal-mauve-bg);
+  --color-cal-mauve-bg-subtle: var(--cal-mauve-bg-subtle);
+  --color-cal-mauve-marker: var(--cal-mauve-marker);
+  --color-cal-mauve-fg: var(--cal-mauve-fg);
+  --color-cal-mist-bg: var(--cal-mist-bg);
+  --color-cal-mist-bg-subtle: var(--cal-mist-bg-subtle);
+  --color-cal-mist-marker: var(--cal-mist-marker);
+  --color-cal-mist-fg: var(--cal-mist-fg);
+  --color-cal-olive-bg: var(--cal-olive-bg);
+  --color-cal-olive-bg-subtle: var(--cal-olive-bg-subtle);
+  --color-cal-olive-marker: var(--cal-olive-marker);
+  --color-cal-olive-fg: var(--cal-olive-fg);
+  --color-cal-flight-bg: var(--cal-flight-bg);
+  --color-cal-flight-bg-subtle: var(--cal-flight-bg-subtle);
+  --color-cal-flight-marker: var(--cal-flight-marker);
+  --color-cal-flight-fg: var(--cal-flight-fg);
+
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+
+  /* Kept effect tokens (out of scope) */
+  --color-rating: var(--rating);
+  --color-brand-shadow: var(--brand-shadow);
+  --color-input-inner-shadow: var(--input-inner-shadow);
+
+  /* Surface */
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-muted-hover: var(--surface-muted-hover);
+  --color-surface-muted-active: var(--surface-muted-active);
+  --color-surface-brand: var(--surface-brand);
+  --color-surface-brand-muted: var(--surface-brand-muted);
+  --color-surface-dark: var(--surface-dark);
+  --color-surface-dark-hover: var(--surface-dark-hover);
+  --color-surface-error: var(--surface-error);
+  --color-surface-error-subtle: var(--surface-error-subtle);
+  --color-surface-success: var(--surface-success);
+  --color-surface-success-subtle: var(--surface-success-subtle);
+  --color-surface-warning: var(--surface-warning);
+  --color-surface-warning-subtle: var(--surface-warning-subtle);
+  --color-surface-info: var(--surface-info);
+  --color-surface-info-subtle: var(--surface-info-subtle);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-surface-overlay-hover: var(--surface-overlay-hover);
+  --color-surface-overlay-active: var(--surface-overlay-active);
+
+  /* Content */
+  --color-content: var(--content);
+  --color-content-secondary: var(--content-secondary);
+  --color-content-tertiary: var(--content-tertiary);
+  --color-content-placeholder: var(--content-placeholder);
+  --color-content-on-brand: var(--content-on-brand);
+  --color-content-on-dark: var(--content-on-dark);
+  --color-content-on-info: var(--content-on-info);
+  --color-content-brand: var(--content-brand);
+  --color-content-info: var(--content-info);
+  --color-content-error: var(--content-error);
+  --color-content-success: var(--content-success);
+  --color-content-warning: var(--content-warning);
+
+  /* Glyph */
+  --color-glyph: var(--glyph);
+  --color-glyph-secondary: var(--glyph-secondary);
+  --color-glyph-disabled: var(--glyph-disabled);
+  --color-glyph-on-brand: var(--glyph-on-brand);
+  --color-glyph-on-dark: var(--glyph-on-dark);
+  --color-glyph-brand: var(--glyph-brand);
+  --color-glyph-error: var(--glyph-error);
+  --color-glyph-success: var(--glyph-success);
+  --color-glyph-warning: var(--glyph-warning);
+
+  /* Edge */
+  --color-edge: var(--edge);
+  --color-edge-subtle: var(--edge-subtle);
+  --color-edge-muted: var(--edge-muted);
+  --color-edge-strong: var(--edge-strong);
+  --color-edge-brand: var(--edge-brand);
+  --color-edge-brand-subtle: var(--edge-brand-subtle);
+  --color-edge-info: var(--edge-info);
+  --color-edge-error: var(--edge-error);
+  --color-edge-input: var(--edge-input);
+  --color-edge-input-active: var(--edge-input-active);
+  --color-edge-input-focus-ring: var(--edge-input-focus-ring);
+
+  /* Action */
+  --color-action-brand: var(--action-brand);
+  --color-action-brand-border: var(--action-brand-border);
+  --color-action-brand-highlight: var(--action-brand-highlight);
+  --color-action-brand-hover: var(--action-brand-hover);
+  --color-action-brand-active: var(--action-brand-active);
+  --color-action-secondary: var(--action-secondary);
+  --color-action-secondary-border: var(--action-secondary-border);
+  --color-action-secondary-highlight: var(--action-secondary-highlight);
+  --color-action-secondary-hover: var(--action-secondary-hover);
+  --color-action-secondary-active: var(--action-secondary-active);
+  --color-action-dark: var(--action-dark);
+  --color-action-dark-border: var(--action-dark-border);
+  --color-action-dark-highlight: var(--action-dark-highlight);
+  --color-action-dark-hover-bg: var(--action-dark-hover-bg);
+  --color-action-dark-active: var(--action-dark-active);
+  --color-action-info: var(--action-info);
+  --color-action-info-border: var(--action-info-border);
+  --color-action-info-highlight: var(--action-info-highlight);
+  --color-action-error: var(--action-error);
+  --color-action-error-highlight: var(--action-error-highlight);
+  --color-action-error-hover: var(--action-error-hover);
+  --color-action-error-active: var(--action-error-active);
+  --color-action-success: var(--action-success);
+  --color-action-success-highlight: var(--action-success-highlight);
+  --color-action-warning: var(--action-warning);
+  --color-action-warning-highlight: var(--action-warning-highlight);
+
+  /* Category */
+  --color-category-link: var(--category-link);
+  --color-category-link-icon: var(--category-link-icon);
+  --color-category-collection: var(--category-collection);
+  --color-category-collection-icon: var(--category-collection-icon);
+  --color-category-itinerary: var(--category-itinerary);
+  --color-category-itinerary-icon: var(--category-itinerary-icon);
+  --color-category-location: var(--category-location);
+  --color-category-location-icon: var(--category-location-icon);
+  --color-category-brand: var(--category-brand);
+  --color-category-brand-icon: var(--category-brand-icon);
+  --color-category-neutral: var(--category-neutral);
+  --color-category-neutral-icon: var(--category-neutral-icon);
+  --color-category-flight: var(--category-flight);
+  --color-category-flight-icon: var(--category-flight-icon);
+  --color-category-accommodation: var(--category-accommodation);
+  --color-category-accommodation-icon: var(--category-accommodation-icon);
+  --color-category-expense: var(--category-expense);
+  --color-category-expense-icon: var(--category-expense-icon);
+  --color-category-link-on: var(--category-link-on);
+  --color-category-collection-on: var(--category-collection-on);
+  --color-category-itinerary-on: var(--category-itinerary-on);
+  --color-category-location-on: var(--category-location-on);
+  --color-category-brand-on: var(--category-brand-on);
+  --color-category-neutral-on: var(--category-neutral-on);
+  --color-category-flight-on: var(--category-flight-on);
+  --color-category-accommodation-on: var(--category-accommodation-on);
+  --color-category-expense-on: var(--category-expense-on);
+
+  /* Shadows */
+  --shadow-default: var(--shadow-default);
+
+  /* H1 */
+  --text-h1: 2.5rem;
+  --leading-h1: 3rem;
+  --tracking-heading-1: -0.0625rem;
+
+  /* H2 */
+  --text-h2: 2rem;
+  --leading-h2: 2.375rem;
+  --tracking-heading-2: -0.05rem;
+
+  /* H3 */
+  --text-h3: 1.5rem;
+  --leading-h3: 1.875rem;
+  --tracking-heading-3: -0.0375rem;
+
+  /* H4 */
+  --text-h4: 1.25rem;
+  --leading-h4: 1.5rem;
+  --tracking-heading-4: -0.03125rem;
+
+  /* Body 1 */
+  --text-body-1: 0.875rem;
+  --leading-body-1: 1.25rem;
+  --tracking-body-1: -0.021875rem;
+
+  /* Body 2 */
+  --text-body-2: 0.875rem;
+  --leading-body-2: 1.25rem;
+  --tracking-body-2: -0.021875rem;
+
+  /* Body 3 */
+  --text-body-3: 0.8125rem;
+  --leading-body-3: 1rem;
+  --tracking-body-3: -0.01875rem;
+
+  /* Body 4 */
+  --text-body-4: 0.75rem;
+  --leading-body-4: 0.875rem;
+  --tracking-body-4: -0.01875rem;
+}
+
+@layer base {
+  /* Headings */
+  .type-h1 {
+    font-family: var(--font-primary);
+    font-size: var(--text-h1);
+    line-height: var(--leading-h1);
+    letter-spacing: var(--tracking-heading-1);
+  }
+  .type-h2 {
+    font-family: var(--font-primary);
+    font-size: var(--text-h2);
+    line-height: var(--leading-h2);
+    letter-spacing: var(--tracking-heading-2);
+  }
+  .type-h3 {
+    font-family: var(--font-primary);
+    font-size: var(--text-h3);
+    line-height: var(--leading-h3);
+    letter-spacing: var(--tracking-heading-3);
+  }
+  .type-h4 {
+    font-family: var(--font-primary);
+    font-size: var(--text-h4);
+    line-height: var(--leading-h4);
+    letter-spacing: var(--tracking-heading-4);
+  }
+
+  /* Body */
+  .type-body-1 {
+    font-family: var(--font-primary);
+    font-size: var(--text-body-1);
+    line-height: var(--leading-body-1);
+    letter-spacing: var(--tracking-body-1);
+  }
+
+  /* Secondary Font (Lora) */
+  .type-secondary {
+    font-family: var(--font-secondary);
+  }
+
+  html {
+    font-family: var(--font-primary);
+  }
+
+  html,
+  body {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Text utilities - apply after variant colors in cascade */
+@layer utilities {
+  .type-body-2 {
+    font-size: var(--text-body-2);
+    line-height: var(--leading-body-2);
+    letter-spacing: var(--tracking-body-2);
+  }
+  .type-body-3 {
+    font-size: var(--text-body-3);
+    line-height: var(--leading-body-3);
+    letter-spacing: var(--tracking-body-3);
+  }
+  .type-body-4 {
+    font-size: var(--text-body-4);
+    line-height: var(--leading-body-4);
+    letter-spacing: var(--tracking-body-4);
+  }
+}
+
+/* Dark Mode Variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Minimal Scrollbar - Pill only, no track/background */
+@layer base {
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-zinc-300);
+    border-radius: 9999px;
+    border: none;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-zinc-400);
+  }
+
+  .content-card,
+  .content-card * {
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .content-card img {
+    pointer-events: none;
+  }
+
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-zinc-300) transparent;
+  }
+
+  /* Dark mode scrollbar */
+  .dark ::-webkit-scrollbar-thumb {
+    background: var(--color-zinc-600);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-zinc-500);
+  }
+
+  .dark * {
+    scrollbar-color: var(--color-zinc-600) transparent;
+  }
+}
+
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* ─── Fade enter/exit utilities ─── */
+@keyframes fade-up-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-20px); }
+}
+@keyframes fade-up-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@utility animate-fade-up-out {
+  animation: fade-up-out var(--motion-duration-exit) var(--motion-ease-standard) forwards;
+}
+@utility animate-fade-up-in {
+  animation: fade-up-in var(--motion-enter-duration) var(--motion-ease-standard) forwards;
+  opacity: 0;
+}
+
+/* ─── Floating decorative animations ─── */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) rotate(var(--tw-rotate, 0deg)); }
+  50% { transform: translateY(-12px) rotate(var(--tw-rotate, 0deg)); }
+}
+@keyframes float-medium {
+  0%, 100% { transform: translateY(0) rotate(var(--tw-rotate, 0deg)); }
+  50% { transform: translateY(-8px) rotate(var(--tw-rotate, 0deg)); }
+}
+@keyframes float-fast {
+  0%, 100% { transform: translateY(0) rotate(var(--tw-rotate, 0deg)); }
+  50% { transform: translateY(-16px) rotate(var(--tw-rotate, 0deg)); }
+}
+@utility animate-float-slow {
+  animation: float-slow var(--motion-duration-decorative-slow) var(--motion-ease-loop) infinite;
+}
+@utility animate-float-medium {
+  animation: float-medium var(--motion-duration-decorative-medium) var(--motion-ease-loop) var(--motion-delay-decorative-medium) infinite;
+}
+@utility animate-float-fast {
+  animation: float-fast var(--motion-duration-decorative-fast) var(--motion-ease-loop) var(--motion-delay-decorative-fast) infinite;
+}
+
+/* ─── Highlight pulse utility ─── */
+@keyframes highlight-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--edge-strong); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--edge-strong) 30%, transparent); }
+}
+@utility animate-highlight-pulse {
+  animation: highlight-pulse var(--motion-duration-progress) var(--motion-ease-loop) 3;
+}
+
+@keyframes activity-card-selected-rail {
+  from { opacity: 0; transform: scaleY(0.45); }
+  to   { opacity: 1; transform: scaleY(1); }
+}
+
+/* One-shot progress bar fill — used by ItineraryLoadingScreen */
+@keyframes progress-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes progress-fill {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(1); }
+  }
+}
+
+/* Toast timeout progress drain */
+@keyframes progress-drain {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes progress-drain {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(0); }
+  }
+}
+
+/* Prevent placeholder text from being selectable */
+input::placeholder,
+textarea::placeholder {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Hide Google Maps attribution UI across all maps */
+.static-map-container .gmnoprint,
+.static-map-container .gm-style-cc,
+.static-map-container .gm-style a[href^="https://maps.google.com"],
+.static-map-container .gm-style a[href^="https://www.google.com/maps"] {
+  display: none !important;
+}
+
+.map-detail-default-marker-image,
+.map-cluster-marker-icon {
+  transform: scale(1);
+}
+
+.map-detail-default-marker-image-highlighted {
+  transform: scale(1.5);
+}
+
+.map-cluster-marker-icon-emphasized {
+  transform: scale(1.1);
+}
+
+.map-cluster-marker-hover-hidden {
+  opacity: 0;
+  transform: translate(-50%, 16px) scale(0.95);
+}
+
+.map-cluster-marker-hover-visible {
+  opacity: 1;
+  transform: translate(-50%, 0) scale(1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .map-detail-default-marker-image,
+  .map-cluster-marker-icon {
+    transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .map-cluster-marker-hover {
+    transition:
+      opacity var(--motion-duration-fast) var(--motion-ease-standard),
+      transform var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-detail-default-marker-image,
+  .map-cluster-marker-icon {
+    transition: none;
+  }
+
+  .map-cluster-marker-hover {
+    transform: translate(-50%, 0) scale(1);
+    transition: opacity 150ms var(--motion-ease-standard);
+  }
+}
+
+.action-card-sticker {
+  transform: translateY(8px) scale(1);
+  transition: transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .action-card:hover .action-card-sticker {
+    transform: translateY(-11px) scale(1.25);
+  }
+
+  .action-card:hover .action-card-icon {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-card-sticker,
+  .action-card:hover .action-card-sticker {
+    transform: translateY(8px) scale(1);
+    transition: none;
+  }
+}
+
+/* ───────────── Bento grid (home page, FE-115) ─────────────
+   Ratio-locked tiles: row height is DERIVED from column width so the
+   243:292 (≈5:6) tile aspect is preserved at every viewport — never a
+   hardcoded height. `--col-w` reads `100cqw`, so the grid MUST sit inside
+   an ancestor with `container-type: inline-size` (Tailwind `@container`).
+   `--cols` is overridden per breakpoint via utilities (e.g. `xl:[--cols:5]`);
+   the map's row-span-2 height (2·row-h + gap) then falls out for free.
+   Defined in @layer components so the `[--cols:N]` utility overrides (utilities
+   layer) win over this rule's `--cols` default. */
+@layer components {
+  .bento-grid {
+    --cols: 5;
+    --gap: 12px;
+    --ratio: calc(292 / 243);
+    --col-w: calc((100cqw - (var(--cols) - 1) * var(--gap)) / var(--cols));
+    --row-h: calc(var(--col-w) * var(--ratio));
+
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    grid-auto-rows: var(--row-h);
+    gap: var(--gap);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .day-time-picker-rail:hover .day-time-picker-handle {
+    opacity: 1;
+    transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/* ───────────── Day-column board (itinerary view, FE-121) ─────────────
+   Horizontal-scroll row of day columns whose width is DERIVED from the
+   content width, like the bento grid: the first `--day-cols` columns fill the
+   full content width exactly (matching the map), and any further days overflow
+   into horizontal scroll. `--day-col-w` reads `100cqw`, so the board MUST sit
+   inside an ancestor with `container-type: inline-size` (Tailwind `@container`).
+   `--day-cols` is overridden per breakpoint via utilities (e.g. `xl:[--day-cols:4]`).
+   Defined in @layer components so the `[--day-cols:N]` utility overrides win. */
+@layer components {
+  .day-board {
+    --day-cols: 4;
+    --day-gap: 12px;
+    --day-col-w: calc((100cqw - (var(--day-cols) - 1) * var(--day-gap)) / var(--day-cols));
+
+    display: flex;
+    align-items: flex-start;
+    gap: var(--day-gap);
+  }
+  .day-board > * {
+    flex: 0 0 var(--day-col-w);
+    max-width: var(--day-col-w);
+  }
+}
