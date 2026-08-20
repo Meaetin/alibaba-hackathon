@@ -1,0 +1,1 @@
+TanStack Query (`@tanstack/react-query`) for data caching, `next-themes` for theme context, Supabase client with Realtime `postgres_changes` channels for job status streaming, and a local `ToastContext` for user notifications.

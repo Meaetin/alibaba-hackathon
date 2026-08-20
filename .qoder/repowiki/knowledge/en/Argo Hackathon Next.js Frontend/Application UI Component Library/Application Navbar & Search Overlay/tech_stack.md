@@ -1,0 +1,1 @@
+React Server Components with "use client" directives; Next.js `next/navigation` router; Supabase client for auth sign-out; `motion/react` (Framer Motion) for AnimatePresence transitions; Tailwind CSS via `cn` utility; Lucide icons.

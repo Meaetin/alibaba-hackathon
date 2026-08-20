@@ -1,0 +1,6 @@
+- Each widget file declares its props as a TypeScript interface and exports the component alongside the prop type via a separate `export type` statement.
+- Styling uses `cn()` from `@/lib/utils` to compose base classes with conditional modifiers rather than string concatenation.
+- Variant-based styling is expressed through `cva` with a `state` variant (e.g., default/hover/processing/queued/failed) and `defaultVariants` for sensible defaults.
+- Components expose a stable `displayName` property when wrapped in `forwardRef` or defined as a function component.
+- Accessible interactive surfaces set `role`, `tabIndex`, `aria-*` attributes and handle keyboard activation via `onKeyDown` for Enter/Space.
+- Theme-aware colors are resolved through a central palette map keyed by a `DayPalette` union, producing both CSS variable names and light/dark hex values.

@@ -1,0 +1,1 @@
+Next.js client components (`"use client"`) built on React, styled with Tailwind utility classes and a `cn` class merger; icons from `lucide-react`; state management via React hooks and TanStack Query for location references; dynamic imports for non-SSR map rendering.

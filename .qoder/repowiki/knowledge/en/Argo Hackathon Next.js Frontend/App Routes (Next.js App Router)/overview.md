@@ -1,0 +1,1 @@
+Top-level Next.js App Router route tree that wires the dashboard, links, collections, and itineraries feature pages into a shared application shell.

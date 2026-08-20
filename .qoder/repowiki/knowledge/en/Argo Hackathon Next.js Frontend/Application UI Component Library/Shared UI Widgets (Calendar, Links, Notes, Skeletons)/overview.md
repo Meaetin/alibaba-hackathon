@@ -1,0 +1,1 @@
+Reusable React UI building blocks for itinerary calendars, link queue cards, inline note editing, and loading skeleton placeholders consumed across the app.

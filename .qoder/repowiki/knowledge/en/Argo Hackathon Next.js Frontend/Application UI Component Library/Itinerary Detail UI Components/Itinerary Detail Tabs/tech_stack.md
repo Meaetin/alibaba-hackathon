@@ -1,0 +1,1 @@
+React Server Components with `"use client"` directive, TypeScript interfaces for props, Tailwind CSS utilities composed via `@/lib/utils`'s `cn`, and Lucide icons for the bookings placeholder.

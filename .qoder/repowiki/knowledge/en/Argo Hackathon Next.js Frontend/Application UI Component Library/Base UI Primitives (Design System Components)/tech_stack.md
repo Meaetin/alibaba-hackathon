@@ -1,0 +1,1 @@
+React (Next.js client components), Base UI (`@base-ui/react`) for unstyled, accessible primitives; Tailwind CSS for layout and tokens; `class-variance-authority` for variant-based styling; `lucide-react` for icons; `@/hooks/useMediaQuery` for responsive behavior.

@@ -1,0 +1,1 @@
+React component library that renders the full itinerary detail page, composing day columns, tabbed sub-views (flights, lodging, bookings, expenses, notes), and edit-mode layouts around shared drag/time/overlap utilities.

@@ -1,0 +1,1 @@
+Next.js App Router pages that list user collections, display a collection's locations with batch operations and itinerary generation, and render a token-scoped public view of shared collections.

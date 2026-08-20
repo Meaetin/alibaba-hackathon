@@ -1,0 +1,1 @@
+Reusable React hooks and app-wide contexts that provide data fetching, real-time subscriptions, UI state (toasts, sidebar, navbar filters), and cross-cutting client-side behavior for the Next.js application.

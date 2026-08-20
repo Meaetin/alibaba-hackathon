@@ -1,0 +1,6 @@
+- Components are declared as named function exports with explicit TypeScript interfaces for props and use `"use client"` at the top of every file.
+- Styling uses Tailwind classes composed through `cn()` from `@/lib/utils`, with BEM-style class prefixes (e.g. `itinerary-*`) and semantic `data-region` / `data-slot` attributes for testing and styling hooks.
+- State is kept controlled: view/edit mode, active tab, and panel open state are passed in via props with corresponding `on*` callback handlers rather than internal `useState`.
+- Reusable visual variants are expressed with `cva` (class-variance-authority) and exported alongside the component (e.g. `ActivityThumbnail`), keeping style logic declarative and type-safe.
+- Tab configuration is centralized in a single `TAB_CONFIG` array in `ItineraryTabBar.tsx` and drives both rendering and clickability rules, rather than being duplicated per tab.
+- Time handling goes through dedicated helpers (`parseTimeMins`, `formatTimeRange`, `minsToHHMM`, `sameWallTime`) instead of ad-hoc string/date math inside components.

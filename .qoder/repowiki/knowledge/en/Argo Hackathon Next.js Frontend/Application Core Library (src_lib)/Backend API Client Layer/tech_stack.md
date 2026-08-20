@@ -1,0 +1,1 @@
+Next.js runtime with Supabase Auth for session tokens and Supabase Storage for attachment uploads; all HTTP calls go through native `fetch` to a configurable `NEXT_PUBLIC_API_URL` (default `http://localhost:8080`).

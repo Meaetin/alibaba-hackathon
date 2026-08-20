@@ -1,0 +1,1 @@
+TypeScript client modules that wrap the Next.js backend REST API for itineraries, collections, content, attachments, photos, profiles, and related resources with authenticated fetch helpers.

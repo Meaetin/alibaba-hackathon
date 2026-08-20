@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: components_ui/cards
+title: Entity Card Components
+scope:
+    - src/components/ui/cards/
+source_files: []
+depends_on: []
+related_to:
+    - path: app_routes/home

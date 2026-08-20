@@ -1,0 +1,1 @@
+Next.js App Router pages that list user itineraries with async planning queues, render the full interactive itinerary editor with drag-and-drop and map integration, and serve read-only public itineraries via share token.

@@ -1,0 +1,1 @@
+React client components that render detailed views for locations and itinerary items (flights, lodging, expenses) along with their sidebars, forms, and shared cards.

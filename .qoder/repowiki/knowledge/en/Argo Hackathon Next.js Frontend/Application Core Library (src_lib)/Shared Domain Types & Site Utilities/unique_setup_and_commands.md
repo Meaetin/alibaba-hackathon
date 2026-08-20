@@ -1,0 +1,1 @@
+Requires the `NEXT_PUBLIC_SITE_URL` environment variable to be set for preview deployments so that social scrapers and crawlers resolve absolute URLs instead of relative ones against the production domain.

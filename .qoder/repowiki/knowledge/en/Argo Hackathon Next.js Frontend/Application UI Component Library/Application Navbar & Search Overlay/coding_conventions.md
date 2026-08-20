@@ -1,0 +1,6 @@
+- Each component file declares itself as a client component with a top-level `"use client"` directive before any imports.
+- Public components follow a dual-export pattern: both the component function and its props type are exported (e.g. `export { Navbar }; export type { NavbarProps }`).
+- Styling uses the `cn` utility to compose Tailwind classes, with semantic `data-slot` attributes (`navbar`, `navbar-searchbar`, `search-dropdown`) marking DOM nodes for testing or styling hooks.
+- User-facing menus are built from the shared `Menu`/`MenuTrigger`/`MenuContent`/`MenuItem` primitives rather than custom dropdown implementations.
+- Search input behavior is controlled via a controlled/uncontrolled pattern: when `value` is provided it is used directly, otherwise internal `useState` manages the value, with a 300ms debounce on change.
+- Overlay/dropdown content that must escape stacking contexts is mounted via `createPortal` into `document.body` and wrapped in `AnimatePresence` for enter/exit animations.

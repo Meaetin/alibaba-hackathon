@@ -1,0 +1,3 @@
+- Each feature segment ships a `layout.tsx` + `page.tsx` pair, with optional `loading.tsx` for suspense boundaries.
+- Detail and public-share views are exposed via parallel dynamic segments: `[id]/page.tsx` for authenticated access and `public/[token]/page.tsx` for read-only sharing.
+- Route segments follow a flat resource-oriented structure (`links`, `collections`, `itineraries`) mirroring domain entities.

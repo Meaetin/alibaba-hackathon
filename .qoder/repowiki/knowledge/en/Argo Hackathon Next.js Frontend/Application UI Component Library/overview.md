@@ -1,0 +1,1 @@
+Top-level React component library that composes primitives, cards, detail views, itinerary, map, modals, navbar, auth, layout, and shared widgets into the app's visual layer, with root providers for theme and data fetching.

@@ -1,0 +1,3 @@
+- Domain surface identifiers are modeled as string-literal union types rather than enums, keeping values serializable and explicit (e.g., `Surface`, `ShareableEntity`, `QuotaType`).
+- Reusable style configurations are defined as `as const` object literals and exposed through pure functions that derive JSX style objects from input parameters.
+- CSS color and effect values are referenced via CSS custom properties (e.g., `var(--edge-brand)`) and combined with `color-mix()` for opacity-driven effects instead of hard-coded hex values.
