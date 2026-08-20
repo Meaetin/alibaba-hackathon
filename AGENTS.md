@@ -73,3 +73,30 @@ detail, then show a plain sentence via `getFriendlyApiError` /
 Copy `.env.local.example` → `.env.local`. Google Maps needs three keys
 (API key + light/dark map IDs) or `/home`, `/collections/**` and
 `/itineraries/**` degrade.
+
+### Planner naming: `profile` describes the traveller, `options` describes the scheduler
+`GenerateItineraryParams.preferences` was renamed to `options` (k-means/scheduler
+knobs) so the new `profile?: PreferenceProfile` could sit beside it without either
+being misread. Types live in `src/lib/planner/types.ts`. Never merge the two.
+
+Likewise `buildClusters` → `buildLocalityPins` (`src/lib/maps/locality-pins.ts`):
+that function groups entities by `"{region}, {country}"` for static-map pins. The
+planner's geographic k-means is a separate module (`src/lib/planner/cluster.ts`).
+Don't share code between them.
+
+### `place-search.ts` is browser-only
+It's built on the Maps JS `Place` class and needs a live `google.maps.Map`. Server-side
+retrieval uses the Places REST API in `src/lib/planner/retrieval.ts`.
+
+`normalizePlace` used to request `priceLevel` in the field mask and then drop it.
+Both paths now go through `toPriceLevelOrdinal` (`src/lib/maps/price-level.ts`) —
+keep it that way, or budget scoring loses its only input. `normalizePlace` and
+`SEARCH_FIELDS` are module-private; export them if you need to test the mapping.
+
+### Tests are Vitest, colocated
+`npm test` (`vitest run`). Test files sit next to their module
+(`src/lib/planner/score.test.ts`), fixtures in `__fixtures__/`. Randomness and
+time are **injected parameters**, never ambient — k-means takes an `rng`, cache
+expiry takes a `now`. Google and Anthropic clients are injected too; there is no
+mocking framework. Build order and per-step assertions live in
+`docs/implementation-plan.md`.

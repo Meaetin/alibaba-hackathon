@@ -2,6 +2,7 @@ import { authFetch, unwrap, ensureOk } from './client'
 import { type Surface } from '@/lib/domain-types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
 import type { ActivityLocation } from '@/lib/supabase/queries/home'
+import type { PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
 
 export interface ItineraryWithRole {
   id: string
@@ -67,13 +68,13 @@ export interface GenerateItineraryParams {
   latitude?: number
   longitude?: number
   overview?: string
-  preferences?: {
-    maxK?: number
-    kmeansInitMethod?: 'kmeans++' | 'random' | 'grid'
-    maxIterations?: number
-    startTime?: string
-    endTime?: string
-  }
+  /**
+   * Scheduler/clustering knobs. Named `options` (not `preferences`) so it can
+   * sit next to `profile` without either being mistaken for the other.
+   */
+  options?: SchedulerOptions
+  /** The traveller. Drives retrieval, scoring, slot assignment and narration. */
+  profile?: PreferenceProfile
 }
 
 export interface GenerateItineraryJob {

@@ -1,7 +1,17 @@
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 import type { RawMapLocation } from "@/lib/supabase/queries/map-clusters";
 
-export interface ClusterResult {
+/**
+ * Groups saved entities into map PINS by their `"{region}, {country}"` label —
+ * a presentation concern for the home/collections static maps. It is string
+ * grouping, not geometry: the pin's lat/lng is the mean of its members.
+ *
+ * This is NOT the planner's geographic clustering. Day assignment uses k-means
+ * over raw coordinates (`src/lib/planner/cluster.ts`) to build neighbourhood
+ * clusters; the two must not be confused or shared.
+ */
+
+export interface LocalityPinResult {
   clusters: MapClusterData[];
   entityIdsByLocality: Map<string, Set<string>>;
 }
@@ -15,10 +25,10 @@ interface GroupData {
   entityIds: Set<string>;
 }
 
-export function buildClusters(
+export function buildLocalityPins(
   items: RawMapLocation[],
   variant: MapClusterData["variant"],
-): ClusterResult {
+): LocalityPinResult {
   const groups = new Map<string, GroupData>();
 
   for (const item of items) {

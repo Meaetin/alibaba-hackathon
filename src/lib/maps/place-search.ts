@@ -6,6 +6,8 @@
 // Enterprise SKU. We always request the Enterprise fields — one rich call is far
 // cheaper per place than a lean Pro search plus a Place Details call on add.
 
+import { toPriceLevelOrdinal, type PriceLevelOrdinal } from "./price-level";
+
 /** Per-photo metadata persisted to `locations.photos` (distinct from the re-hosted
  *  image URLs). Maps JS doesn't expose Google's photo resource `name`, so it's omitted. */
 export interface PlacePhotoMeta {
@@ -41,7 +43,13 @@ export interface PlaceSearchResult {
   googleMapsUri?: string;
   /** Object of Google Maps deep links (directions, reviews, photos). */
   googleMapsLinks?: Record<string, unknown>;
-  /** Raw price-range object (startPrice, endPrice, currency). */
+  /**
+   * 0–4 ordinal derived from Google's `priceLevel` string. This is the field
+   * budget filtering compares against — `priceRange` is currency-denominated
+   * and not comparable across cities.
+   */
+  priceLevel?: PriceLevelOrdinal;
+  /** Raw price-range object (startPrice, endPrice, currency). Display only. */
   priceRange?: Record<string, unknown>;
   // ── Persistence-only fields (not rendered; carried through to the API so a
   //    search-added place can be stored without a redundant server-side fetch) ──
@@ -244,6 +252,7 @@ function normalizePlace(place: google.maps.places.Place): PlaceSearchResult | nu
     businessStatus: place.businessStatus ?? undefined,
     googleMapsUri: place.googleMapsURI ?? undefined,
     googleMapsLinks: extra.googleMapsLinks ?? undefined,
+    priceLevel: toPriceLevelOrdinal(place.priceLevel),
     priceRange: extra.priceRange ?? undefined,
     addressComponents: addressComponents?.length ? addressComponents : undefined,
     openingHoursPeriods: openingHoursPeriods?.length ? openingHoursPeriods : undefined,
@@ -269,6 +278,8 @@ export interface PlaceDetailsPayload {
   primaryType?: string;
   rating?: number;
   userRatingCount?: number;
+  /** 0–4 ordinal; the budget-filtering input. Persisted to `locations.price_level`. */
+  priceLevel?: PriceLevelOrdinal;
   priceRange?: { startPrice?: number; endPrice?: number; currency?: string };
   openingHoursPeriods?: Array<{
     open: { day: number; hour: number; minute: number };
@@ -330,6 +341,7 @@ export function toPlaceDetailsPayload(place: PlaceSearchResult): PlaceDetailsPay
     primaryType: place.primaryType,
     rating: place.rating,
     userRatingCount: place.userRatingCount,
+    priceLevel: place.priceLevel,
     priceRange: normalizePriceRange(place.priceRange),
     openingHoursPeriods: place.openingHoursPeriods,
     weekdayDescriptions: place.openingHours,

@@ -9,7 +9,7 @@ import {
   getMapClustersForDashboard,
   type RawMapLocation,
 } from "@/lib/supabase/queries/map-clusters";
-import { buildClusters, type ClusterResult } from "@/lib/maps/buildClusters";
+import { buildLocalityPins, type LocalityPinResult } from "@/lib/maps/locality-pins";
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 import { queryKeys } from "@/lib/query/queryKeys";
 
@@ -40,12 +40,12 @@ export function useMapClusters(
   entityIdsByLocality: Map<string, Set<string>>;
   isLoading: boolean;
 } {
-  const { data, isLoading } = useQuery<ClusterResult>({
+  const { data, isLoading } = useQuery<LocalityPinResult>({
     queryKey: queryKeys.mapClusters(userId ?? "", source),
     queryFn: async () => {
       const supabase = createClient();
       const raw = await queryBySource[source](supabase, userId!);
-      return buildClusters(raw, variantBySource[source]);
+      return buildLocalityPins(raw, variantBySource[source]);
     },
     enabled: !!userId,
     staleTime: 10 * 60 * 1000,
