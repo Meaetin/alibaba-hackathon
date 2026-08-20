@@ -4,8 +4,10 @@ Companion to [`personalization-pipeline.md`](./personalization-pipeline.md). Tha
 says *what* to build; this one says *in what order*, and *what test proves each part
 works* before the part exists.
 
-**Status (2026-08-20):** not started. Step 0 is a prerequisite for every other step —
-the repo currently has zero test files and no test runner.
+**Status (2026-08-20):** Steps 0–6 complete, plus the invariant suite and the
+Gate A fixture run (minus the `pack`/`validate` legs, which don't exist yet) —
+111 tests green, `type-check` clean. Next is Step 7 (`pack.ts`), then Step 8;
+extend `__tests__/gate-a.test.ts` as each lands rather than adding new files.
 
 ---
 
@@ -288,6 +290,25 @@ degradation ladders. The tests here are mostly about *what doesn't happen*.
 - **the rung used is returned, at every rung including 1** — a caller must never
   have to infer it
 
+*cluster grouping (Pass B's input — added after the first pass at this step)*
+- the shortlist comes back **grouped by cluster** (`result.clusters`), best cluster
+  first and best member first within each. Step 13 assigns one cluster per day and
+  cannot re-derive membership from a flat list.
+- each cluster carries `centroid`, the unfilled `label` slot, and its
+  `cluster_score` (`scoreCluster`: mean of top-5 place scores + small coverage and
+  variety bonuses)
+- a cluster the quotas emptied is **omitted**, never returned empty
+
+*dropped candidates (invariant 8, enforced here rather than at Gate A)*
+- every candidate in `stages.retrieved` either survives or appears in
+  `result.dropped` with a stage and a reason — asserted as a partition, so a new
+  cut can't silently swallow anything
+- the reason names the rule (`permanently closed`, `price level 4 is 3 steps over
+  budget 1`, `cuisine quota full: 3× ramen_restaurant`), not just the stage
+- candidates clustering couldn't place (no lat/lng) are passed in as
+  `options.unlocated` so they count as retrieved and get a reason — otherwise they
+  vanish between `cluster.ts` and `funnel.ts` and `stats.retrieved` lies
+
 **Verify:** `npx vitest run src/lib/planner/funnel`
 
 ---
@@ -395,10 +416,17 @@ npm test && npm run type-check
 ```
 
 At this gate you can already build a plausible itinerary from a hand-written
-candidate fixture with no API keys and no database. **Do that** — a
-`src/lib/planner/__fixtures__/kyoto-candidates.json` of ~80 places driven through
-score → cluster → funnel → pack → validate, snapshotted. It is the cheapest
-end-to-end confidence in the whole project and it costs nothing to run.
+candidate fixture with no API keys and no database. **Done, ahead of the gate** —
+`src/lib/planner/__fixtures__/kyoto-candidates.json` (86 Kyoto places, including
+two permanently closed, two with no coordinates, a ¥¥¥¥ kaiseki, a steakhouse,
+several near-identical ramen shops and a museum with no rating) runs through
+cluster → funnel → meal ladder → duration in `__tests__/gate-a.test.ts`, judged
+by the invariant suite and snapshotted. Add the `pack` and `validate` legs to
+that same file at Steps 7 and 8.
+
+It paid for itself immediately: it caught a symmetric `priceFit` that ranked a
+¥¥ ramen shop above a ¥ Kiyomizu-dera for a ¥¥ traveller. Every unit test passed
+that bug straight through, because each one was individually correct.
 
 ---
 
@@ -495,6 +523,12 @@ per-commit gate.
 
 # Step 12 — `enrich.ts` (Batches)
 
+**Carried over — validate `avgVisitMinutes` before it reaches the packer.**
+`resolveVisitDuration` (Step 6) trusts rung 2 completely: `[0, 0]` yields a
+zero-minute activity and a reversed `[120, 30]` yields `preferred < min`, both of
+which the packer's elastic slots take at face value. Clamp on the way out of
+enrichment — a model-authored range is untrusted input, not a constant.
+
 **Mode:** Seam · **Depends on:** 9, 10
 
 ```bash
@@ -526,6 +560,13 @@ Client injected. No test in this file asserts anything about tag *quality*.
 # Step 13 — `assign.ts` (Pass B)
 
 **Mode:** Seam · **Depends on:** 5, 12
+
+**Carried over — cluster labels are still unfilled.** `PlaceCluster.label` /
+`ScoredCluster.label` are `undefined` all the way through the deterministic core:
+nothing there knows that a centroid at (35.017, 135.671) is "Arashiyama". Decide
+here whether Pass B names each cluster from its members (free, in the same call)
+or a reverse-geocode fills it before the call (accurate, one extra Google SKU).
+Until then, day headings would read "Cluster 2".
 
 **Tests** (`src/lib/planner/assign.test.ts`):
 
