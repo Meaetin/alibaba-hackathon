@@ -440,7 +440,11 @@ the next candidate from Stage 3's ranked list.
    `CompactActivityCard.tsx` and `overlap-utils.ts`, so the column earns its keep)
 2. Enriched estimate from the cached LLM pass (e.g. kaiseki → 90–120 min)
 3. Type heuristic table: cafe 45, temple 45, museum 90, hike 120, shopping street 60…
-4. Pace multiplier: relaxed ×1.2, packed ×0.85
+4. Global default (60 min)
+
+Pace is **not** a rung — it's a multiplier applied to `preferred` after the ladder
+resolves (relaxed ×1.2, packed ×0.85), clamped so it never pushes outside
+`[min, max]`. See `resolveVisitDuration` in `src/lib/planner/duration.ts`.
 
 ## Beyond-Google Data: Cached LLM Enrichment
 
@@ -963,7 +967,9 @@ undebuggable. Narrowing happens in deterministic, logged stages:
   → 15 + flex  after Pass B        (LLM assigns to day-slots)
 ```
 
-1. **Hard filters** — closed, dietary mismatch, business status. Free.
+1. **Hard filters** — closed, business status, way-off-budget. Free. Dietary is a
+   hard filter too, but applied to *meal-slot* candidates only: a diet doesn't ban
+   you from a museum with a grill in the lobby. See `hardFilterReason` in `score.ts`.
 2. **Per-cluster cap (~20/cluster)** — score everything, keep top N within each
    cluster. Without this, one dense district starves every other neighborhood.
 3. **Global cap (~60) with per-type quotas** — max ~40% restaurants, max 3 of the
@@ -981,6 +987,11 @@ cluster_score = mean(top 5 place scores in cluster)
               + interest_coverage bonus   // does this cluster serve MY interests?
               + variety bonus             // mix of activity + food + cafe?
 ```
+
+Implemented as `scoreCluster` in `src/lib/planner/funnel.ts`. Both bonuses are small
+(0.06 / 0.04) on purpose: interest matching is already priced into every place score
+at `WEIGHTS.affinity`, so a large coverage bonus double-counts it and lets a cluster
+of mediocre places win on variety alone.
 
 Pass B receives candidates grouped by cluster with cluster summaries; its day
 assignments naturally allocate ~one cluster per day. "Outdoors + cafes" user →
@@ -1002,7 +1013,7 @@ still a scored, explainable choice rather than a dice roll.
 
 | Cut | Owner | Mechanism |
 |---|---|---|
-| 1,043 → 612 | Code | Hard filters (dietary = filter, always) |
+| 1,043 → 612 | Code | Hard filters (dietary = filter, on meal slots) |
 | 612 → 200 | Code | Stage 3 score, per-cluster cap |
 | 200 → 60 | Code | Global rank + per-type quotas + cluster score ordering |
 | 60 → 15+flex | LLM | Pass B: taste, nuance, "why" |

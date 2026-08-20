@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: hooks_contexts
+title: React Hooks & App-Level Contexts
+scope:
+    - src/hooks/
+    - src/contexts/
+source_files: []
+depends_on: []
+related_to:
+    - path: app_routes/links
+    - path: components_ui/providers_and_notifications

@@ -1,0 +1,1 @@
+None — these are standard Next.js App Router route files loaded automatically by the framework; no build or test scripts specific to this module.

@@ -1,0 +1,327 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: en-US
+branch: main
+nodes_managed: true
+exported_at: "2026-08-20T16:15:23Z"
+modules:
+    "":
+        dir_name: Argo Hackathon Next.js Frontend
+        title: Argo Hackathon Next.js Frontend
+        scope:
+            - docs/
+            - .gitignore
+            - AGENTS.md
+            - CLAUDE.md
+            - next-env.d.ts
+            - next.config.js
+            - package.json
+            - postcss.config.js
+            - tsconfig.json
+            - vitest.config.ts
+            - .env.local.example
+            - package-lock.json
+        source_files: []
+        children:
+            - app_routes
+            - components_ui
+            - hooks_contexts
+            - lib_core
+        depends_on: []
+        related_to: []
+    app_routes:
+        dir_name: App Routes (Next.js App Router)
+        title: App Routes (Next.js App Router)
+        scope:
+            - src/app/
+        source_files: []
+        children:
+            - app_routes/collections
+            - app_routes/home
+            - app_routes/itineraries
+            - app_routes/links
+        depends_on: []
+        related_to: []
+    app_routes/collections:
+        dir_name: Collections Routes (List, Detail & Public View)
+        title: Collections Routes (List, Detail & Public View)
+        scope:
+            - src/app/collections/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    app_routes/home:
+        dir_name: Dashboard Home Page (Recent Content & Creation Hub)
+        title: Dashboard Home Page (Recent Content & Creation Hub)
+        scope:
+            - src/app/home/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/cards
+            - path: lib_core/supabase_layer
+    app_routes/itineraries:
+        dir_name: Itineraries Routes (List, Detail & Public View)
+        title: Itineraries Routes (List, Detail & Public View)
+        scope:
+            - src/app/itineraries/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: lib_core/api_clients
+    app_routes/links:
+        dir_name: Links Management & Detail Pages
+        title: Links Management & Detail Pages
+        scope:
+            - src/app/links/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: hooks_contexts
+    components_ui:
+        dir_name: Application UI Component Library
+        title: Application UI Component Library
+        scope:
+            - src/components/
+        source_files: []
+        children:
+            - components_ui/auth_ui
+            - components_ui/cards
+            - components_ui/detail_views
+            - components_ui/itinerary
+            - components_ui/layout_and_dashboard
+            - components_ui/map
+            - components_ui/modals
+            - components_ui/navbar
+            - components_ui/primitives
+            - components_ui/providers_and_notifications
+            - components_ui/shared_widgets
+        depends_on: []
+        related_to: []
+    components_ui/auth_ui:
+        dir_name: Auth UI Components & Stripe Background
+        title: Auth UI Components & Stripe Background
+        scope:
+            - src/components/ui/auth/
+            - src/components/ui/StripeBackground/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    components_ui/cards:
+        dir_name: Entity Card Components
+        title: Entity Card Components
+        scope:
+            - src/components/ui/cards/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_routes/home
+    components_ui/detail_views:
+        dir_name: Detail Views & Itinerary Cards
+        title: Detail Views & Itinerary Cards
+        scope:
+            - src/components/ui/detail-views/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    components_ui/itinerary:
+        dir_name: Itinerary Detail UI Components
+        title: Itinerary Detail UI Components
+        scope:
+            - src/components/ui/itinerary/
+        source_files: []
+        children:
+            - components_ui/itinerary/core_itinerary
+            - components_ui/itinerary/tabs
+        depends_on: []
+        related_to: []
+    components_ui/itinerary/core_itinerary:
+        dir_name: Itinerary Detail UI Components
+        title: Itinerary Detail UI Components
+        scope:
+            - src/components/ui/itinerary/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/itinerary/tabs
+    components_ui/itinerary/tabs:
+        dir_name: Itinerary Detail Tabs
+        title: Itinerary Detail Tabs
+        scope:
+            - src/components/ui/itinerary/tabs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/itinerary/core_itinerary
+    components_ui/layout_and_dashboard:
+        dir_name: Main Layout & Dashboard Action UI
+        title: Main Layout & Dashboard Action UI
+        scope:
+            - src/components/ui/layout/
+            - src/components/ui/dashboard/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/modals
+            - path: components_ui/navbar
+    components_ui/map:
+        dir_name: Google Maps Interactive & Clustered Map Components
+        title: Google Maps Interactive & Clustered Map Components
+        scope:
+            - src/components/ui/map/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: lib_core/maps
+    components_ui/modals:
+        dir_name: Modal & Dialog UI Components
+        title: Modal & Dialog UI Components
+        scope:
+            - src/components/ui/modals/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/layout_and_dashboard
+    components_ui/navbar:
+        dir_name: Application Navbar & Search Overlay
+        title: Application Navbar & Search Overlay
+        scope:
+            - src/components/ui/navbar/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/layout_and_dashboard
+    components_ui/primitives:
+        dir_name: Base UI Primitives (Design System Components)
+        title: Base UI Primitives (Design System Components)
+        scope:
+            - src/components/ui/primitives/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    components_ui/providers_and_notifications:
+        dir_name: App Context Providers & Itinerary Job Notifications
+        title: App Context Providers & Itinerary Job Notifications
+        scope:
+            - src/components/QueryProvider.tsx
+            - src/components/ThemeProvider.tsx
+            - src/components/notifications/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: hooks_contexts
+    components_ui/shared_widgets:
+        dir_name: Shared UI Widgets (Calendar, Links, Notes, Skeletons)
+        title: Shared UI Widgets (Calendar, Links, Notes, Skeletons)
+        scope:
+            - src/components/ui/calendar/
+            - src/components/ui/links/
+            - src/components/ui/notes/
+            - src/components/ui/skeletons/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    hooks_contexts:
+        dir_name: React Hooks & App-Level Contexts
+        title: React Hooks & App-Level Contexts
+        scope:
+            - src/hooks/
+            - src/contexts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_routes/links
+            - path: components_ui/providers_and_notifications
+    lib_core:
+        dir_name: Application Core Library (src_lib)
+        title: Application Core Library (src/lib)
+        scope:
+            - src/lib/
+        source_files: []
+        children:
+            - lib_core/api_clients
+            - lib_core/lib_root_modules
+            - lib_core/maps
+            - lib_core/motion_and_utils
+            - lib_core/planner_engine
+            - lib_core/supabase_layer
+        depends_on: []
+        related_to: []
+    lib_core/api_clients:
+        dir_name: Backend API Client Layer
+        title: Backend API Client Layer
+        scope:
+            - src/lib/api/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_routes/itineraries
+    lib_core/lib_root_modules:
+        dir_name: Shared Domain Types & Site Utilities
+        title: Shared Domain Types & Site Utilities
+        scope:
+            - src/lib/domain-types.ts
+            - src/lib/selection-style.ts
+            - src/lib/site.ts
+            - src/lib/utils.ts
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lib_core/maps:
+        dir_name: Google Maps Place Search & Location Utilities
+        title: Google Maps Place Search & Location Utilities
+        scope:
+            - src/lib/maps/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: components_ui/map
+    lib_core/motion_and_utils:
+        dir_name: Motion Presets & Shared UI Utilities
+        title: Motion Presets & Shared UI Utilities
+        scope:
+            - src/lib/motion/
+            - src/lib/utils/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lib_core/planner_engine:
+        dir_name: Personalized Itinerary Planner Engine
+        title: Personalized Itinerary Planner Engine
+        scope:
+            - src/lib/planner/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    lib_core/supabase_layer:
+        dir_name: Supabase Data Access Layer
+        title: Supabase Data Access Layer
+        scope:
+            - src/lib/supabase/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: app_routes/home

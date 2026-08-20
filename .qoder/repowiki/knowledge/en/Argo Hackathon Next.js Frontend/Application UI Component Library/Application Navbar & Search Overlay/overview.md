@@ -1,0 +1,1 @@
+Top-level application navbar providing logo, tabs, search with a full-screen overlay dropdown, filter pills, and profile/create menus for links, collections, and itineraries.

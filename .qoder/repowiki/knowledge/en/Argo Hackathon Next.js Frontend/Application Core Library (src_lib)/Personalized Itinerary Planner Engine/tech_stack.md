@@ -1,0 +1,1 @@
+Pure TypeScript with no runtime dependencies beyond the project's `@/lib/maps/price-level` ordinal; uses a custom k-means++ implementation rather than a clustering library.

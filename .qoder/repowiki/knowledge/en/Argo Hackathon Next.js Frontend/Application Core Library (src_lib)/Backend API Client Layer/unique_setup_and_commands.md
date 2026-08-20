@@ -1,0 +1,1 @@
+Requires `NEXT_PUBLIC_API_URL` environment variable pointing at the backend; without it requests target `http://localhost:8080`. Supabase must be configured via `@/lib/supabase/client` for both auth sessions and storage operations.

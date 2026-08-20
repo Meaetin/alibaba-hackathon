@@ -1,0 +1,90 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Gate A — the shortlist itself > matches the recorded plan 1`] = `
+{
+  "days": [
+    {
+      "places": [
+        "Kiyomizu-dera",
+        "Ginkaku-ji",
+        "Weekenders Coffee Tominokoji",
+        "Kodai-ji Temple",
+        "Kennin-ji",
+        "% Arabica Kyoto Higashiyama",
+        "Menbaka Fire Ramen",
+        "Walden Woods Kyoto",
+        "Inoda Coffee Honten",
+        "Kyoto Gyoza Chao Chao",
+        "Blue Bottle Coffee Kyoto",
+        "Cafe Bibliotic Hello",
+        "Ramen Sen no Kaze",
+        "Vegan Ramen Uzu Kyoto",
+        "Kasagiya",
+        "Smart Coffee",
+        "Mumokuteki Cafe",
+        "Kaiten Sushi Musashi",
+        "Issen Yoshoku",
+      ],
+      "score": 0.796,
+    },
+    {
+      "places": [
+        "Okochi Sanso Garden",
+        "Tenryu-ji Temple",
+        "Gio-ji Temple",
+        "Jojakko-ji Temple",
+        "% Arabica Kyoto Arashiyama",
+        "Yoshimura Soba Arashiyama",
+        "Shigetsu Shojin Ryori",
+        "Sagano Yudofu",
+        "Togetsukyo Bridge",
+        "Iwatayama Monkey Park",
+        "Arashiyama Bamboo Grove",
+        "Kameyama Park",
+        "Arashiyama Kimono Forest",
+      ],
+      "score": 0.796,
+    },
+    {
+      "places": [
+        "Kinkaku-ji",
+        "Nijo Castle",
+        "Ryoan-ji",
+        "Daitoku-ji",
+        "Sarasa Nishijin",
+        "Kyoto Imperial Palace",
+        "Kamigamo Shrine",
+        "Kyoto Botanical Gardens",
+        "Funaoka Onsen",
+      ],
+      "score": 0.759,
+    },
+    {
+      "places": [
+        "Sanjusangendo",
+        "Kurasu Kyoto Stand",
+        "Vermillion Espresso Bar",
+        "Fushimi Inari Taisha",
+        "Mt. Inari Trail",
+      ],
+      "score": 0.69,
+    },
+    {
+      "places": [
+        "Torisei Honten",
+        "Kizakura Kappa Country",
+        "Fushimi Momoyama Castle",
+        "Gekkeikan Okura Sake Museum",
+        "Fushimi Sake District",
+      ],
+      "score": 0.637,
+    },
+  ],
+  "stats": {
+    "afterClusterCap": 53,
+    "afterFilters": 77,
+    "afterGlobalCap": 51,
+    "retrieved": 86,
+  },
+}
+`;

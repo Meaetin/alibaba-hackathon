@@ -7,6 +7,8 @@
  * and drive clustering and packing. They are never merged into one object.
  */
 
+import type { PriceLevelOrdinal } from "@/lib/maps/price-level";
+
 /** Fixed taxonomy. Adding a member means adding a row to the taxonomy bridge. */
 export type Interest =
   | "outdoors"
@@ -46,4 +48,45 @@ export interface SchedulerOptions {
   /** "HH:MM" wall clock bounds for a planned day. */
   startTime?: string;
   endTime?: string;
+}
+
+/**
+ * A retrieved place as the deterministic core consumes it — produced by
+ * retrieval (Places REST) and scored/filtered/clustered without ever going
+ * back to Google. Field names follow the REST response, not the DB row.
+ */
+export interface CandidatePlace {
+  placeId: string;
+  name: string;
+  types: string[];
+  primaryType?: string;
+  latitude?: number;
+  longitude?: number;
+  rating?: number;
+  userRatingCount?: number;
+  /** 0–4 ordinal via `toPriceLevelOrdinal`; undefined = Google didn't say. */
+  priceLevel?: PriceLevelOrdinal;
+  businessStatus?: string;
+  /** Minutes; `locations.stay_duration`, backfilled from enrichment. Rung 1
+   *  of the visit-duration ladder when present. */
+  stayDuration?: number;
+}
+
+/**
+ * Cached per place_id — profile-agnostic, pay once, TTL ~90 days. Produced by
+ * the enrichment pass (Step 12), consumed by duration resolution, the dietary
+ * ladder (tags) and Pass C. See "Beyond-Google Data" in the pipeline doc.
+ */
+export interface PlaceEnrichment {
+  /** 1–2 sentences. Replaces Google's editorialSummary. */
+  description: string;
+  /** e.g. ["vegetarian-friendly", "outdoor-seating"] — rung 2 of the dietary ladder. */
+  tags: string[];
+  confidence: number;
+  /** [low, high] minutes estimate — rung 2 of the visit-duration ladder. */
+  avgVisitMinutes: [number, number];
+  /** Feeds foodRecommendations. Grounded by enrichment, never invented by Pass C. */
+  signatureDishes?: string[];
+  bestTimeOfDay?: "morning" | "midday" | "sunset" | "evening";
+  crowdProfile?: "quiet" | "moderate" | "packed";
 }

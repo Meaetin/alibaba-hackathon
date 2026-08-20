@@ -1,0 +1,1 @@
+React + Next.js client components, `@base-ui/react/dialog` for accessible dialog primitives, `class-variance-authority` for variant-based styling, `lucide-react` icons, and `react-dom/createPortal` for the image lightbox overlay.

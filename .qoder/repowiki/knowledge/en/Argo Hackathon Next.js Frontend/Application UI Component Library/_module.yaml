@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: components_ui
+title: Application UI Component Library
+scope:
+    - src/components/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: components_ui/detail_views
+title: Detail Views & Itinerary Cards
+scope:
+    - src/components/ui/detail-views/
+source_files: []
+depends_on: []
+related_to: []

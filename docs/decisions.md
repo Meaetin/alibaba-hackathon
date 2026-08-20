@@ -49,3 +49,37 @@
   or `node --test`. Native ESM + TypeScript with no Babel config, and it reads the
   `@/*` alias straight out of `tsconfig.json`. Implementation order and per-step
   verify commands live in `docs/implementation-plan.md`.
+- 2026-08-20 — The funnel returns the shortlist **grouped by cluster**
+  (`FunnelResult.clusters`) as well as flat. Pass B (Step 13) assigns one cluster
+  per day; a flat `ScoredPlace[]` forced it to re-derive membership by joining on
+  `placeId` against the original clusters, which is a silent-drift bug waiting to
+  happen. `scoreCluster` implements the doc's `cluster_score` and orders them.
+- 2026-08-20 — Cluster-score coverage/variety bonuses are 0.06/0.04, not 0.15/0.10.
+  Interest matching is already priced into every place score at `WEIGHTS.affinity`
+  (0.4); at the larger weights a cluster of 2.5★ places outscored a cluster of
+  4.9★ ones purely on role variety. The bonuses break ties, they don't override.
+- 2026-08-20 — Every funnel cut records `{ placeId, stage, reason }` in
+  `FunnelResult.dropped`, and `hardFilterReason` in `score.ts` owns both the rule
+  and its wording so the two can't drift. This is invariant 8 of the cross-cutting
+  suite, enforced at the funnel instead of waiting for Gate A.
+- 2026-08-20 — The restaurant quota is denominated in the global cap (24 of 60),
+  not in the output length. In a thin city the shortlist tips past 40% restaurants
+  rather than shrink; 34 candidates for Pass B beats 16. Pinned by a test, because
+  it reads like a bug.
+- 2026-08-20 — Two known gaps deferred, noted at the step that will close them:
+  cluster labels stay `undefined` through the deterministic core (Step 13 decides
+  Pass B vs reverse-geocode), and `avgVisitMinutes` from enrichment is trusted
+  unvalidated by `resolveVisitDuration` (Step 12 clamps it). Neither blocks Gate A.
+- 2026-08-20 — `priceFit` is asymmetric: at or under budget scores 1, only
+  *above* budget is penalized. The symmetric version contradicted the hard filter
+  ("cheap is never a violation") and ranked a ¥¥ ramen shop above a ¥
+  Kiyomizu-dera for a ¥¥ traveller. Found by the Gate A fixture, not by any unit
+  test — each unit test was individually right.
+- 2026-08-20 — Gate A's end-to-end fixture run lives in
+  `src/lib/planner/__tests__/gate-a.test.ts` and is the extension point for Steps
+  7 and 8. `__tests__/` means cross-module (invariants, seeded rng, Gate A);
+  per-module tests stay colocated.
+- 2026-08-21 — One Google Maps map ID only, the light style, used in both app
+  themes. `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK` is gone; maintaining a second
+  Cloud Console map style wasn't worth it. App dark mode still colors markers and
+  polylines, just not the base map.

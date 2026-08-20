@@ -21,8 +21,7 @@ export type PlaceDetailsFetcher = (placeId: string) => Promise<Partial<PlaceSear
 export type PlaceSearchRunner = (query: string, includedTypes: string[]) => Promise<PlaceSearchResult[]>;
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-const MAP_ID_LIGHT = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT ?? "map-light";
-const MAP_ID_DARK = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK ?? "map-dark";
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT ?? "map-light";
 
 function getCenter(locations: MapLocation[]): google.maps.LatLngLiteral {
   if (locations.length === 0) return { lat: 20, lng: 0 };
@@ -326,8 +325,6 @@ function GoogleMapDetailInner({ locations, polylines, defaultCenter, defaultZoom
     return () => onPlaceDetailsFetcherReady(null);
   }, [placesLib, onPlaceDetailsFetcherReady]);
 
-  const mapId = resolvedTheme === "dark" ? MAP_ID_DARK : MAP_ID_LIGHT;
-
   const initialCenter = locations.length > 0
     ? getCenter(locations)
     : defaultCenter
@@ -340,7 +337,7 @@ function GoogleMapDetailInner({ locations, polylines, defaultCenter, defaultZoom
 
   return (
     <Map
-      mapId={mapId}
+      mapId={MAP_ID}
       defaultCenter={initialCenter}
       defaultZoom={initialZoom}
       gestureHandling={interactive ? "greedy" : "none"}

@@ -2,13 +2,11 @@
 
 import { useEffect, type ReactNode } from "react";
 import { APIProvider, Map, AdvancedMarker, MapControl, ControlPosition, useMap } from "@vis.gl/react-google-maps";
-import { useTheme } from "next-themes";
 import { MapClusterMarker } from "./MapClusterMarker";
 import type { MapClusterData } from "./StaticMap";
 
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
-const MAP_ID_LIGHT = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT ?? "map-light";
-const MAP_ID_DARK = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK ?? "map-dark";
+const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT ?? "map-light";
 
 function calculateMapView(clusters: MapClusterData[]): { center: google.maps.LatLngLiteral; zoom: number } {
   if (clusters.length === 0) return { center: { lat: 20, lng: 0 }, zoom: 1 };
@@ -89,16 +87,13 @@ function GoogleMapClusterInner({
   hoveredClusterId,
   onHoverChange,
 }: GoogleMapClusterInnerProps & { center?: [number, number]; zoom?: number }) {
-  const { resolvedTheme } = useTheme();
-
-  const mapId = resolvedTheme === "dark" ? MAP_ID_DARK : MAP_ID_LIGHT;
   const autoView = calculateMapView(clusters);
   const center = centerProp ? { lat: centerProp[0], lng: centerProp[1] } : autoView.center;
   const zoom = zoomProp ?? autoView.zoom;
 
   return (
     <Map
-      mapId={mapId}
+      mapId={MAP_ID}
       defaultCenter={center}
       defaultZoom={zoom}
       gestureHandling={interactive ? "greedy" : "none"}

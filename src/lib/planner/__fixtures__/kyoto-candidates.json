@@ -1,0 +1,1158 @@
+[
+  {
+    "placeId": "ChIJ_arashiyama_bamboo",
+    "name": "Arashiyama Bamboo Grove",
+    "types": [
+      "park",
+      "tourist_attraction"
+    ],
+    "primaryType": "park",
+    "latitude": 35.017,
+    "longitude": 135.6716,
+    "rating": 4.5,
+    "userRatingCount": 41000
+  },
+  {
+    "placeId": "ChIJ_tenryuji",
+    "name": "Tenryu-ji Temple",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0158,
+    "longitude": 135.6737,
+    "rating": 4.5,
+    "userRatingCount": 12400,
+    "priceLevel": 1,
+    "stayDuration": 60
+  },
+  {
+    "placeId": "ChIJ_okochi",
+    "name": "Okochi Sanso Garden",
+    "types": [
+      "garden",
+      "historical_landmark"
+    ],
+    "primaryType": "garden",
+    "latitude": 35.0186,
+    "longitude": 135.6684,
+    "rating": 4.6,
+    "userRatingCount": 3400,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_monkeypark",
+    "name": "Iwatayama Monkey Park",
+    "types": [
+      "park",
+      "tourist_attraction"
+    ],
+    "primaryType": "park",
+    "latitude": 35.0132,
+    "longitude": 135.678,
+    "rating": 4.4,
+    "userRatingCount": 9800,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_togetsukyo",
+    "name": "Togetsukyo Bridge",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "latitude": 35.013,
+    "longitude": 135.6776,
+    "rating": 4.4,
+    "userRatingCount": 15200
+  },
+  {
+    "placeId": "ChIJ_gioji",
+    "name": "Gio-ji Temple",
+    "types": [
+      "place_of_worship",
+      "garden"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0248,
+    "longitude": 135.6668,
+    "rating": 4.5,
+    "userRatingCount": 1900,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_jojakkoji",
+    "name": "Jojakko-ji Temple",
+    "types": [
+      "place_of_worship"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.023,
+    "longitude": 135.6676,
+    "rating": 4.5,
+    "userRatingCount": 1180,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_arabica_arashiyama",
+    "name": "% Arabica Kyoto Arashiyama",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0126,
+    "longitude": 135.6768,
+    "rating": 4.3,
+    "userRatingCount": 4200,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_sagano_yudofu",
+    "name": "Sagano Yudofu",
+    "types": [
+      "restaurant",
+      "vegetarian_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0163,
+    "longitude": 135.6726,
+    "rating": 4.2,
+    "userRatingCount": 380,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_shigetsu",
+    "name": "Shigetsu Shojin Ryori",
+    "types": [
+      "restaurant",
+      "vegetarian_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0155,
+    "longitude": 135.674,
+    "rating": 4.3,
+    "userRatingCount": 620,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_yoshimura_soba",
+    "name": "Yoshimura Soba Arashiyama",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0139,
+    "longitude": 135.6773,
+    "rating": 4.1,
+    "userRatingCount": 3100,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kameyama",
+    "name": "Kameyama Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 35.0179,
+    "longitude": 135.6702,
+    "rating": 4.5,
+    "userRatingCount": 2600
+  },
+  {
+    "placeId": "ChIJ_kimono_forest",
+    "name": "Arashiyama Kimono Forest",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 35.0152,
+    "longitude": 135.681,
+    "rating": 4.3,
+    "userRatingCount": 8700
+  },
+  {
+    "placeId": "ChIJ_yamamoto_closed",
+    "name": "Coffee Shop Yamamoto",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0141,
+    "longitude": 135.6752,
+    "rating": 4.0,
+    "userRatingCount": 210,
+    "priceLevel": 2,
+    "businessStatus": "CLOSED_PERMANENTLY"
+  },
+  {
+    "placeId": "ChIJ_kiyomizu",
+    "name": "Kiyomizu-dera",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 34.9949,
+    "longitude": 135.785,
+    "rating": 4.6,
+    "userRatingCount": 68000,
+    "priceLevel": 1,
+    "stayDuration": 90
+  },
+  {
+    "placeId": "ChIJ_yasaka",
+    "name": "Yasaka Shrine",
+    "types": [
+      "place_of_worship"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0036,
+    "longitude": 135.7786,
+    "rating": 4.5,
+    "userRatingCount": 33000
+  },
+  {
+    "placeId": "ChIJ_kodaiji",
+    "name": "Kodai-ji Temple",
+    "types": [
+      "place_of_worship",
+      "garden"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0,
+    "longitude": 135.7807,
+    "rating": 4.4,
+    "userRatingCount": 8600,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_chionin",
+    "name": "Chion-in",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0055,
+    "longitude": 135.7825,
+    "rating": 4.5,
+    "userRatingCount": 9700
+  },
+  {
+    "placeId": "ChIJ_kenninji",
+    "name": "Kennin-ji",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0,
+    "longitude": 135.7738,
+    "rating": 4.4,
+    "userRatingCount": 6200,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_maruyama",
+    "name": "Maruyama Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 35.0037,
+    "longitude": 135.7815,
+    "rating": 4.3,
+    "userRatingCount": 14000
+  },
+  {
+    "placeId": "ChIJ_shirakawa",
+    "name": "Gion Shirakawa",
+    "types": [
+      "tourist_attraction",
+      "historical_landmark"
+    ],
+    "latitude": 35.0053,
+    "longitude": 135.7752,
+    "rating": 4.5,
+    "userRatingCount": 4900
+  },
+  {
+    "placeId": "ChIJ_sannenzaka",
+    "name": "Sannenzaka",
+    "types": [
+      "tourist_attraction",
+      "historical_landmark"
+    ],
+    "latitude": 34.9968,
+    "longitude": 135.7817,
+    "rating": 4.6,
+    "userRatingCount": 11000
+  },
+  {
+    "placeId": "ChIJ_national_museum",
+    "name": "Kyoto National Museum",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 34.9903,
+    "longitude": 135.7729,
+    "rating": 4.4,
+    "userRatingCount": 7300,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_sanjusangendo",
+    "name": "Sanjusangendo",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 34.9879,
+    "longitude": 135.7717,
+    "rating": 4.6,
+    "userRatingCount": 13000,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_arabica_higashiyama",
+    "name": "% Arabica Kyoto Higashiyama",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.9962,
+    "longitude": 135.7797,
+    "rating": 4.3,
+    "userRatingCount": 5600,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kasagiya",
+    "name": "Kasagiya",
+    "types": [
+      "cafe"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.9971,
+    "longitude": 135.7811,
+    "rating": 4.2,
+    "userRatingCount": 430,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kikunoi",
+    "name": "Kikunoi Honten",
+    "types": [
+      "restaurant",
+      "fine_dining_restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0,
+    "longitude": 135.781,
+    "rating": 4.6,
+    "userRatingCount": 890,
+    "priceLevel": 4
+  },
+  {
+    "placeId": "ChIJ_gion_nanba",
+    "name": "Gion Nanba",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.004,
+    "longitude": 135.776,
+    "rating": 4.7,
+    "userRatingCount": 210,
+    "priceLevel": 4
+  },
+  {
+    "placeId": "ChIJ_gion_steak",
+    "name": "Gion Steak House Ishikawa",
+    "types": [
+      "restaurant",
+      "steak_house"
+    ],
+    "primaryType": "steak_house",
+    "latitude": 35.0031,
+    "longitude": 135.7768,
+    "rating": 4.5,
+    "userRatingCount": 640,
+    "priceLevel": 4
+  },
+  {
+    "placeId": "ChIJ_omen",
+    "name": "Omen Kodaiji",
+    "types": [
+      "restaurant",
+      "noodle_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0006,
+    "longitude": 135.7801,
+    "rating": 4.2,
+    "userRatingCount": 1400,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_issen",
+    "name": "Issen Yoshoku",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0037,
+    "longitude": 135.7745,
+    "rating": 3.9,
+    "userRatingCount": 3600,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_nanzenji",
+    "name": "Nanzen-ji",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0114,
+    "longitude": 135.7942,
+    "rating": 4.5,
+    "userRatingCount": 11000
+  },
+  {
+    "placeId": "ChIJ_philosophers",
+    "name": "Philosopher's Path",
+    "types": [
+      "park",
+      "tourist_attraction"
+    ],
+    "primaryType": "park",
+    "latitude": 35.027,
+    "longitude": 135.7946,
+    "rating": 4.5,
+    "userRatingCount": 9400
+  },
+  {
+    "placeId": "ChIJ_ginkakuji",
+    "name": "Ginkaku-ji",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.027,
+    "longitude": 135.7982,
+    "rating": 4.5,
+    "userRatingCount": 26000,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_bluebottle",
+    "name": "Blue Bottle Coffee Kyoto",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0121,
+    "longitude": 135.7862,
+    "rating": 4.2,
+    "userRatingCount": 2900,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_heian",
+    "name": "Heian Shrine",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.016,
+    "longitude": 135.7825,
+    "rating": 4.4,
+    "userRatingCount": 17000
+  },
+  {
+    "placeId": "ChIJ_fushimi_inari",
+    "name": "Fushimi Inari Taisha",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 34.9671,
+    "longitude": 135.7727,
+    "rating": 4.7,
+    "userRatingCount": 96000,
+    "stayDuration": 120
+  },
+  {
+    "placeId": "ChIJ_inari_trail",
+    "name": "Mt. Inari Trail",
+    "types": [
+      "hiking_area",
+      "park"
+    ],
+    "primaryType": "hiking_area",
+    "latitude": 34.967,
+    "longitude": 135.779,
+    "rating": 4.7,
+    "userRatingCount": 3200
+  },
+  {
+    "placeId": "ChIJ_vermillion",
+    "name": "Vermillion Espresso Bar",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.966,
+    "longitude": 135.7735,
+    "rating": 4.3,
+    "userRatingCount": 780,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_sando_chaya",
+    "name": "Fushimi Inari Sando Chaya",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 34.9679,
+    "longitude": 135.7719,
+    "rating": 4.0,
+    "userRatingCount": 520,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_gekkeikan",
+    "name": "Gekkeikan Okura Sake Museum",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 34.9315,
+    "longitude": 135.762,
+    "rating": 4.2,
+    "userRatingCount": 3100,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_sake_district",
+    "name": "Fushimi Sake District",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 34.933,
+    "longitude": 135.76,
+    "rating": 4.3,
+    "userRatingCount": 1100
+  },
+  {
+    "placeId": "ChIJ_torisei",
+    "name": "Torisei Honten",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 34.9322,
+    "longitude": 135.7607,
+    "rating": 4.2,
+    "userRatingCount": 1900,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kizakura",
+    "name": "Kizakura Kappa Country",
+    "types": [
+      "restaurant",
+      "brewery"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 34.9308,
+    "longitude": 135.7627,
+    "rating": 4.0,
+    "userRatingCount": 1600,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_momoyama",
+    "name": "Fushimi Momoyama Castle",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "latitude": 34.9394,
+    "longitude": 135.783,
+    "rating": 4.1,
+    "userRatingCount": 2400
+  },
+  {
+    "placeId": "ChIJ_kokopeli_closed",
+    "name": "Cafe Kokopeli",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.9668,
+    "longitude": 135.7742,
+    "rating": 4.1,
+    "userRatingCount": 90,
+    "priceLevel": 2,
+    "businessStatus": "CLOSED_PERMANENTLY"
+  },
+  {
+    "placeId": "ChIJ_nishiki",
+    "name": "Nishiki Market",
+    "types": [
+      "market",
+      "tourist_attraction"
+    ],
+    "primaryType": "market",
+    "latitude": 35.005,
+    "longitude": 135.7649,
+    "rating": 4.2,
+    "userRatingCount": 34000
+  },
+  {
+    "placeId": "ChIJ_nijo",
+    "name": "Nijo Castle",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "latitude": 35.0142,
+    "longitude": 135.7481,
+    "rating": 4.5,
+    "userRatingCount": 30000,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_imperial",
+    "name": "Kyoto Imperial Palace",
+    "types": [
+      "historical_landmark",
+      "park"
+    ],
+    "latitude": 35.0254,
+    "longitude": 135.7621,
+    "rating": 4.4,
+    "userRatingCount": 12000
+  },
+  {
+    "placeId": "ChIJ_manga_museum",
+    "name": "Kyoto International Manga Museum",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 35.011,
+    "longitude": 135.7594,
+    "rating": 4.1,
+    "userRatingCount": 5200,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_museum_of_kyoto",
+    "name": "The Museum of Kyoto",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 35.01,
+    "longitude": 135.7625,
+    "rating": 4.0,
+    "userRatingCount": 1800,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kaleidoscope",
+    "name": "Kyoto Kaleidoscope Museum",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 35.0117,
+    "longitude": 135.7604,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_pontocho",
+    "name": "Pontocho Alley",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 35.0064,
+    "longitude": 135.7708,
+    "rating": 4.4,
+    "userRatingCount": 9600
+  },
+  {
+    "placeId": "ChIJ_teramachi",
+    "name": "Teramachi Kyogoku",
+    "types": [
+      "shopping_mall",
+      "tourist_attraction"
+    ],
+    "primaryType": "shopping_mall",
+    "latitude": 35.006,
+    "longitude": 135.767,
+    "rating": 4.1,
+    "userRatingCount": 6300
+  },
+  {
+    "placeId": "ChIJ_takashimaya",
+    "name": "Kyoto Takashimaya",
+    "types": [
+      "department_store",
+      "shopping_mall"
+    ],
+    "primaryType": "department_store",
+    "latitude": 35.0044,
+    "longitude": 135.7684,
+    "rating": 4.2,
+    "userRatingCount": 5100,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_daimaru",
+    "name": "Daimaru Kyoto",
+    "types": [
+      "department_store"
+    ],
+    "primaryType": "department_store",
+    "latitude": 35.0043,
+    "longitude": 135.7658,
+    "rating": 4.1,
+    "userRatingCount": 4700,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_weekenders",
+    "name": "Weekenders Coffee Tominokoji",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0069,
+    "longitude": 135.7635,
+    "rating": 4.5,
+    "userRatingCount": 1400,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_kurasu",
+    "name": "Kurasu Kyoto Stand",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.9885,
+    "longitude": 135.7566,
+    "rating": 4.4,
+    "userRatingCount": 900,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_walden",
+    "name": "Walden Woods Kyoto",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 34.9926,
+    "longitude": 135.7602,
+    "rating": 4.3,
+    "userRatingCount": 2100,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_bibliotic",
+    "name": "Cafe Bibliotic Hello",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0132,
+    "longitude": 135.7672,
+    "rating": 4.2,
+    "userRatingCount": 2400,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_smart_coffee",
+    "name": "Smart Coffee",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.009,
+    "longitude": 135.7676,
+    "rating": 4.1,
+    "userRatingCount": 3300,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_inoda",
+    "name": "Inoda Coffee Honten",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0075,
+    "longitude": 135.7639,
+    "rating": 4.2,
+    "userRatingCount": 5800,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_mumokuteki",
+    "name": "Mumokuteki Cafe",
+    "types": [
+      "restaurant",
+      "vegetarian_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0068,
+    "longitude": 135.7663,
+    "rating": 4.1,
+    "userRatingCount": 2600,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_ainsoph",
+    "name": "Ain Soph Journey Kyoto",
+    "types": [
+      "restaurant",
+      "vegan_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0043,
+    "longitude": 135.7684,
+    "rating": 4.3,
+    "userRatingCount": 940,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_uzu",
+    "name": "Vegan Ramen Uzu Kyoto",
+    "types": [
+      "restaurant",
+      "ramen_restaurant",
+      "vegan_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0119,
+    "longitude": 135.7708,
+    "rating": 4.2,
+    "userRatingCount": 1100,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_menbaka",
+    "name": "Menbaka Fire Ramen",
+    "types": [
+      "restaurant",
+      "ramen_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0128,
+    "longitude": 135.7513,
+    "rating": 4.3,
+    "userRatingCount": 4300,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_sennokaze",
+    "name": "Ramen Sen no Kaze",
+    "types": [
+      "restaurant",
+      "ramen_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0043,
+    "longitude": 135.769,
+    "rating": 4.2,
+    "userRatingCount": 2200,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_ippudo",
+    "name": "Ippudo Nishikikoji",
+    "types": [
+      "restaurant",
+      "ramen_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0053,
+    "longitude": 135.766,
+    "rating": 4.0,
+    "userRatingCount": 1700,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_chaochao",
+    "name": "Kyoto Gyoza Chao Chao",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.006,
+    "longitude": 135.7706,
+    "rating": 4.2,
+    "userRatingCount": 3900,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_owariya",
+    "name": "Honke Owariya",
+    "types": [
+      "restaurant",
+      "noodle_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0148,
+    "longitude": 135.7601,
+    "rating": 4.2,
+    "userRatingCount": 3700,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_katsukura",
+    "name": "Katsukura Sanjo",
+    "types": [
+      "restaurant",
+      "japanese_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0086,
+    "longitude": 135.7683,
+    "rating": 4.3,
+    "userRatingCount": 4100,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_sushi_matsumoto",
+    "name": "Sushi Matsumoto",
+    "types": [
+      "restaurant",
+      "sushi_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0072,
+    "longitude": 135.7712,
+    "rating": 4.6,
+    "userRatingCount": 340,
+    "priceLevel": 4
+  },
+  {
+    "placeId": "ChIJ_sushi_iwa",
+    "name": "Sushi Iwa",
+    "types": [
+      "restaurant",
+      "sushi_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0058,
+    "longitude": 135.7719,
+    "rating": 4.5,
+    "userRatingCount": 280,
+    "priceLevel": 4
+  },
+  {
+    "placeId": "ChIJ_musashi",
+    "name": "Kaiten Sushi Musashi",
+    "types": [
+      "restaurant",
+      "sushi_restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 35.0049,
+    "longitude": 135.7688,
+    "rating": 3.9,
+    "userRatingCount": 5600,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_bees_knees",
+    "name": "Bee's Knees",
+    "types": [
+      "bar",
+      "cocktail_bar"
+    ],
+    "primaryType": "bar",
+    "latitude": 35.006,
+    "longitude": 135.7622,
+    "rating": 4.6,
+    "userRatingCount": 780,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_escamoteur",
+    "name": "L'Escamoteur Bar",
+    "types": [
+      "bar",
+      "cocktail_bar"
+    ],
+    "primaryType": "bar",
+    "latitude": 35.0035,
+    "longitude": 135.7699,
+    "rating": 4.5,
+    "userRatingCount": 1300,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_yoramu",
+    "name": "Sake Bar Yoramu",
+    "types": [
+      "bar",
+      "wine_bar"
+    ],
+    "primaryType": "bar",
+    "latitude": 35.013,
+    "longitude": 135.7628,
+    "rating": 4.4,
+    "userRatingCount": 420,
+    "priceLevel": 3
+  },
+  {
+    "placeId": "ChIJ_kinkakuji",
+    "name": "Kinkaku-ji",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0394,
+    "longitude": 135.7292,
+    "rating": 4.6,
+    "userRatingCount": 61000,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_ryoanji",
+    "name": "Ryoan-ji",
+    "types": [
+      "place_of_worship",
+      "garden"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.0345,
+    "longitude": 135.7183,
+    "rating": 4.4,
+    "userRatingCount": 15000,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_daitokuji",
+    "name": "Daitoku-ji",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.043,
+    "longitude": 135.7457,
+    "rating": 4.3,
+    "userRatingCount": 4200,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_botanical",
+    "name": "Kyoto Botanical Gardens",
+    "types": [
+      "botanical_garden",
+      "park"
+    ],
+    "primaryType": "botanical_garden",
+    "latitude": 35.049,
+    "longitude": 135.764,
+    "rating": 4.4,
+    "userRatingCount": 6800,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_kamigamo",
+    "name": "Kamigamo Shrine",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 35.06,
+    "longitude": 135.7527,
+    "rating": 4.4,
+    "userRatingCount": 3600
+  },
+  {
+    "placeId": "ChIJ_funaoka",
+    "name": "Funaoka Onsen",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 35.04,
+    "longitude": 135.7442,
+    "rating": 4.4,
+    "userRatingCount": 1500,
+    "priceLevel": 1
+  },
+  {
+    "placeId": "ChIJ_sarasa",
+    "name": "Sarasa Nishijin",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 35.0349,
+    "longitude": 135.7439,
+    "rating": 4.3,
+    "userRatingCount": 1200,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_handicraft",
+    "name": "Kyoto Handicraft Center",
+    "types": [
+      "shopping_mall",
+      "tourist_attraction"
+    ],
+    "primaryType": "shopping_mall",
+    "rating": 4.1,
+    "userRatingCount": 1900
+  },
+  {
+    "placeId": "ChIJ_nishijin_textile",
+    "name": "Nishijin Textile Center",
+    "types": [
+      "museum",
+      "tourist_attraction"
+    ],
+    "primaryType": "museum",
+    "rating": 3.9,
+    "userRatingCount": 2300
+  }
+]

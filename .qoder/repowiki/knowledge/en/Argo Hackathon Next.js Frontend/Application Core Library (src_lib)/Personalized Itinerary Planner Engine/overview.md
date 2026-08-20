@@ -1,0 +1,1 @@
+Deterministic personalization pipeline that scores, filters, clusters, and narrows retrieved places into a shortlist for itinerary assembly.

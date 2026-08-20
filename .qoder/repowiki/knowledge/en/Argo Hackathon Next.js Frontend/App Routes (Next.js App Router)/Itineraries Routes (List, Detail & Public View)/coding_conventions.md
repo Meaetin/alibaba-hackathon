@@ -1,0 +1,6 @@
+- Each route file is a client component declared with the `"use client"` directive at the top of the file.
+- Data fetching uses TanStack Query custom hooks (e.g. `useItinerariesQuery`, `useItineraryDetailQuery`) combined with `queryClient.invalidateQueries` keyed by `queryKeys.*` after mutations instead of manual refetches.
+- User-facing errors are surfaced through `useToast()` with explicit `variant` values (`success`, `error`, `default`) rather than alerts or console-only logging.
+- Async operations wrap try/catch blocks that call `showToast` for failures and use `finally` to reset loading/optimistic flags, keeping UI state consistent on both success and error paths.
+- Heavy or browser-only dependencies (e.g. `MapContainer`) are loaded lazily via `next/dynamic` with `ssr: false` to avoid SSR pollution.
+- Route-level state is kept local to the page component using `useState`/`useRef` pairs, while cross-cutting concerns (toasts, navigation loading, breakpoints) are consumed from contexts and hooks rather than passed down.

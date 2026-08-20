@@ -1,0 +1,1 @@
+motion/react for animation primitives (`Transition`, `Variants`); Intl.DateTimeFormat / Intl.DisplayNames for timezone-aware time parsing and country-code-to-flag emoji generation; native URL constructor for validation.

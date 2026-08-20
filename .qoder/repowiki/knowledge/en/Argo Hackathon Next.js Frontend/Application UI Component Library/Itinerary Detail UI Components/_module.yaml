@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: components_ui/itinerary
+title: Itinerary Detail UI Components
+scope:
+    - src/components/ui/itinerary/
+source_files: []
+depends_on: []
+related_to: []

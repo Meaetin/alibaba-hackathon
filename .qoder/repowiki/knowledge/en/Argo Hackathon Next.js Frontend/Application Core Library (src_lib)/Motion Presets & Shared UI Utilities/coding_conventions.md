@@ -1,0 +1,5 @@
+- Animation configuration is expressed as exported constant objects typed as `Transition` or `Variants` rather than inline definitions, enabling reuse across components.
+- Duration and easing values are defined once in a `motionTokens` object and referenced by transition presets instead of being duplicated per preset.
+- Time/date helpers consistently use `Intl.DateTimeFormat` with explicit `en-US` / `en-GB` locales and `timeZone` options instead of manual string parsing for cross-zone correctness.
+- Formatting utilities return empty strings, undefined, or null for missing input rather than throwing, making them safe to call on optional fields.
+- Cross-cutting display logic (e.g., opening hours, price ranges, stay duration) is extracted into dedicated utils files so multiple views share identical phrasing and never drift.

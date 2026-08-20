@@ -70,9 +70,18 @@ detail, then show a plain sentence via `getFriendlyApiError` /
 `getFriendlyAuthError` from `src/lib/errors/userMessages.ts`.
 
 ### Env
-Copy `.env.local.example` → `.env.local`. Google Maps needs three keys
-(API key + light/dark map IDs) or `/home`, `/collections/**` and
-`/itineraries/**` degrade.
+Copy `.env.local.example` → `.env.local`. Google Maps needs two keys
+(API key + `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT`) or `/home`, `/collections/**`
+and `/itineraries/**` degrade. There is **one** map ID — the light style, used in
+both themes. Don't reintroduce a dark map ID; the app's dark mode still drives
+marker and polyline colors in `GoogleMapDetail`, but never the base map.
+
+### The site is light-only — `forcedTheme="light"`
+`ThemeProvider` (`src/components/ThemeProvider.tsx`) pins `defaultTheme` **and**
+`forcedTheme` to light, so `resolvedTheme` is never `"dark"`. The `.dark` blocks in
+`globals.css`, the `dark` half of `PALETTE_COLORS`, and the `resolvedTheme === "dark"`
+branches in `GoogleMapDetail` / `ItineraryQuickView` are all unreachable today. Don't
+add new dark variants; don't treat the existing ones as live.
 
 ### Planner naming: `profile` describes the traveller, `options` describes the scheduler
 `GenerateItineraryParams.preferences` was renamed to `options` (k-means/scheduler
@@ -95,8 +104,30 @@ keep it that way, or budget scoring loses its only input. `normalizePlace` and
 
 ### Tests are Vitest, colocated
 `npm test` (`vitest run`). Test files sit next to their module
-(`src/lib/planner/score.test.ts`), fixtures in `__fixtures__/`. Randomness and
+(`src/lib/planner/score.test.ts`), fixtures in `__fixtures__/`. `__tests__/` is
+for **cross-module** work only — the invariant suite (`__tests__/invariants.ts`),
+the shared seeded rng, and the Gate A end-to-end run. Per-module tests don't go
+in there.
+
+`__tests__/gate-a.test.ts` drives 86 hand-written Kyoto candidates through the
+whole offline core and snapshots the result. Run it after any scoring change and
+read the snapshot diff before accepting it — it is the only test that tells you
+whether the trip still looks like a trip. It has already caught one real bug that
+every unit test passed straight through. Randomness and
 time are **injected parameters**, never ambient — k-means takes an `rng`, cache
 expiry takes a `now`. Google and Anthropic clients are injected too; there is no
 mocking framework. Build order and per-step assertions live in
 `docs/implementation-plan.md`.
+
+### The funnel is the only place that answers "what got cut, and why"
+`runFunnel` returns the shortlist three ways — flat (`shortlist`), grouped by
+cluster (`clusters`, what Pass B consumes), and `dropped` with a stage and a
+reason per casualty. Adding a cut means adding a `FunnelStage`, a stat, and a
+`dropped` entry; a cut that only shrinks a list is a silent bug. Hard-filter
+wording lives with the rule in `hardFilterReason` (`score.ts`), never duplicated
+at the call site.
+
+Dietary is a hard filter but a **meal-slot** one: `applyHardFilters` only enforces
+it when passed `{ mealSlot: true }`, and the day-level ladder lives in
+`selectMealCandidates`. The older prose in `personalization-pipeline.md` that said
+"dietary = filter, always" was wrong and has been corrected.

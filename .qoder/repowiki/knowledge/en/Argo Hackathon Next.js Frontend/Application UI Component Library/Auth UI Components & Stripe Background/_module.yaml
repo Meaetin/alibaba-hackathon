@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: components_ui/auth_ui
+title: Auth UI Components & Stripe Background
+scope:
+    - src/components/ui/auth/
+    - src/components/ui/StripeBackground/
+source_files: []
+depends_on: []
+related_to: []

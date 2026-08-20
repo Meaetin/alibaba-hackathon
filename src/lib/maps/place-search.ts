@@ -128,8 +128,9 @@ const ENTERPRISE_EXTRAS = [
   "websiteURI",
 ] as const;
 
-// Always-Enterprise search field set.
-const SEARCH_FIELDS = [...BASE_FIELDS, ...ENTERPRISE_EXTRAS];
+// Always-Enterprise search field set. Exported for tests that pin the
+// mask/normalizer pairing (see place-search.test.ts).
+export const SEARCH_FIELDS = [...BASE_FIELDS, ...ENTERPRISE_EXTRAS];
 
 // Place Details requests everything except `id` (that's the Place constructor arg).
 const DETAILS_FIELDS = SEARCH_FIELDS.filter((f) => f !== "id");
@@ -173,8 +174,9 @@ function viewportCircle(map: google.maps.Map): google.maps.CircleLiteral | null 
   };
 }
 
-/** Maps a Maps JS `Place` to our normalized result, skipping any without coordinates. */
-function normalizePlace(place: google.maps.places.Place): PlaceSearchResult | null {
+/** Maps a Maps JS `Place` to our normalized result, skipping any without coordinates.
+ *  Exported for tests (see place-search.test.ts). */
+export function normalizePlace(place: google.maps.places.Place): PlaceSearchResult | null {
   const lat = place.location?.lat();
   const lng = place.location?.lng();
   if (lat == null || lng == null) return null;

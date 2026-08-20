@@ -1,0 +1,6 @@
+Organized as Next.js App Router segments under `src/app/collections/`:
+- `layout.tsx` wraps all routes in the shared `MainLayout`, providing the app shell.
+- `page.tsx` is the authenticated collections index: it fetches collections via React Query (`useCollectionsQuery`), renders a bento grid of `CollectionCard`s plus a `CreateCard`, and drives creation/deletion through `NewCollectionModal` / `ConfirmDeleteModal`, invalidating queries via `queryClient.invalidateQueries(queryKeys.collections())` after mutations.
+- `[id]/page.tsx` is the collection detail page: it loads a single `CollectionWithLocations`, exposes rubber-band multi-select (`useRubberBandSelection`), batch add/remove/generate-itinerary operations via `useCollectionLocationBatchOperations` and `useJobsQueue`, shows an inline `LocationDetailView` sheet, and integrates quota gating for itinerary generation.
+- `public/[token]/page.tsx` is an unauthenticated read-only route that calls `getPublicCollection(token)` and renders a simplified card list with a sign-in CTA.
+- Data access is centralized in `@/lib/api/collections` (and `@/lib/api/itineraries`); UI state lives in components while cross-cutting concerns (toasts, session user, query client) are consumed from `@/contexts` and `@/hooks`. The module has no server-side logic — it is purely a presentation layer over the API hooks.

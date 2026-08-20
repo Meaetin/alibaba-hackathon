@@ -1,0 +1,5 @@
+- Each entity card is a `forwardRef`-wrapped function component whose props extend a `Pick<BaseCardProps, ...>` subset, keeping the shared interaction surface consistent across card types.
+- Cards declare a stable semantic `cardClass` string (e.g. `collection-card`, `itinerary-card`, `link-card`) passed to `BaseCard` so pages can target them in CSS or tests.
+- Media content is composed through `CardMedia` with `imageUrl`/`gradient`/`imageAspect`/`label` props, falling back to gradient then placeholder when no image is available.
+- All card files opt into client-side behavior by leading with the `"use client"` directive, since they use `useState`, `useRouter`, and event handlers.
+- Component exports pair a default export of the component with a named `export type` of its props interface, and set an explicit `displayName` for debugging.

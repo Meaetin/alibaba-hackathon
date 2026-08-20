@@ -1,0 +1,1 @@
+Next.js App Router routes for browsing submitted links, queuing content-analysis jobs, and viewing the extracted locations of a specific link with selection, saving, and itinerary generation.

@@ -1,0 +1,1 @@
+React Server Components with `"use client"` directives, Tailwind CSS via `cn()` from `@/lib/utils`, class-variance-authority for component variants, `motion/react` (framer-motion) for panel open/close animations, lucide-react icons, and a shared primitive system under `@/components/ui/primitives` (Button, Tab, DataPill, Avatar, ToggleGroup, Menu).
