@@ -1,8 +1,12 @@
 {
 	"mcpServers": {
 		"paper": {
-			"type": "sse",
+			"type": "http",
 			"url": "http://127.0.0.1:29979/mcp"
+		},
+		"figma-desktop": {
+			"type": "http",
+			"url": "http://127.0.0.1:3845/mcp"
 		}
 	}
 }
