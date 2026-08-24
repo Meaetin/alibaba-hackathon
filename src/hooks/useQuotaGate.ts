@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useToast } from "@/contexts/ToastContext";
-import type { QuotaType, Surface } from "@/lib/domain-types";
+import type { QuotaType } from "@/lib/domain-types";
 
 /**
  * The single place a "you've hit your plan limit" message is produced.
@@ -17,9 +17,7 @@ export function useQuotaGate() {
   const { showToast } = useToast();
 
   const showQuotaToast = useCallback(
-    (type: QuotaType, limit: number, source: Surface) => {
-      // Hitting a cap is the strongest upgrade-intent signal available.
-
+    (type: QuotaType, limit: number) => {
       showToast({
         variant: "error",
         title:

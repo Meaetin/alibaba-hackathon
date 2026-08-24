@@ -78,6 +78,7 @@ interface ItinerarySidePanelProps {
   /** Navigates back (e.g., location → collection) */
   onBack?: () => void;
   // Location
+  /** Accepted, not implemented — the component ignores this today. */
   onViewOnMap?: () => void;
   /** Called when user selects a day from "Add to" dropdown (location not yet in itinerary) */
   onAddToDay?: (dayId: string) => void;
@@ -95,9 +96,11 @@ interface ItinerarySidePanelProps {
   /** Open the owning activity when its note card in the Notes tab is clicked. */
   onNotesActivityClick?: (activityId: string) => void;
   onActivityAddAttachment?: () => void;
+  /** Accepted, not implemented — the component ignores this today. */
   onActivityRemoveAttachment?: (attachmentId: string) => void;
   onActivityToggleLock?: () => void;
   onActivityDelete?: () => void;
+  /** Accepted, not implemented — the component ignores this today. */
   onActivityMoveTo?: (dayId: string) => void;
   availableDays?: { id: string; label: string }[];
   activityAttachments?: ActivityAttachment[];
@@ -114,8 +117,9 @@ interface ItinerarySidePanelProps {
   itineraryLocationIds?: Set<string>;
   onLocationSelect?: (location: Location) => void;
   onCollectionChange?: (collectionId: string) => void;
-  /** When true, shows a back chevron on the collection panel to return to the main itinerary collection */
+  /** Accepted, not implemented — the component ignores this today. */
   isSecondaryCollection?: boolean;
+  /** Accepted, not implemented — the component ignores this today. */
   onCollectionBack?: () => void;
   // Flight
   flights?: FlightCardProps[];
@@ -740,7 +744,6 @@ export function ItinerarySidePanel({
   state,
   onClose,
   onBack,
-  onViewOnMap,
   onAddToDay,
   onActivityTimeChange,
   activityDaySiblings,
@@ -753,10 +756,8 @@ export function ItinerarySidePanel({
   notesActivityNotes,
   onNotesActivityClick,
   onActivityAddAttachment,
-  onActivityRemoveAttachment,
   onActivityToggleLock,
   onActivityDelete,
-  onActivityMoveTo,
   availableDays = [],
   activityAttachments = [],
   activityIsLocked = false,
@@ -769,8 +770,6 @@ export function ItinerarySidePanel({
   itineraryLocationIds,
   onLocationSelect,
   onCollectionChange,
-  isSecondaryCollection = false,
-  onCollectionBack,
   flights = [],
   flightLoading,
   flightFiles,

@@ -1,5 +1,104 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`Gate A — the packed trip itself > matches the recorded itinerary 1`] = `
+[
+  {
+    "day": 1,
+    "dropped": [],
+    "timeline": [
+      "09:00-11:15 activity: Kiyomizu-dera",
+      "11:15-11:48 transit Kiyomizu-dera -> Menbaka Fire Ramen",
+      "11:48-13:03 lunch: Menbaka Fire Ramen",
+      "13:03-13:38 transit Menbaka Fire Ramen -> Ginkaku-ji",
+      "13:38-14:31 activity: Ginkaku-ji",
+      "14:31-15:04 transit Ginkaku-ji -> Weekenders Coffee Tominokoji",
+      "15:04-15:49 activity: Weekenders Coffee Tominokoji",
+      "15:49-16:17 transit Weekenders Coffee Tominokoji -> Kodai-ji Temple",
+      "16:17-17:02 activity: Kodai-ji Temple",
+      "17:02-17:23 walk Kodai-ji Temple -> % Arabica Kyoto Higashiyama",
+      "17:23-18:08 activity: % Arabica Kyoto Higashiyama",
+      "18:08-18:35 transit % Arabica Kyoto Higashiyama -> Kyoto Gyoza Chao Chao",
+      "18:35-19:50 dinner: Kyoto Gyoza Chao Chao",
+      "19:50-20:15 walk Kyoto Gyoza Chao Chao -> Kennin-ji",
+      "20:15-21:00 activity: Kennin-ji",
+    ],
+  },
+  {
+    "day": 2,
+    "dropped": [],
+    "timeline": [
+      "09:00-10:08 activity: Okochi Sanso Garden",
+      "10:08-10:36 walk Okochi Sanso Garden -> Yoshimura Soba Arashiyama",
+      "10:36-11:30 free break",
+      "11:30-12:45 lunch: Yoshimura Soba Arashiyama",
+      "12:45-13:05 walk Yoshimura Soba Arashiyama -> Tenryu-ji Temple",
+      "13:05-14:35 activity: Tenryu-ji Temple",
+      "14:35-15:05 walk Tenryu-ji Temple -> Gio-ji Temple",
+      "15:05-16:03 activity: Gio-ji Temple",
+      "16:03-16:21 walk Gio-ji Temple -> Jojakko-ji Temple",
+      "16:21-17:06 activity: Jojakko-ji Temple",
+      "17:06-17:33 transit Jojakko-ji Temple -> Togetsukyo Bridge",
+      "17:33-18:18 activity: Togetsukyo Bridge",
+      "18:18-18:39 walk Togetsukyo Bridge -> Shigetsu Shojin Ryori",
+      "18:39-19:54 dinner: Shigetsu Shojin Ryori",
+      "19:54-20:15 walk Shigetsu Shojin Ryori -> % Arabica Kyoto Arashiyama",
+      "20:15-21:00 activity: % Arabica Kyoto Arashiyama",
+    ],
+  },
+  {
+    "day": 3,
+    "dropped": [],
+    "timeline": [
+      "09:00-10:08 activity: Sanjusangendo",
+      "10:08-10:37 transit Sanjusangendo -> Fushimi Inari Sando Chaya",
+      "10:37-11:30 free break",
+      "11:30-13:03 lunch: Fushimi Inari Sando Chaya",
+      "13:03-13:33 transit Fushimi Inari Sando Chaya -> Kurasu Kyoto Stand",
+      "13:33-14:41 activity: Kurasu Kyoto Stand",
+      "14:41-15:12 transit Kurasu Kyoto Stand -> Vermillion Espresso Bar",
+      "15:12-16:20 activity: Vermillion Espresso Bar",
+      "16:20-16:37 walk Vermillion Espresso Bar -> Fushimi Inari Taisha",
+      "16:37-18:37 activity: Fushimi Inari Taisha",
+      "18:37-19:00 walk Fushimi Inari Taisha -> Mt. Inari Trail",
+      "19:00-21:00 activity: Mt. Inari Trail",
+    ],
+  },
+  {
+    "day": 4,
+    "dropped": [],
+    "timeline": [
+      "09:00-10:08 activity: Kinkaku-ji",
+      "10:08-10:40 transit Kinkaku-ji -> Nijo Castle",
+      "10:40-11:48 activity: Nijo Castle",
+      "11:48-12:20 transit Nijo Castle -> Ryoan-ji",
+      "12:20-13:28 activity: Ryoan-ji",
+      "13:28-13:58 transit Ryoan-ji -> Daitoku-ji",
+      "13:58-15:06 activity: Daitoku-ji",
+      "15:06-15:33 walk Daitoku-ji -> Sarasa Nishijin",
+      "15:33-16:41 activity: Sarasa Nishijin",
+      "16:41-17:09 transit Sarasa Nishijin -> Kyoto Imperial Palace",
+      "17:09-18:17 activity: Kyoto Imperial Palace",
+    ],
+  },
+  {
+    "day": 5,
+    "dropped": [],
+    "timeline": [
+      "09:00-10:08 activity: Fushimi Momoyama Castle",
+      "10:08-10:37 transit Fushimi Momoyama Castle -> Torisei Honten",
+      "10:37-11:30 free break",
+      "11:30-13:23 lunch: Torisei Honten",
+      "13:23-13:40 walk Torisei Honten -> Gekkeikan Okura Sake Museum",
+      "13:40-15:55 activity: Gekkeikan Okura Sake Museum",
+      "15:55-16:14 walk Gekkeikan Okura Sake Museum -> Fushimi Sake District",
+      "16:14-17:44 activity: Fushimi Sake District",
+      "17:44-18:04 walk Fushimi Sake District -> Kizakura Kappa Country",
+      "18:04-19:57 dinner: Kizakura Kappa Country",
+    ],
+  },
+]
+`;
+
 exports[`Gate A — the shortlist itself > matches the recorded plan 1`] = `
 {
   "days": [
@@ -47,6 +146,17 @@ exports[`Gate A — the shortlist itself > matches the recorded plan 1`] = `
     },
     {
       "places": [
+        "Sanjusangendo",
+        "Kurasu Kyoto Stand",
+        "Vermillion Espresso Bar",
+        "Fushimi Inari Sando Chaya",
+        "Fushimi Inari Taisha",
+        "Mt. Inari Trail",
+      ],
+      "score": 0.765,
+    },
+    {
+      "places": [
         "Kinkaku-ji",
         "Nijo Castle",
         "Ryoan-ji",
@@ -58,16 +168,6 @@ exports[`Gate A — the shortlist itself > matches the recorded plan 1`] = `
         "Funaoka Onsen",
       ],
       "score": 0.759,
-    },
-    {
-      "places": [
-        "Sanjusangendo",
-        "Kurasu Kyoto Stand",
-        "Vermillion Espresso Bar",
-        "Fushimi Inari Taisha",
-        "Mt. Inari Trail",
-      ],
-      "score": 0.69,
     },
     {
       "places": [
@@ -83,8 +183,69 @@ exports[`Gate A — the shortlist itself > matches the recorded plan 1`] = `
   "stats": {
     "afterClusterCap": 53,
     "afterFilters": 77,
-    "afterGlobalCap": 51,
+    "afterGlobalCap": 52,
     "retrieved": 86,
   },
 }
+`;
+
+exports[`Gate A — the validated trip itself > matches the recorded repairs 1`] = `
+[
+  {
+    "assumed": [],
+    "day": 1,
+    "failures": [],
+    "ok": true,
+    "repairs": [
+      "Kodai-ji Temple -> Walden Woods Kyoto (closed during its 16:17–17:02 slot)",
+      "% Arabica Kyoto Higashiyama dropped (closed during its 17:23–18:08 slot)",
+      "Kennin-ji dropped (closed during its 19:52–21:00 slot)",
+      "Walden Woods Kyoto dropped (closed during its 17:33–18:41 slot)",
+    ],
+  },
+  {
+    "assumed": [
+      "Iwatayama Monkey Park",
+      "Togetsukyo Bridge",
+      "Arashiyama Bamboo Grove",
+    ],
+    "day": 2,
+    "failures": [],
+    "ok": true,
+    "repairs": [
+      "Jojakko-ji Temple -> Iwatayama Monkey Park (closed during its 16:21–17:06 slot)",
+      "% Arabica Kyoto Arashiyama -> Arashiyama Bamboo Grove (closed during its 20:15–21:00 slot)",
+    ],
+  },
+  {
+    "assumed": [
+      "Fushimi Inari Taisha",
+      "Mt. Inari Trail",
+    ],
+    "day": 3,
+    "failures": [],
+    "ok": true,
+    "repairs": [],
+  },
+  {
+    "assumed": [
+      "Funaoka Onsen",
+    ],
+    "day": 4,
+    "failures": [],
+    "ok": true,
+    "repairs": [
+      "Kyoto Imperial Palace -> Funaoka Onsen (closed during its 17:09–18:17 slot)",
+    ],
+  },
+  {
+    "assumed": [
+      "Fushimi Sake District",
+    ],
+    "day": 5,
+    "failures": [],
+    "ok": true,
+    "repairs": [],
+  },
+]
 `;

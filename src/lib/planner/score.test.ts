@@ -9,6 +9,7 @@ import {
   priceFit,
   PRICE_FIT_NEUTRAL,
   applyHardFilters,
+  hardFilterReason,
   scorePlace,
   scoreCandidates,
 } from './score'
@@ -123,6 +124,52 @@ describe('hard filters — the guarantees', () => {
   it('that same steakhouse is NOT removed from non-meal candidates', () => {
     const kept = applyHardFilters([steakhouse], vegetarianProfile, { mealSlot: false })
     expect(kept.map((p) => p.placeId)).toEqual(['ChIJ_steak'])
+  })
+
+  // Google's own answer, from the shortlist hydration mask, outranks the type
+  // guess in both directions.
+  it("servesVegetarianFood: false removes a place the type list would have missed", () => {
+    const plainDiner = makePlace({
+      placeId: 'ChIJ_diner',
+      types: ['restaurant'],
+      servesVegetarianFood: false,
+    })
+    const kept = applyHardFilters([plainDiner], vegetarianProfile, { mealSlot: true })
+    expect(kept).toEqual([])
+  })
+
+  it('servesVegetarianFood: true rescues a steakhouse the type list would have killed', () => {
+    const veggieSteakhouse = { ...steakhouse, servesVegetarianFood: true }
+    const kept = applyHardFilters([veggieSteakhouse], vegetarianProfile, { mealSlot: true })
+    expect(kept.map((p) => p.placeId)).toEqual(['ChIJ_steak'])
+  })
+
+  // The case that would delete most of a city if we got it wrong: Google is
+  // silent for most non-chain places, and silence is not a "no".
+  it('undefined falls through to the type list rather than convicting', () => {
+    const plainDiner = makePlace({ placeId: 'ChIJ_diner', types: ['restaurant'] })
+    expect(plainDiner.servesVegetarianFood).toBeUndefined()
+    const kept = applyHardFilters([plainDiner, steakhouse], vegetarianProfile, { mealSlot: true })
+    expect(kept.map((p) => p.placeId)).toEqual(['ChIJ_diner'])
+  })
+
+  // No vegan field exists at Google, so vegan borrows the vegetarian one. A
+  // place serving no vegetarian food serves no vegan food either.
+  it('vegan reads the vegetarian flag, and a false still convicts', () => {
+    const veganProfile = makeProfile({ dietary: ['vegan'] })
+    const plainDiner = makePlace({
+      placeId: 'ChIJ_diner',
+      types: ['restaurant'],
+      servesVegetarianFood: false,
+    })
+    expect(applyHardFilters([plainDiner], veganProfile, { mealSlot: true })).toEqual([])
+  })
+
+  it('the dietary reason names the need, whichever rule produced it', () => {
+    const plainDiner = makePlace({ types: ['restaurant'], servesVegetarianFood: false })
+    expect(hardFilterReason(plainDiner, vegetarianProfile, { mealSlot: true })).toBe(
+      'dietary conflict: vegetarian',
+    )
   })
 
   it('priceLevel 4 is removed for budget 1; priceLevel 2 is kept (one step out is "widen later")', () => {

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import tzlookup from "tz-lookup";
 import { getCollectionPreviewImages } from "../queries";
 import type { TransportMode } from "@/components/ui/itinerary/ItineraryDayColumn/constants";
+import type { PriceRange } from "@/lib/maps/price-range";
 
 // ───── Types ─────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ export type ActivityLocation = {
   rating?: number | null;
   user_rating_count?: number | null;
   /** Parsed Google Places price range (per-person), e.g. { startPrice: 1, endPrice: 100000, currency: "VND" }. */
-  price_range?: { startPrice?: number; endPrice?: number; currency?: string } | null;
+  price_range?: PriceRange | null;
   primary_type?: string | null;
   categories?: string[] | null;
   business_status?: string | null;

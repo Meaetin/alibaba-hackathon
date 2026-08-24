@@ -11,8 +11,6 @@ interface FlightDetailsSectionProps extends ComponentPropsWithoutRef<"div"> {
   cost: string;
   confirmation: string;
   flightNumber: string;
-  airline?: string;
-  fareClass?: string;
   departTime?: string;
   departDate?: string;
   arriveDate?: string;
@@ -42,8 +40,6 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
       cost,
       confirmation,
       flightNumber,
-      airline,
-      fareClass,
       departTime,
       departDate,
       arriveDate,

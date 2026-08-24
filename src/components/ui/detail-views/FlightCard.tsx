@@ -59,7 +59,8 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
       arriveDate,
       arriveTime,
       airline,
-      fareClass,
+      // Destructured only to keep it out of the DOM spread below.
+      fareClass: _fareClass,
       flightDuration,
       terminal,
       baggageAllowance,
@@ -121,8 +122,6 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
           cost={cost}
           confirmation={confirmation}
           flightNumber={flightNumber}
-          airline={airline}
-          fareClass={fareClass}
           departTime={departTime}
           departDate={departDate}
           arriveDate={arriveDate}

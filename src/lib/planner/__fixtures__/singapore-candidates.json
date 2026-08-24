@@ -1,0 +1,1876 @@
+[
+  {
+    "placeId": "ChIJ_sg_gardens_by_the_bay",
+    "name": "Gardens by the Bay",
+    "types": [
+      "park",
+      "tourist_attraction"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2816,
+    "longitude": 103.8636,
+    "rating": 4.7,
+    "userRatingCount": 121000
+  },
+  {
+    "placeId": "ChIJ_sg_cloud_forest",
+    "name": "Cloud Forest",
+    "types": [
+      "tourist_attraction",
+      "garden"
+    ],
+    "primaryType": "garden",
+    "latitude": 1.2836,
+    "longitude": 103.8607,
+    "rating": 4.7,
+    "userRatingCount": 25400,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_flower_dome",
+    "name": "Flower Dome",
+    "types": [
+      "tourist_attraction",
+      "garden"
+    ],
+    "primaryType": "garden",
+    "latitude": 1.2839,
+    "longitude": 103.8611,
+    "rating": 4.6,
+    "userRatingCount": 18900,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_supertree_obs",
+    "name": "Supertree Observatory",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 1.282,
+    "longitude": 103.8639,
+    "rating": 4.5,
+    "userRatingCount": 9100,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_kingfisher_wetlands",
+    "name": "Kingfisher Wetlands Wildlife Lookout",
+    "types": [
+      "park",
+      "point_of_interest",
+      "establishment"
+    ],
+    "latitude": 1.282,
+    "longitude": 103.8677,
+    "rating": 4.6,
+    "userRatingCount": 100,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 5, "minute": 0 }, "close": { "day": 1, "hour": 2, "minute": 0 } },
+        { "open": { "day": 1, "hour": 5, "minute": 0 }, "close": { "day": 2, "hour": 2, "minute": 0 } },
+        { "open": { "day": 2, "hour": 5, "minute": 0 }, "close": { "day": 3, "hour": 2, "minute": 0 } },
+        { "open": { "day": 3, "hour": 5, "minute": 0 }, "close": { "day": 4, "hour": 2, "minute": 0 } },
+        { "open": { "day": 4, "hour": 5, "minute": 0 }, "close": { "day": 5, "hour": 2, "minute": 0 } },
+        { "open": { "day": 5, "hour": 5, "minute": 0 }, "close": { "day": 6, "hour": 2, "minute": 0 } },
+        { "open": { "day": 6, "hour": 5, "minute": 0 }, "close": { "day": 0, "hour": 2, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_mbs_skypark",
+    "name": "Marina Bay Sands SkyPark",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 1.2834,
+    "longitude": 103.8607,
+    "rating": 4.5,
+    "userRatingCount": 31000,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_artscience",
+    "name": "ArtScience Museum",
+    "types": [
+      "museum",
+      "tourist_attraction",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.2863,
+    "longitude": 103.8593,
+    "rating": 4.4,
+    "userRatingCount": 18402,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_natgallery",
+    "name": "National Gallery Singapore",
+    "types": [
+      "art_museum",
+      "museum",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "art_museum",
+    "latitude": 1.2902,
+    "longitude": 103.8515,
+    "rating": 4.6,
+    "userRatingCount": 16973,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_natmuseum",
+    "name": "National Museum of Singapore",
+    "types": [
+      "tourist_attraction",
+      "art_museum",
+      "history_museum",
+      "museum",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.2966,
+    "longitude": 103.8485,
+    "rating": 4.5,
+    "userRatingCount": 16504,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_acm",
+    "name": "Asian Civilisations Museum",
+    "types": [
+      "museum",
+      "art_gallery"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.2874,
+    "longitude": 103.8515,
+    "rating": 4.5,
+    "userRatingCount": 6600,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_peranakan_museum",
+    "name": "Peranakan Museum",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.2942,
+    "longitude": 103.8492,
+    "rating": 4.6,
+    "userRatingCount": 1650,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_merlion",
+    "name": "Merlion Park",
+    "types": [
+      "park",
+      "tourist_attraction",
+      "monument"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2868,
+    "longitude": 103.8545,
+    "rating": 4.5,
+    "userRatingCount": 61000
+  },
+  {
+    "placeId": "ChIJ_sg_esplanade",
+    "name": "Esplanade - Theatres on the Bay",
+    "types": [
+      "tourist_attraction",
+      "historical_landmark"
+    ],
+    "latitude": 1.2897,
+    "longitude": 103.8558,
+    "rating": 4.6,
+    "userRatingCount": 21500,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_raffles",
+    "name": "Raffles Hotel Singapore",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "primaryType": "historical_landmark",
+    "latitude": 1.2949,
+    "longitude": 103.8545,
+    "rating": 4.6,
+    "userRatingCount": 9200,
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_chijmes",
+    "name": "CHIJMES",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "primaryType": "historical_landmark",
+    "latitude": 1.2949,
+    "longitude": 103.8515,
+    "rating": 4.4,
+    "userRatingCount": 5100,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_fort_canning",
+    "name": "Fort Canning Park",
+    "types": [
+      "park",
+      "historical_landmark"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2937,
+    "longitude": 103.8465,
+    "rating": 4.6,
+    "userRatingCount": 12300
+  },
+  {
+    "placeId": "ChIJ_sg_sg_flyer",
+    "name": "Singapore Flyer",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 1.2893,
+    "longitude": 103.8632,
+    "rating": 4.3,
+    "userRatingCount": 25600,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_lau_pa_sat",
+    "name": "Lau Pa Sat",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant",
+      "tourist_attraction"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.2807,
+    "longitude": 103.8504,
+    "rating": 4.4,
+    "userRatingCount": 27800,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 0, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_satay_by_the_bay",
+    "name": "Satay by the Bay",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.2825,
+    "longitude": 103.8686,
+    "rating": 4.2,
+    "userRatingCount": 8300,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_odette",
+    "name": "Odette",
+    "types": [
+      "fine_dining_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "fine_dining_restaurant",
+    "latitude": 1.2903,
+    "longitude": 103.8515,
+    "rating": 4.6,
+    "userRatingCount": 1520,
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 12, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 12, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 12, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 12, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 12, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 12, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 12, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_cut_steakhouse",
+    "name": "CUT by Wolfgang Puck",
+    "types": [
+      "steak_house",
+      "restaurant"
+    ],
+    "primaryType": "steak_house",
+    "latitude": 1.2846,
+    "longitude": 103.8593,
+    "rating": 4.4,
+    "userRatingCount": 1180,
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 17, "minute": 30 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 30 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 30 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 30 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 30 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 30 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 30 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_jumbo_seafood",
+    "name": "Jumbo Seafood Riverside Point",
+    "types": [
+      "seafood_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "seafood_restaurant",
+    "latitude": 1.2884,
+    "longitude": 103.846,
+    "rating": 4.3,
+    "userRatingCount": 9400,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 30 }, "close": { "day": 0, "hour": 15, "minute": 0 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 30 }, "close": { "day": 1, "hour": 15, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 30 }, "close": { "day": 2, "hour": 15, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 30 }, "close": { "day": 3, "hour": 15, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 30 }, "close": { "day": 4, "hour": 15, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 30 }, "close": { "day": 5, "hour": 15, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 30 }, "close": { "day": 6, "hour": 15, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_sky_on_57_closed",
+    "name": "Sky on 57",
+    "types": [
+      "fine_dining_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2834,
+    "longitude": 103.86,
+    "rating": 4.2,
+    "userRatingCount": 1900,
+    "priceLevel": 4,
+    "businessStatus": "CLOSED_PERMANENTLY",
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_buddha_tooth",
+    "name": "Buddha Tooth Relic Temple",
+    "types": [
+      "place_of_worship",
+      "tourist_attraction"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.2815,
+    "longitude": 103.8443,
+    "rating": 4.6,
+    "userRatingCount": 21400,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_sri_mariamman",
+    "name": "Sri Mariamman Temple",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.2827,
+    "longitude": 103.8452,
+    "rating": 4.6,
+    "userRatingCount": 8100,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_thian_hock_keng",
+    "name": "Thian Hock Keng Temple",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.281,
+    "longitude": 103.8477,
+    "rating": 4.5,
+    "userRatingCount": 3650,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 30 } },
+        { "open": { "day": 1, "hour": 7, "minute": 30 }, "close": { "day": 1, "hour": 17, "minute": 30 } },
+        { "open": { "day": 2, "hour": 7, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 30 } },
+        { "open": { "day": 3, "hour": 7, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 30 } },
+        { "open": { "day": 4, "hour": 7, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 30 } },
+        { "open": { "day": 5, "hour": 7, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 30 } },
+        { "open": { "day": 6, "hour": 7, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_chinatown_heritage",
+    "name": "Chinatown Heritage Centre",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.2836,
+    "longitude": 103.8442,
+    "rating": 4.3,
+    "userRatingCount": 2140,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_maxwell",
+    "name": "Maxwell Food Centre",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.2803,
+    "longitude": 103.8449,
+    "rating": 4.4,
+    "userRatingCount": 15600,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_chinatown_complex",
+    "name": "Chinatown Complex Food Centre",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.2824,
+    "longitude": 103.8425,
+    "rating": 4.4,
+    "userRatingCount": 12700,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_tian_tian",
+    "name": "Tian Tian Hainanese Chicken Rice",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2804,
+    "longitude": 103.845,
+    "rating": 4.2,
+    "userRatingCount": 6900,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 30 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 30 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 30 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 30 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 30 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 30 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_hawker_chan",
+    "name": "Hawker Chan",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2823,
+    "longitude": 103.8428,
+    "rating": 4.0,
+    "userRatingCount": 5300,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_ah_chiangs",
+    "name": "Ah Chiang's Porridge",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2851,
+    "longitude": 103.8323,
+    "rating": 4.3,
+    "userRatingCount": 3100,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_tiong_bahru_market",
+    "name": "Tiong Bahru Market",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.2846,
+    "longitude": 103.832,
+    "rating": 4.4,
+    "userRatingCount": 9600,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_tiong_bahru_bakery",
+    "name": "Tiong Bahru Bakery",
+    "types": [
+      "cafe",
+      "coffee_shop"
+    ],
+    "primaryType": "cafe",
+    "latitude": 1.2872,
+    "longitude": 103.832,
+    "rating": 4.4,
+    "userRatingCount": 3260,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 30 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 30 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 30 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 30 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 30 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 30 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 30 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_nylon_coffee",
+    "name": "Nylon Coffee",
+    "types": [
+      "coffee_shop",
+      "coffee_roastery",
+      "cafe",
+      "food_store",
+      "food",
+      "store",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "coffee_shop",
+    "latitude": 1.2769,
+    "longitude": 103.84,
+    "rating": 4.7,
+    "userRatingCount": 2295,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 16, "minute": 30 } },
+        { "open": { "day": 1, "hour": 8, "minute": 30 }, "close": { "day": 1, "hour": 16, "minute": 30 } },
+        { "open": { "day": 3, "hour": 8, "minute": 30 }, "close": { "day": 3, "hour": 16, "minute": 30 } },
+        { "open": { "day": 4, "hour": 8, "minute": 30 }, "close": { "day": 4, "hour": 16, "minute": 30 } },
+        { "open": { "day": 5, "hour": 8, "minute": 30 }, "close": { "day": 5, "hour": 16, "minute": 30 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 16, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_grey_area",
+    "name": "Grey Area Coffee Roasters",
+    "types": [
+      "coffee_shop",
+      "cafe",
+      "food_store",
+      "store",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "coffee_shop",
+    "latitude": 1.2772,
+    "longitude": 103.8367,
+    "rating": 4.7,
+    "userRatingCount": 276,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 30 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 16, "minute": 30 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 16, "minute": 30 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 16, "minute": 30 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 16, "minute": 30 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 16, "minute": 30 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_ask_coffee",
+    "name": "ASK Coffee Roastery Singapore",
+    "types": [
+      "cafe",
+      "coffee_roastery",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "cafe",
+    "latitude": 1.2961,
+    "longitude": 103.8548,
+    "rating": 4.6,
+    "userRatingCount": 439,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 30 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 30 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 30 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_genesis_vegan",
+    "name": "Genesis Vegan Restaurant",
+    "types": [
+      "vegan_restaurant",
+      "vegetarian_restaurant",
+      "restaurant",
+      "food_store",
+      "store",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "vegan_restaurant",
+    "latitude": 1.2872,
+    "longitude": 103.8452,
+    "rating": 4.4,
+    "userRatingCount": 451,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 15, "minute": 0 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 15, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 15, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 15, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 15, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 15, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_red_star",
+    "name": "Red Star Restaurant",
+    "types": [
+      "chinese_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2857,
+    "longitude": 103.8385,
+    "rating": 4.1,
+    "userRatingCount": 2950,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 18, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 18, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 18, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 18, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 18, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 18, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 18, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_burnt_ends",
+    "name": "Burnt Ends",
+    "types": [
+      "barbecue_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "barbecue_restaurant",
+    "latitude": 1.2799,
+    "longitude": 103.8407,
+    "rating": 4.5,
+    "userRatingCount": 2240,
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_ann_siang",
+    "name": "Ann Siang Hill Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2805,
+    "longitude": 103.8464,
+    "rating": 4.4,
+    "userRatingCount": 910
+  },
+  {
+    "placeId": "ChIJ_sg_duxton_plain",
+    "name": "Duxton Plain Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2784,
+    "longitude": 103.8408,
+    "rating": 4.2,
+    "userRatingCount": 430
+  },
+  {
+    "placeId": "ChIJ_sg_pearls_hill",
+    "name": "Pearl's Hill City Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2839,
+    "longitude": 103.8398,
+    "rating": 4.4,
+    "userRatingCount": 720
+  },
+  {
+    "placeId": "ChIJ_sg_telok_ayer_green",
+    "name": "Telok Ayer Green",
+    "types": [
+      "park",
+      "historical_landmark"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2807,
+    "longitude": 103.8482,
+    "rating": 4.3,
+    "userRatingCount": 340
+  },
+  {
+    "placeId": "ChIJ_sg_yue_hwa",
+    "name": "Yue Hwa Chinese Products",
+    "types": [
+      "department_store",
+      "shopping_mall"
+    ],
+    "primaryType": "department_store",
+    "latitude": 1.2843,
+    "longitude": 103.8438,
+    "rating": 4.2,
+    "userRatingCount": 2600,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_veeramakaliamman",
+    "name": "Sri Veeramakaliamman Temple",
+    "types": [
+      "place_of_worship",
+      "historical_landmark"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.3067,
+    "longitude": 103.8517,
+    "rating": 4.6,
+    "userRatingCount": 6150,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 5, "minute": 30 }, "close": { "day": 0, "hour": 21, "minute": 30 } },
+        { "open": { "day": 1, "hour": 5, "minute": 30 }, "close": { "day": 1, "hour": 21, "minute": 30 } },
+        { "open": { "day": 2, "hour": 5, "minute": 30 }, "close": { "day": 2, "hour": 21, "minute": 30 } },
+        { "open": { "day": 3, "hour": 5, "minute": 30 }, "close": { "day": 3, "hour": 21, "minute": 30 } },
+        { "open": { "day": 4, "hour": 5, "minute": 30 }, "close": { "day": 4, "hour": 21, "minute": 30 } },
+        { "open": { "day": 5, "hour": 5, "minute": 30 }, "close": { "day": 5, "hour": 21, "minute": 30 } },
+        { "open": { "day": 6, "hour": 5, "minute": 30 }, "close": { "day": 6, "hour": 21, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_abdul_gafoor",
+    "name": "Abdul Gafoor Mosque",
+    "types": [
+      "place_of_worship"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.3076,
+    "longitude": 103.8541,
+    "rating": 4.6,
+    "userRatingCount": 1020,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_sultan_mosque",
+    "name": "Sultan Mosque",
+    "types": [
+      "place_of_worship",
+      "tourist_attraction"
+    ],
+    "primaryType": "place_of_worship",
+    "latitude": 1.3021,
+    "longitude": 103.859,
+    "rating": 4.6,
+    "userRatingCount": 12200,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_indian_heritage",
+    "name": "Indian Heritage Centre",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.3067,
+    "longitude": 103.8496,
+    "rating": 4.4,
+    "userRatingCount": 1230,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_sun_yat_sen",
+    "name": "Sun Yat Sen Nanyang Memorial Hall",
+    "types": [
+      "museum",
+      "historical_landmark"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.3273,
+    "longitude": 103.8478,
+    "rating": 4.3,
+    "userRatingCount": 1140,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_tekka",
+    "name": "Tekka Centre",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.3061,
+    "longitude": 103.85,
+    "rating": 4.3,
+    "userRatingCount": 7900,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_whampoa_makan",
+    "name": "Whampoa Makan Place",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.3221,
+    "longitude": 103.8556,
+    "rating": 4.2,
+    "userRatingCount": 2450,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_mustafa",
+    "name": "Mustafa Centre",
+    "types": [
+      "department_store",
+      "shopping_mall"
+    ],
+    "primaryType": "department_store",
+    "latitude": 1.3103,
+    "longitude": 103.8556,
+    "rating": 4.3,
+    "userRatingCount": 25900,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 0, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_little_india_arcade",
+    "name": "Little India Arcade",
+    "types": [
+      "shopping_mall",
+      "market"
+    ],
+    "primaryType": "shopping_mall",
+    "latitude": 1.3062,
+    "longitude": 103.8508,
+    "rating": 4.2,
+    "userRatingCount": 1830,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_bugis_street",
+    "name": "Bugis Street",
+    "types": [
+      "shopping_mall",
+      "market",
+      "tourist_attraction"
+    ],
+    "primaryType": "shopping_mall",
+    "latitude": 1.3005,
+    "longitude": 103.8555,
+    "rating": 4.2,
+    "userRatingCount": 22400,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_haji_lane",
+    "name": "Haji Lane",
+    "types": [
+      "tourist_attraction"
+    ],
+    "latitude": 1.3009,
+    "longitude": 103.8592,
+    "rating": 4.3,
+    "userRatingCount": 5040
+  },
+  {
+    "placeId": "ChIJ_sg_annapoorna",
+    "name": "Annapoorna (Original Pure vegetarian)",
+    "types": [
+      "family_restaurant",
+      "restaurant",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "family_restaurant",
+    "latitude": 1.3112,
+    "longitude": 103.8557,
+    "rating": 4.7,
+    "userRatingCount": 2082,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_saravanaa_bhavan",
+    "name": "Saravanaa Bhavan",
+    "types": [
+      "vegetarian_restaurant",
+      "restaurant",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "vegetarian_restaurant",
+    "latitude": 1.3108,
+    "longitude": 103.8548,
+    "rating": 4.6,
+    "userRatingCount": 4583,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 30 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 30 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 30 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 30 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 30 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 30 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 30 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_bo_de_vegetarian",
+    "name": "Bồ Đề Vegetarian - Healthy Veggies Delights",
+    "types": [
+      "vegetarian_restaurant",
+      "vegan_restaurant",
+      "restaurant",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "vegetarian_restaurant",
+    "latitude": 1.3113,
+    "longitude": 103.861,
+    "rating": 4.9,
+    "userRatingCount": 349,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 30 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_mother_earth",
+    "name": "Mother Earth Classic Vegetarian 大地之素 (Balestier)",
+    "types": [
+      "vegetarian_restaurant",
+      "restaurant",
+      "food",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "vegetarian_restaurant",
+    "latitude": 1.3272,
+    "longitude": 103.8456,
+    "rating": 4.7,
+    "userRatingCount": 259,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 30 }, "close": { "day": 0, "hour": 21, "minute": 30 } },
+        { "open": { "day": 1, "hour": 10, "minute": 30 }, "close": { "day": 1, "hour": 21, "minute": 30 } },
+        { "open": { "day": 2, "hour": 10, "minute": 30 }, "close": { "day": 2, "hour": 21, "minute": 30 } },
+        { "open": { "day": 4, "hour": 10, "minute": 30 }, "close": { "day": 4, "hour": 21, "minute": 30 } },
+        { "open": { "day": 5, "hour": 10, "minute": 30 }, "close": { "day": 5, "hour": 21, "minute": 30 } },
+        { "open": { "day": 6, "hour": 10, "minute": 30 }, "close": { "day": 6, "hour": 21, "minute": 30 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_zerah_coffee",
+    "name": "Zerah Coffee Roasters",
+    "types": [
+      "coffee_shop",
+      "cafe",
+      "food_store",
+      "store",
+      "point_of_interest",
+      "food",
+      "establishment"
+    ],
+    "primaryType": "coffee_shop",
+    "latitude": 1.3052,
+    "longitude": 103.8631,
+    "rating": 4.8,
+    "userRatingCount": 287,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 16, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 16, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 16, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 16, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 16, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_chye_seng_huat",
+    "name": "Chye Seng Huat Hardware",
+    "types": [
+      "cafe",
+      "coffee_shop",
+      "coffee_roastery"
+    ],
+    "primaryType": "cafe",
+    "latitude": 1.3116,
+    "longitude": 103.8617,
+    "rating": 4.4,
+    "userRatingCount": 3980,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_zam_zam",
+    "name": "Zam Zam Restaurant",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.3024,
+    "longitude": 103.8588,
+    "rating": 4.3,
+    "userRatingCount": 7100,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_kampong_gelam_park",
+    "name": "Kampong Gelam Park",
+    "types": [
+      "park"
+    ],
+    "primaryType": "park",
+    "latitude": 1.3029,
+    "longitude": 103.8598,
+    "rating": 4.2,
+    "userRatingCount": 510
+  },
+  {
+    "placeId": "ChIJ_sg_balestier_trail",
+    "name": "Balestier Road Heritage Trail",
+    "types": [
+      "historical_landmark",
+      "tourist_attraction"
+    ],
+    "primaryType": "historical_landmark",
+    "latitude": 1.3253,
+    "longitude": 103.8462,
+    "rating": 4.0,
+    "userRatingCount": 290
+  },
+  {
+    "placeId": "ChIJ_sg_botanic_gardens",
+    "name": "Singapore Botanic Gardens",
+    "types": [
+      "park",
+      "botanical_garden",
+      "tourist_attraction"
+    ],
+    "primaryType": "botanical_garden",
+    "latitude": 1.3138,
+    "longitude": 103.8159,
+    "rating": 4.7,
+    "userRatingCount": 60400,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 5, "minute": 0 }, "close": { "day": 0, "hour": 24, "minute": 0 } },
+        { "open": { "day": 1, "hour": 5, "minute": 0 }, "close": { "day": 1, "hour": 24, "minute": 0 } },
+        { "open": { "day": 2, "hour": 5, "minute": 0 }, "close": { "day": 2, "hour": 24, "minute": 0 } },
+        { "open": { "day": 3, "hour": 5, "minute": 0 }, "close": { "day": 3, "hour": 24, "minute": 0 } },
+        { "open": { "day": 4, "hour": 5, "minute": 0 }, "close": { "day": 4, "hour": 24, "minute": 0 } },
+        { "open": { "day": 5, "hour": 5, "minute": 0 }, "close": { "day": 5, "hour": 24, "minute": 0 } },
+        { "open": { "day": 6, "hour": 5, "minute": 0 }, "close": { "day": 6, "hour": 24, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_orchid_garden",
+    "name": "National Orchid Garden",
+    "types": [
+      "botanical_garden",
+      "garden"
+    ],
+    "primaryType": "botanical_garden",
+    "latitude": 1.3115,
+    "longitude": 103.8156,
+    "rating": 4.6,
+    "userRatingCount": 9150,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 30 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 30 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 30 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 30 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 30 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 30 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 30 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_bukit_timah_reserve",
+    "name": "Bukit Timah Nature Reserve",
+    "types": [
+      "national_park",
+      "hiking_area",
+      "park"
+    ],
+    "primaryType": "national_park",
+    "latitude": 1.3483,
+    "longitude": 103.7767,
+    "rating": 4.6,
+    "userRatingCount": 6870,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_macritchie",
+    "name": "MacRitchie Nature Trail",
+    "types": [
+      "hiking_area",
+      "sports_activity_location",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "hiking_area",
+    "latitude": 1.3458,
+    "longitude": 103.8365,
+    "rating": 4.8,
+    "userRatingCount": 413
+  },
+  {
+    "placeId": "ChIJ_sg_rifle_range",
+    "name": "Rifle Range Nature Park",
+    "types": [
+      "park",
+      "tourist_attraction",
+      "nature_preserve",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "park",
+    "latitude": 1.3435,
+    "longitude": 103.7794,
+    "rating": 4.7,
+    "userRatingCount": 1059,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_bukit_batok",
+    "name": "Bukit Batok Nature Park",
+    "types": [
+      "nature_preserve",
+      "national_park",
+      "park",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "nature_preserve",
+    "latitude": 1.3485,
+    "longitude": 103.7642,
+    "rating": 4.5,
+    "userRatingCount": 3273,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 0, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_chestnut",
+    "name": "Chestnut Nature Park",
+    "types": [
+      "nature_preserve",
+      "park",
+      "tourist_attraction",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "nature_preserve",
+    "latitude": 1.376,
+    "longitude": 103.7811,
+    "rating": 4.5,
+    "userRatingCount": 1590,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 7, "minute": 0 }, "close": { "day": 0, "hour": 19, "minute": 0 } },
+        { "open": { "day": 1, "hour": 7, "minute": 0 }, "close": { "day": 1, "hour": 19, "minute": 0 } },
+        { "open": { "day": 2, "hour": 7, "minute": 0 }, "close": { "day": 2, "hour": 19, "minute": 0 } },
+        { "open": { "day": 3, "hour": 7, "minute": 0 }, "close": { "day": 3, "hour": 19, "minute": 0 } },
+        { "open": { "day": 4, "hour": 7, "minute": 0 }, "close": { "day": 4, "hour": 19, "minute": 0 } },
+        { "open": { "day": 5, "hour": 7, "minute": 0 }, "close": { "day": 5, "hour": 19, "minute": 0 } },
+        { "open": { "day": 6, "hour": 7, "minute": 0 }, "close": { "day": 6, "hour": 19, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_tiong_hoe",
+    "name": "Tiong Hoe Specialty Coffee",
+    "types": [
+      "cafe",
+      "coffee_shop",
+      "coffee_roastery",
+      "wholesaler",
+      "supplier",
+      "food_store",
+      "store",
+      "food",
+      "service",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "cafe",
+    "latitude": 1.291,
+    "longitude": 103.8031,
+    "rating": 4.6,
+    "userRatingCount": 774,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 30 }, "close": { "day": 0, "hour": 16, "minute": 15 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 16, "minute": 45 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 16, "minute": 45 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 16, "minute": 45 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 16, "minute": 45 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 16, "minute": 45 } },
+        { "open": { "day": 6, "hour": 8, "minute": 30 }, "close": { "day": 6, "hour": 16, "minute": 15 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_dempsey_hill",
+    "name": "Dempsey Hill",
+    "types": [
+      "shopping_mall",
+      "tourist_attraction"
+    ],
+    "primaryType": "shopping_mall",
+    "latitude": 1.3045,
+    "longitude": 103.8107,
+    "rating": 4.4,
+    "userRatingCount": 4080,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_holland_village",
+    "name": "Holland Village",
+    "types": [
+      "tourist_attraction",
+      "market"
+    ],
+    "latitude": 1.3113,
+    "longitude": 103.796,
+    "rating": 4.3,
+    "userRatingCount": 6120,
+    "priceLevel": 2
+  },
+  {
+    "placeId": "ChIJ_sg_adam_road",
+    "name": "Adam Road Food Centre",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.3235,
+    "longitude": 103.8143,
+    "rating": 4.3,
+    "userRatingCount": 4260,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 23, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 23, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 23, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 23, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 23, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 23, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 23, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_ghim_moh",
+    "name": "Ghim Moh Market & Food Centre",
+    "types": [
+      "food_court",
+      "market",
+      "restaurant"
+    ],
+    "primaryType": "food_court",
+    "latitude": 1.3116,
+    "longitude": 103.7885,
+    "rating": 4.3,
+    "userRatingCount": 2130,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 6, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 6, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 6, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 6, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 6, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 6, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 6, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_haw_par_villa",
+    "name": "Haw Par Villa",
+    "types": [
+      "park",
+      "tourist_attraction"
+    ],
+    "primaryType": "park",
+    "latitude": 1.2837,
+    "longitude": 103.7818,
+    "rating": 4.2,
+    "userRatingCount": 8560,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_hells_museum",
+    "name": "Hell's Museum",
+    "types": [
+      "museum",
+      "point_of_interest",
+      "establishment"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.284,
+    "longitude": 103.7817,
+    "rating": 4.8,
+    "userRatingCount": 1068,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_les_amis",
+    "name": "Les Amis",
+    "types": [
+      "french_restaurant",
+      "fine_dining_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "french_restaurant",
+    "latitude": 1.3037,
+    "longitude": 103.8318,
+    "rating": 4.5,
+    "userRatingCount": 930,
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 12, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 0 } },
+        { "open": { "day": 0, "hour": 19, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 12, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 0 } },
+        { "open": { "day": 1, "hour": 19, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 12, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 0 } },
+        { "open": { "day": 2, "hour": 19, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 12, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 0 } },
+        { "open": { "day": 3, "hour": 19, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 12, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 0 } },
+        { "open": { "day": 4, "hour": 19, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 12, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 0 } },
+        { "open": { "day": 5, "hour": 19, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 12, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 0 } },
+        { "open": { "day": 6, "hour": 19, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_singapore_zoo",
+    "name": "Singapore Zoo",
+    "types": [
+      "zoo",
+      "tourist_attraction"
+    ],
+    "primaryType": "zoo",
+    "latitude": 1.4043,
+    "longitude": 103.793,
+    "rating": 4.6,
+    "userRatingCount": 45700,
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 30 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 30 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 30 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 30 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 30 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 30 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 30 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_whitegrass_closed",
+    "name": "Whitegrass",
+    "types": [
+      "fine_dining_restaurant",
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "latitude": 1.2949,
+    "longitude": 103.8514,
+    "rating": 4.3,
+    "userRatingCount": 410,
+    "priceLevel": 4,
+    "businessStatus": "CLOSED_PERMANENTLY",
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 12, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 12, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 12, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 12, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 12, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 12, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 12, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_the_intan",
+    "name": "The Intan",
+    "types": [
+      "museum"
+    ],
+    "primaryType": "museum",
+    "latitude": 1.3103,
+    "longitude": 103.8996,
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_katong_laksa_nogeo",
+    "name": "328 Katong Laksa",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "rating": 4.2,
+    "userRatingCount": 8900,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 21, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 21, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 21, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 21, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 21, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 21, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 21, "minute": 0 } }
+      ]
+  },
+  {
+    "placeId": "ChIJ_sg_sungei_road_laksa_nogeo",
+    "name": "Sungei Road Laksa",
+    "types": [
+      "restaurant"
+    ],
+    "primaryType": "restaurant",
+    "rating": 4.4,
+    "userRatingCount": 2600,
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
+  }
+]

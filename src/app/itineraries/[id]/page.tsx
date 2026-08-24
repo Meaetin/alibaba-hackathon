@@ -420,7 +420,6 @@ export default function ItineraryDetailPage() {
           data.latitude,
           data.longitude,
           data.tags,
-          "save_picker",
         );
         const list = await getCollections();
         setCollections(list);
@@ -1176,7 +1175,7 @@ export default function ItineraryDetailPage() {
     setPendingOptimize(null);
   }, [itineraryId, pendingOptimize]);
 
-  const { activitiesChannelRef } = useItineraryRealtime({
+  useItineraryRealtime({
     itineraryId,
     itineraryRef,
     setCalendarDays,
@@ -3075,7 +3074,6 @@ export default function ItineraryDetailPage() {
     async (file: File) => {
       if (!itineraryId) return;
       setFlightUploading(true);
-      const flightUploadStartedAt = Date.now();
       try {
         const extracted = await extractFlightsFromPDF(itineraryId, file);
         if (extracted.length === 0) return;
@@ -3178,7 +3176,6 @@ export default function ItineraryDetailPage() {
     async (file: File) => {
       if (!itineraryId) return;
       setLodgingUploading(true);
-      const lodgingUploadStartedAt = Date.now();
       try {
         const { lodgings: extracted, cascades } = await extractLodgingsFromPDF(itineraryId, file);
         if (extracted.length === 0) return;
@@ -3874,10 +3871,6 @@ export default function ItineraryDetailPage() {
                   ref={editDayListRef}
                   days={editPreviewDays ?? editLocalDays}
                   onDatesChange={(range) => {
-                    if (range?.from && range?.to) {
-                      const days =
-                        Math.round((range.to.getTime() - range.from.getTime()) / 86_400_000) + 1;
-                    }
                     setDateRange(range);
                   }}
                   panelVariant={

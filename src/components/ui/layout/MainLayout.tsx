@@ -237,7 +237,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     } catch (err) {
       if (err instanceof ItineraryQuotaError) {
         if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.itineraryUsage(userId) });
-        showQuotaToast("itinerary", err.max_itineraries, "navbar");
+        showQuotaToast("itinerary", err.max_itineraries);
         setItineraryModalOpen(false);
       } else {
         console.error("Failed to create itinerary:", err);

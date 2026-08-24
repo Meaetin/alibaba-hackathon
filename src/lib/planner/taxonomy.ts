@@ -11,7 +11,7 @@
  * send a raw row to retrieval.
  */
 
-import type { Interest } from "./types";
+import type { CandidatePlace, Interest } from "./types";
 
 export interface TaxonomyBridge {
   /** Google Places types — used as `includedType` filters and for affinity scoring. */
@@ -94,4 +94,16 @@ export function typesFor(interests: readonly Interest[]): string[] {
 
 export function dietaryBridgeFor(dietary: string): TaxonomyBridge | undefined {
   return Object.hasOwn(DIETARY_BRIDGE, dietary) ? DIETARY_BRIDGE[dietary] : undefined;
+}
+
+/**
+ * Somewhere you can eat a meal. Google types a specific cuisine as
+ * `ramen_restaurant` and a generic one as plain `restaurant`; both seat a meal
+ * slot. It lives here rather than in the funnel because it is a question about
+ * Google's type vocabulary, and because four modules ask it — the funnel's
+ * quotas, the validator's meal rule, the invariant suite and Gate A. A fifth
+ * private copy is how the four quietly disagree.
+ */
+export function isRestaurant(place: Pick<CandidatePlace, "types">): boolean {
+  return place.types.some((t) => t === "restaurant" || t.endsWith("_restaurant"));
 }

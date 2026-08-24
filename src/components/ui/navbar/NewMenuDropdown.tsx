@@ -3,7 +3,6 @@
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/primitives/Button";
-import type { Surface } from "@/lib/domain-types";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import {
   Menu,
@@ -13,8 +12,6 @@ import {
 } from "@/components/ui/primitives/Menu";
 
 interface NewMenuDropdownProps {
-  /** Surface this menu lives on, for the create-funnel analytics. */
-  source: Surface;
   /** Fired when "Link" is chosen. */
   onNewLink?: () => void;
   /** Fired when "Collection" is chosen. */
@@ -32,7 +29,6 @@ function NewMenuDropdown({
   onNewLink,
   onNewCollection,
   onNewItinerary,
-  source,
 }: NewMenuDropdownProps) {
   return (
     <Menu>

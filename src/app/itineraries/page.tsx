@@ -192,7 +192,7 @@ export default function ItinerariesPage() {
 
   const handleCreateNewItinerary = () => {
     if (itineraryQuotaExceeded) {
-      showQuotaToast("itinerary", itineraryUsage?.max ?? 0, "itineraries");
+      showQuotaToast("itinerary", itineraryUsage?.max ?? 0);
       return;
     }
     setIsCreateModalOpen(true);
@@ -232,7 +232,7 @@ export default function ItinerariesPage() {
       console.error("Failed to create itinerary:", err);
       if (err instanceof ItineraryQuotaError) {
         if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.itineraryUsage(userId) });
-        showQuotaToast("itinerary", err.max_itineraries, "itineraries");
+        showQuotaToast("itinerary", err.max_itineraries);
         setIsCreateModalOpen(false);
       } else {
         showToast({

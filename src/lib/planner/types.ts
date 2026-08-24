@@ -51,6 +51,26 @@ export interface SchedulerOptions {
 }
 
 /**
+ * One `regularOpeningHours.periods[]` entry, exactly as the Places API returns
+ * it. `day` is **0 = Sunday** through 6 = Saturday — Google's numbering, kept
+ * rather than translated so a payload can be diffed against the type.
+ */
+export interface OpeningPeriodPoint {
+  day: number;
+  hour: number;
+  minute: number;
+}
+
+export interface OpeningPeriod {
+  open: OpeningPeriodPoint;
+  /**
+   * Absent is Google's encoding for "always open" — it arrives as a lone period
+   * at day 0, 00:00 with no close. See `hours.ts`.
+   */
+  close?: OpeningPeriodPoint;
+}
+
+/**
  * A retrieved place as the deterministic core consumes it — produced by
  * retrieval (Places REST) and scored/filtered/clustered without ever going
  * back to Google. Field names follow the REST response, not the DB row.
@@ -70,6 +90,19 @@ export interface CandidatePlace {
   /** Minutes; `locations.stay_duration`, backfilled from enrichment. Rung 1
    *  of the visit-duration ladder when present. */
   stayDuration?: number;
+  /**
+   * `regularOpeningHours.periods`. Already in retrieval's field mask, so this
+   * costs nothing extra. Absent or empty means we have no hours for the place,
+   * which `hours.ts` reads as always open — see the caveat there.
+   */
+  openingPeriods?: OpeningPeriod[];
+  /**
+   * Google's own answer to the dietary question, from the shortlist hydration
+   * mask — **three-state**. `true`/`false` are Google's answer; `undefined`
+   * means it never said, which is the common case outside chains and must
+   * never be read as `false`. Absent until `hydrateShortlist` runs.
+   */
+  servesVegetarianFood?: boolean;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { authFetch, unwrap } from './client'
+import type { PriceRange } from "@/lib/maps/price-range";
 
 /**
  * A persisted `locations` row returned by the resolve-google-maps-url endpoint.
@@ -20,7 +21,7 @@ export interface ResolvedGoogleMapsLocation {
   stay_duration: number | null
   rating: number | null
   user_rating_count: number | null
-  price_range: { startPrice?: number; endPrice?: number; currency?: string } | null
+  price_range: PriceRange | null
   primary_type: string | null
   categories: string[] | null
   business_status: string | null

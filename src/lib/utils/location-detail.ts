@@ -3,11 +3,11 @@
  *  phrasing, price-range formatting, and opening-hours parsing identical across
  *  both so the two views never drift. */
 
-export interface PriceRange {
-  startPrice?: number;
-  endPrice?: number;
-  currency?: string;
-}
+import type { PriceRange } from "@/lib/maps/price-range";
+
+/** Re-exported so the card surfaces keep importing their types from one place,
+ *  while `price-range.ts` stays the single definition both write paths flatten to. */
+export type { PriceRange };
 
 /** Google `weekdayDescriptions` (Monday-first) from a `regular_opening_hours` blob. */
 export function weekdayDescriptionsFrom(hours?: unknown): string[] {

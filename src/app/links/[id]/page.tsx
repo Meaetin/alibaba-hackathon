@@ -38,6 +38,7 @@ import type { MapClusterData } from "@/components/ui/map/StaticMap";
 import { useRecordView } from "@/hooks/useRecordView";
 import { useHighlightLocation } from "@/hooks/useHighlightLocation";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
+import type { PriceRange } from "@/lib/maps/price-range";
 
 const StaticMap = dynamic(
   () => import("@/components/ui/map/StaticMap").then((mod) => mod.StaticMap),
@@ -72,7 +73,7 @@ interface LocationItem {
     phone: string;
     website: string;
     stayDurationMinutes: number | null;
-    priceRange: { startPrice?: number; endPrice?: number; currency?: string } | null;
+    priceRange: PriceRange | null;
   };
   images: string[];
   isFavorite: boolean;
@@ -92,7 +93,7 @@ interface LocationRow {
   international_phone_number: string | null;
   website_uri: string | null;
   stay_duration: number | null;
-  price_range: { startPrice?: number; endPrice?: number; currency?: string } | null;
+  price_range: PriceRange | null;
   location_context: string | null;
   google_maps_uri: string | null;
 }
@@ -229,10 +230,7 @@ export default function LinkDetailPage() {
     async (targetCollectionId: string) => {
       const locationIds = Array.from(selection.selectedIds);
       try {
-        await batchOps.handleAddToDestination(targetCollectionId, locationIds, undefined, {
-          target: "collection",
-          isBatch: true,
-        });
+        await batchOps.handleAddToDestination(targetCollectionId, locationIds);
         const target = saveCollections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added ${locationIds.length} to ${target?.name ?? "collection"}` });
       } catch (err) {
@@ -250,11 +248,7 @@ export default function LinkDetailPage() {
     async (itinerary: ActionToolbarItinerary) => {
       const locationIds = Array.from(selection.selectedIds);
       try {
-        await batchOps.handleAddToDestination(itinerary.collectionId, locationIds, undefined, {
-          target: "itinerary",
-          isBatch: true,
-          itineraryId: itinerary.id,
-        });
+        await batchOps.handleAddToDestination(itinerary.collectionId, locationIds);
         showToast({ title: `Added ${locationIds.length} to ${itinerary.name}` });
       } catch (err) {
         showToast({
@@ -453,12 +447,7 @@ export default function LinkDetailPage() {
     async (targetCollectionId: string) => {
       if (!selectedLocation) return;
       try {
-        await batchOps.handleAddToDestination(
-          targetCollectionId,
-          [selectedLocation.id],
-          undefined,
-          { target: "collection", isBatch: false },
-        );
+        await batchOps.handleAddToDestination(targetCollectionId, [selectedLocation.id]);
         const target = saveCollections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added to ${target?.name ?? "collection"}` });
       } catch (err) {
@@ -491,7 +480,6 @@ export default function LinkDetailPage() {
           data.latitude,
           data.longitude,
           data.tags,
-          "save_picker",
         );
         const list = await getCollections();
         setSaveCollections(list.filter((c) => !c.is_archived));
@@ -537,12 +525,7 @@ export default function LinkDetailPage() {
       const itinerary = saveItineraries.find((i) => i.id === itineraryId);
       if (!itinerary) return;
       try {
-        await batchOps.handleAddToDestination(
-          itinerary.collection_id,
-          [selectedLocation.id],
-          undefined,
-          { target: "itinerary", isBatch: false, itineraryId: itinerary.id },
-        );
+        await batchOps.handleAddToDestination(itinerary.collection_id, [selectedLocation.id]);
         showToast({ title: `Added to ${itinerary.name}` });
       } catch (err) {
         showToast({
@@ -909,7 +892,7 @@ export default function LinkDetailPage() {
           } catch (err) {
             setIsGenerating(false);
             if (err instanceof ItineraryQuotaError) {
-              showQuotaToast("itinerary", err.max_itineraries, "link_detail");
+              showQuotaToast("itinerary", err.max_itineraries);
             } else {
               showToast({
                 variant: "error",

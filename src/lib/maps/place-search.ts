@@ -7,6 +7,7 @@
 // cheaper per place than a lean Pro search plus a Place Details call on add.
 
 import { toPriceLevelOrdinal, type PriceLevelOrdinal } from "./price-level";
+import { toPriceRange, type PriceRange } from "./price-range";
 
 /** Per-photo metadata persisted to `locations.photos` (distinct from the re-hosted
  *  image URLs). Maps JS doesn't expose Google's photo resource `name`, so it's omitted. */
@@ -49,8 +50,8 @@ export interface PlaceSearchResult {
    * and not comparable across cities.
    */
   priceLevel?: PriceLevelOrdinal;
-  /** Raw price-range object (startPrice, endPrice, currency). Display only. */
-  priceRange?: Record<string, unknown>;
+  /** Flattened by `toPriceRange`, same as the persisted column. Display only. */
+  priceRange?: PriceRange;
   // ── Persistence-only fields (not rendered; carried through to the API so a
   //    search-added place can be stored without a redundant server-side fetch) ──
   /** Address components (city/country derivation). Pro-tier, always present. */
@@ -185,7 +186,8 @@ export function normalizePlace(place: google.maps.places.Place): PlaceSearchResu
   // narrowed view so missing type defs don't break the build.
   const extra = place as unknown as {
     googleMapsLinks?: Record<string, unknown>;
-    priceRange?: Record<string, unknown>;
+    /** Google's nested money range — `toPriceRange` flattens it. */
+    priceRange?: unknown;
     toJSON?: () => Record<string, unknown>;
   };
 
@@ -255,7 +257,7 @@ export function normalizePlace(place: google.maps.places.Place): PlaceSearchResu
     googleMapsUri: place.googleMapsURI ?? undefined,
     googleMapsLinks: extra.googleMapsLinks ?? undefined,
     priceLevel: toPriceLevelOrdinal(place.priceLevel),
-    priceRange: extra.priceRange ?? undefined,
+    priceRange: toPriceRange(extra.priceRange),
     addressComponents: addressComponents?.length ? addressComponents : undefined,
     openingHoursPeriods: openingHoursPeriods?.length ? openingHoursPeriods : undefined,
     photoStorageUrls: photoStorageUrls.length ? photoStorageUrls : undefined,
@@ -282,7 +284,7 @@ export interface PlaceDetailsPayload {
   userRatingCount?: number;
   /** 0–4 ordinal; the budget-filtering input. Persisted to `locations.price_level`. */
   priceLevel?: PriceLevelOrdinal;
-  priceRange?: { startPrice?: number; endPrice?: number; currency?: string };
+  priceRange?: PriceRange;
   openingHoursPeriods?: Array<{
     open: { day: number; hour: number; minute: number };
     close?: { day: number; hour: number; minute: number };
@@ -300,30 +302,6 @@ export interface PlaceDetailsPayload {
   rawPlace?: Record<string, unknown>;
 }
 
-/**
- * Normalize the Maps JS `PriceRange` (whose `startPrice`/`endPrice` are `Money`
- * objects — `{ units, currencyCode, nanos }`) into the numeric shape the server
- * persists. Returns undefined when no price data is present.
- */
-function normalizePriceRange(
-  raw: Record<string, unknown> | undefined,
-): { startPrice?: number; endPrice?: number; currency?: string } | undefined {
-  if (!raw) return undefined;
-  const toNum = (v: unknown): number | undefined => {
-    if (typeof v === 'number') return v;
-    const units = (v as { units?: unknown } | undefined)?.units;
-    const n =
-      typeof units === 'string' ? parseInt(units, 10) : typeof units === 'number' ? units : NaN;
-    return Number.isFinite(n) ? n : undefined;
-  };
-  const startPrice = toNum(raw.startPrice);
-  const endPrice = toNum(raw.endPrice);
-  const currency =
-    (raw.startPrice as { currencyCode?: string } | undefined)?.currencyCode ??
-    (typeof raw.currency === 'string' ? raw.currency : undefined);
-  if (startPrice == null && endPrice == null && !currency) return undefined;
-  return { startPrice, endPrice, currency };
-}
 
 /**
  * Builds the server persistence payload from a search result — but ONLY when the
@@ -344,7 +322,7 @@ export function toPlaceDetailsPayload(place: PlaceSearchResult): PlaceDetailsPay
     rating: place.rating,
     userRatingCount: place.userRatingCount,
     priceLevel: place.priceLevel,
-    priceRange: normalizePriceRange(place.priceRange),
+    priceRange: toPriceRange(place.priceRange),
     openingHoursPeriods: place.openingHoursPeriods,
     weekdayDescriptions: place.openingHours,
     businessStatus: place.businessStatus,

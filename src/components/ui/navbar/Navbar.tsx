@@ -383,7 +383,6 @@ function Navbar({
                 </Button>
                 {menusMounted ? (
                   <NewMenuDropdown
-                    source="navbar"
                     onNewLink={onNewLink}
                     onNewCollection={onNewCollection}
                     onNewItinerary={onNewItinerary}

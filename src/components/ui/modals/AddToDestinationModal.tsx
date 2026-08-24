@@ -135,7 +135,7 @@ export function AddToDestinationModal({
     setIsCreating(true);
     try {
       if (mode === "collection") {
-        await createCollection(data.name!, data.country, data.region, data.latitude, data.longitude, data.tags, "action_toolbar");
+        await createCollection(data.name!, data.country, data.region, data.latitude, data.longitude, data.tags);
       } else {
         if (!data.tripName || !data.country) return;
         await createItinerary(data.tripName, data.country, data.region, data.latitude, data.longitude, data.startDate, data.totalDays, data.endDate);
