@@ -1,0 +1,1 @@
+Central TypeScript library that centralizes domain types, site config, React Query caching, and feature-scoped clients consumed uniformly by all pages and components.

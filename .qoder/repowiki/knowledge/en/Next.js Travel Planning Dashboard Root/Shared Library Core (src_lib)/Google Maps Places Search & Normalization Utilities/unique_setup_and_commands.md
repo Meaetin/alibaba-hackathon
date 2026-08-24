@@ -1,0 +1,1 @@
+None — pure TypeScript utilities consumed by the map UI and Add Location flow.

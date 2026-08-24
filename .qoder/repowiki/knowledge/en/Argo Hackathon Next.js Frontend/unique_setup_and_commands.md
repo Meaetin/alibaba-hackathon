@@ -1,1 +1,0 @@
-`npm run dev` boots the dev server with Turbopack; `npm run build` / `npm start` for production; `npm run type-check` runs `tsc --noEmit`; `npm test` runs Vitest over `src/**/*.test.ts` with `vite-tsconfig-paths` enabled. Requires copying `.env.local.example` to `.env.local` with Google Maps keys before `/home`, `/collections/**`, and `/itineraries/**` will render maps.

@@ -1,1 +1,0 @@
-Next.js client components (`"use client"`, `next/dynamic` SSR off) with `@vis.gl/react-google-maps` for the Google Maps JS wrapper, `next-themes` for light/dark map styles, and `class-variance-authority` for marker variant styling. Map IDs are read from `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT` / `_DARK` env vars.

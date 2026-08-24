@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: components_ui/modals
+title: Modal & Dialog UI Components
+scope:
+    - src/components/ui/modals/
+source_files: []
+depends_on: []
+related_to: []

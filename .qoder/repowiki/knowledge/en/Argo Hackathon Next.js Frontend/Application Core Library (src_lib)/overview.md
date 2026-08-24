@@ -1,1 +1,0 @@
-Shared TypeScript library that centralizes domain types, site config, auth policy, React Query setup, and cross-cutting clients for Supabase, backend API, maps, planning, and UI utilities consumed by all pages and components.

@@ -1,0 +1,1 @@
+Browser-side helpers that query Google Places (New) via the Maps JS API, normalize results into a stable domain shape, cluster saved locations by locality, and validate Google Maps share URLs.

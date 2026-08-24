@@ -1,3 +1,14 @@
+</think>
+
+Based on my analysis of the codebase, I can see the significant enhancements to the AI route optimization system. The key changes include:
+
+1. **Enhanced deterministic planning core** with sophisticated multi-factor scoring
+2. **New hardFilterReason function** providing detailed rejection explanations
+3. **Improved budget constraints and dietary filtering**
+4. **Better user rating normalization** using Bayesian averaging
+
+Let me now update the documentation to reflect these changes:
+
 # AI-Powered Route Optimization
 
 <cite>
@@ -12,7 +23,16 @@
 - [cluster.ts](file://src/lib/planner/cluster.ts)
 - [duration.ts](file://src/lib/planner/duration.ts)
 - [types.ts](file://src/lib/planner/types.ts)
+- [taxonomy.ts](file://src/lib/planner/taxonomy.ts)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced scoring system with sophisticated multi-factor approach (interest affinity, price fit, user rating normalization)
+- Added comprehensive hard filters for closed venues and budget constraints
+- Implemented detailed rejection explanations via hardFilterReason function
+- Improved budget widening ladder and dietary constraint handling
+- Enhanced candidate funnel with better quota enforcement and tracking
 
 ## Table of Contents
 1. Introduction
@@ -27,7 +47,7 @@
 10. Appendices
 
 ## Introduction
-This document explains the AI-powered route optimization system that plans optimal activity sequences across a day or multi-day itinerary. It covers how the system computes schedules considering opening hours, travel times, geographic proximity, and user preferences; how it detects and resolves conflicts (overlaps and time cascades); how the drag-and-drop interface integrates with AI recommendations while preserving consistency; and how to customize behavior for different planning needs.
+This document explains the AI-powered route optimization system that plans optimal activity sequences across a day or multi-day itinerary. The system has been enhanced with a new deterministic planning core that provides sophisticated multi-factor scoring, comprehensive hard filters, and detailed rejection explanations. It covers how the system computes schedules considering opening hours, travel times, geographic proximity, and user preferences; how it detects and resolves conflicts (overlaps and time cascades); how the drag-and-drop interface integrates with AI recommendations while preserving consistency; and how to customize behavior for different planning needs.
 
 ## Project Structure
 The system is split into two cooperating layers:
@@ -42,6 +62,7 @@ F["funnel.ts"]
 C["cluster.ts"]
 D["duration.ts"]
 T["types.ts"]
+X["taxonomy.ts"]
 end
 subgraph "Itinerary UI"
 O["overlap-utils.ts"]
@@ -56,6 +77,7 @@ F --> S
 D --> F
 T --> S
 T --> D
+X --> S
 O --> A
 O --> Q
 G --> A
@@ -64,11 +86,12 @@ H --> A
 ```
 
 **Diagram sources**
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 - [funnel.ts:1-448](file://src/lib/planner/funnel.ts#L1-L448)
 - [cluster.ts:1-166](file://src/lib/planner/cluster.ts#L1-L166)
 - [duration.ts:1-105](file://src/lib/planner/duration.ts#L1-L105)
 - [types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
+- [taxonomy.ts:1-98](file://src/lib/planner/taxonomy.ts#L1-L98)
 - [overlap-utils.ts:1-303](file://src/components/ui/itinerary/overlap-utils.ts#L1-L303)
 - [drag-utils.ts:1-89](file://src/components/ui/itinerary/drag-utils.ts#L1-L89)
 - [sequence.ts:1-196](file://src/components/ui/itinerary/ItineraryDayColumn/sequence.ts#L1-L196)
@@ -76,11 +99,12 @@ H --> A
 - [opening-hours-status.ts:1-112](file://src/components/ui/itinerary/opening-hours-status.ts#L1-L112)
 
 **Section sources**
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 - [funnel.ts:1-448](file://src/lib/planner/funnel.ts#L1-L448)
 - [cluster.ts:1-166](file://src/lib/planner/cluster.ts#L1-L166)
 - [duration.ts:1-105](file://src/lib/planner/duration.ts#L1-L105)
 - [types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
+- [taxonomy.ts:1-98](file://src/lib/planner/taxonomy.ts#L1-L98)
 - [overlap-utils.ts:1-303](file://src/components/ui/itinerary/overlap-utils.ts#L1-L303)
 - [drag-utils.ts:1-89](file://src/components/ui/itinerary/drag-utils.ts#L1-L89)
 - [sequence.ts:1-196](file://src/components/ui/itinerary/ItineraryDayColumn/sequence.ts#L1-L196)
@@ -89,10 +113,11 @@ H --> A
 
 ## Core Components
 - Preference profile and scheduler options define user interests, dietary constraints, pace, budget, and scheduling knobs.
-- Candidate scoring ranks places by affinity, quality, and price fit, with hard filters for closed venues, dietary conflicts, and extreme budget mismatches.
+- **Enhanced Candidate scoring** ranks places by interest affinity, Bayesian-quality rating, and price fit with configurable weights, including sophisticated multi-factor scoring.
+- **Comprehensive hard filters** remove permanently closed venues, enforce dietary constraints for meal slots, and kill extreme budget outliers with detailed rejection reasons.
 - Geographic clustering groups nearby candidates per day using k-means++ for coherent neighborhood planning.
 - Duration resolution estimates visit lengths via a ladder (stored stay durations, enrichment ranges, type heuristics, global default) and adjusts by pace.
-- The candidate funnel narlists top candidates per cluster and globally, enforcing quotas (e.g., restaurant share, cuisine diversity).
+- **Enhanced candidate funnel** narlists top candidates per cluster and globally, enforcing quotas (e.g., restaurant share, cuisine diversity) with detailed tracking.
 - Conflict detection identifies overlapping activities and transport overflow between consecutive rows.
 - Time cascading re-times unlocked activities on a 10-minute grid, respecting locked anchors and travel legs.
 - Sequence building renders activities and transport legs, marking conflicts when travel cannot fit.
@@ -100,7 +125,7 @@ H --> A
 
 **Section sources**
 - [types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 - [cluster.ts:1-166](file://src/lib/planner/cluster.ts#L1-L166)
 - [duration.ts:1-105](file://src/lib/planner/duration.ts#L1-L105)
 - [funnel.ts:1-448](file://src/lib/planner/funnel.ts#L1-L448)
@@ -136,34 +161,41 @@ UI-->>User : updated schedule + conflict indicators
 
 ## Detailed Component Analysis
 
-### Scoring and Personalization
-- Scores combine interest affinity, Bayesian-quality rating, and price fit with configurable weights.
-- Hard filters remove permanently closed venues, enforce dietary constraints for meal slots, and kill extreme budget outliers.
-- Reasons are attached to each scored place for explainability.
+### Enhanced Scoring and Personalization
+**Updated** The scoring system now uses sophisticated multi-factor approach combining interest affinity, Bayesian-quality rating, and price fit with configurable weights.
+
+- Scores combine interest affinity, Bayesian-quality rating, and price fit with configurable weights (affinity: 0.4, quality: 0.35, priceFit: 0.25).
+- **Enhanced hard filters** remove permanently closed venues, enforce dietary constraints for meal slots, and kill extreme budget outliers with detailed rejection reasons via `hardFilterReason` function.
+- Reasons are attached to each scored place for explainability, including match reasons and budget widening information.
+- **Bayesian rating normalization** prevents places with few reviews from outranking well-established venues.
 
 ```mermaid
 flowchart TD
-Start(["Place Input"]) --> Filters["Hard Filters<br/>closed, dietary, budget"]
-Filters --> |Pass| Score["Affinity + Quality + Price Fit"]
-Filters --> |Fail| Drop["Drop with reason"]
+Start(["Place Input"]) --> Filters["Hard Filters<br/>closed, dietary, budget<br/>with detailed reasons"]
+Filters --> |Pass| Score["Multi-factor Scoring:<br/>Affinity (0.4) + Quality (0.35) + Price Fit (0.25)"]
+Filters --> |Fail| Drop["Drop with reason:<br/>permanently closed,<br/>dietary conflict,<br/>budget violation"]
 Score --> Ranked["Sort best-first"]
-Ranked --> Output(["Scored list"])
+Ranked --> Output(["Scored list with reasons"])
 ```
 
 **Diagram sources**
-- [score.ts:90-200](file://src/lib/planner/score.ts#L90-L200)
+- [score.ts:90-207](file://src/lib/planner/score.ts#L90-L207)
 
 **Section sources**
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 
-### Candidate Funnel and Clustering
+### Enhanced Candidate Funnel and Clustering
+**Updated** The funnel now includes comprehensive tracking of dropped candidates with detailed reasons and improved quota enforcement.
+
 - The funnel applies per-cluster caps, then a global cap with quotas (restaurant share, cuisine diversity), producing a shortlist grouped by cluster.
+- **Enhanced tracking** records every dropped candidate with specific stage and reason for full transparency.
 - Geographic clustering uses k-means++ seeding and Lloyd iterations to group nearby candidates into neighborhoods aligned with planned days.
+- **Budget widening ladder** automatically expands budget constraints when needed, recording the widening in match reasons.
 
 ```mermaid
 flowchart TD
 In(["Clustered Candidates"]) --> PerCluster["Per-cluster cap by score"]
-PerCluster --> GlobalCap["Global cap + quotas"]
+PerCluster --> GlobalCap["Global cap + quotas<br/>with detailed tracking"]
 GlobalCap --> Shortlist["Shortlist grouped by cluster"]
 Shortlist --> Out(["Pass B input"])
 ```
@@ -251,7 +283,7 @@ SEQ-->>UI : Transport legs + conflict flags
 
 ### Opening Hours Validation
 - Validates scheduled windows against location opening hours, handling overnight periods and missing data gracefully.
-- Returns actionable statuses such as “opens late” or “closes early” to guide adjustments.
+- Returns actionable statuses such as "opens late" or "closes early" to guide adjustments.
 
 ```mermaid
 flowchart TD
@@ -276,6 +308,7 @@ Check --> |No| Status["Closed today / Closed during / Opens late / Closes early"
 graph LR
 Types["types.ts"] --> Score["score.ts"]
 Types --> Duration["duration.ts"]
+Taxonomy["taxonomy.ts"] --> Score
 Score --> Funnel["funnel.ts"]
 Cluster["cluster.ts"] --> Funnel
 Funnel --> UI["Itinerary UI"]
@@ -287,8 +320,9 @@ UI --> OpenHrs["opening-hours-status.ts"]
 
 **Diagram sources**
 - [types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 - [duration.ts:1-105](file://src/lib/planner/duration.ts#L1-L105)
+- [taxonomy.ts:1-98](file://src/lib/planner/taxonomy.ts#L1-L98)
 - [funnel.ts:1-448](file://src/lib/planner/funnel.ts#L1-L448)
 - [cluster.ts:1-166](file://src/lib/planner/cluster.ts#L1-L166)
 - [overlap-utils.ts:1-303](file://src/components/ui/itinerary/overlap-utils.ts#L1-L303)
@@ -298,7 +332,7 @@ UI --> OpenHrs["opening-hours-status.ts"]
 
 **Section sources**
 - [types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
-- [score.ts:1-200](file://src/lib/planner/score.ts#L1-L200)
+- [score.ts:1-207](file://src/lib/planner/score.ts#L1-L207)
 - [funnel.ts:1-448](file://src/lib/planner/funnel.ts#L1-L448)
 - [cluster.ts:1-166](file://src/lib/planner/cluster.ts#L1-L166)
 - [overlap-utils.ts:1-303](file://src/components/ui/itinerary/overlap-utils.ts#L1-L303)
@@ -312,6 +346,7 @@ UI --> OpenHrs["opening-hours-status.ts"]
 - Time cascading operates only on the conflicting suffix, minimizing rework.
 - Travel leg requests are limited to newly created adjacencies to reduce network calls.
 - Opening-hours checks are computed on demand during render without heavy state updates.
+- **Enhanced tracking** adds minimal overhead while providing comprehensive debugging information.
 
 [No sources needed since this section provides general guidance]
 
@@ -320,14 +355,16 @@ UI --> OpenHrs["opening-hours-status.ts"]
 - Transport overflow: check that travel durations exist on the preceding row; missing values prevent accurate cascading.
 - Overpacked days: if activities push past the day boundary, cascading stops to avoid unrealistic schedules; consider splitting across days or relaxing constraints.
 - Opening hours warnings: adjust start/end times to fall within open windows; overnight visits require careful alignment with closing/opening logic.
+- **Enhanced debugging**: Use the detailed rejection reasons from `hardFilterReason` to understand why places were filtered out, including specific budget violations and dietary conflicts.
 
 **Section sources**
 - [overlap-utils.ts:229-297](file://src/components/ui/itinerary/overlap-utils.ts#L229-L297)
 - [drag-utils.ts:37-88](file://src/components/ui/itinerary/drag-utils.ts#L37-L88)
 - [opening-hours-status.ts:84-112](file://src/components/ui/itinerary/opening-hours-status.ts#L84-L112)
+- [score.ts:131-149](file://src/lib/planner/score.ts#L131-L149)
 
 ## Conclusion
-The system combines transparent, deterministic algorithms with a responsive UI to produce feasible, preference-aligned itineraries. It balances user control (drag-and-drop, manual edits) with AI-driven suggestions (scoring, clustering, duration estimation) while maintaining consistency through robust conflict detection, time cascading, and opening-hours validation. Customizable preferences and scheduler options allow tailoring to diverse planning needs.
+The system combines transparent, deterministic algorithms with a responsive UI to produce feasible, preference-aligned itineraries. The enhanced deterministic planning core provides sophisticated multi-factor scoring, comprehensive hard filters with detailed rejection explanations, and improved budget constraint handling. It balances user control (drag-and-drop, manual edits) with AI-driven suggestions (scoring, clustering, duration estimation) while maintaining consistency through robust conflict detection, time cascading, and opening-hours validation. Customizable preferences and scheduler options allow tailoring to diverse planning needs.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -336,7 +373,8 @@ The system combines transparent, deterministic algorithms with a responsive UI t
 ### Example Optimization Scenarios
 - Tight city tour: high-interest museums and cafes clustered geographically; funnels limit restaurants to preserve variety; cascading ensures realistic gaps between visits.
 - Family-friendly day: relaxed pace increases preferred durations; opening-hours checks prevent scheduling at closed attractions; locked lodging check-in/out anchor the day.
-- Budget-conscious trip: budget widening ladder surfaces affordable alternatives; scoring favors price-fit while preserving quality signals.
+- Budget-conscious trip: budget widening ladder surfaces affordable alternatives; scoring favors price-fit while preserving quality signals; detailed rejection reasons help users understand budget constraints.
+- **Enhanced scenario**: Dietary restrictions are handled with tiered degradation ladders, providing vegetarian/vegan options when available and appropriate caveats when compromises are necessary.
 
 [No sources needed since this section provides conceptual examples]
 
@@ -344,8 +382,11 @@ The system combines transparent, deterministic algorithms with a responsive UI t
 - Preferences: interests, dietary constraints, pace, budget level.
 - Scheduler options: maximum clusters, initialization method, iteration caps, daily start/end bounds.
 - Funnel tuning: per-cluster cap, global cap, restaurant share, cuisine diversity.
+- **Enhanced scoring weights**: Configurable weights for affinity, quality, and price fit components.
+- **Budget widening**: Automatic budget expansion with detailed tracking of widening steps.
 
 **Section sources**
 - [types.ts:27-51](file://src/lib/planner/types.ts#L27-L51)
 - [funnel.ts:32-56](file://src/lib/planner/funnel.ts#L32-L56)
 - [duration.ts:27-34](file://src/lib/planner/duration.ts#L27-L34)
+- [score.ts:30-34](file://src/lib/planner/score.ts#L30-L34)

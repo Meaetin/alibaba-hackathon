@@ -1,0 +1,6 @@
+- Database rows keep snake_case property names matching Postgres column names so they can be passed directly to UI components without a rename layer.
+- JSONB columns are typed via Drizzle's `$type<T>()` helper against domain interfaces imported from `@/lib/planner/*` rather than loose `any` types.
+- TTL-expirable tables store both `created_at` and `expires_at` timestamps, with `expires_at` defaulting to `now() + interval '<N> days'`.
+- Upset operations use `onConflictDoUpdate` with explicit per-column `sql\`excluded.<col>\`` or `coalesce(excluded.<col>, <existing>)` to preserve enrichment data instead of blindly overwriting.
+- Time is stored as integer minutes from midnight in `itinerary_activities` and formatted only at the read boundary via `formatMinutes`, keeping storage timezone-neutral.
+- Lazy initialization is used for expensive resources: the Neon connection is cached in a module-level variable and thrown on if `DATABASE_URL` is missing.

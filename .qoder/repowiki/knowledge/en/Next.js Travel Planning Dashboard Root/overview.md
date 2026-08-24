@@ -1,0 +1,1 @@
+Root of a Next.js 15 App Router travel planning dashboard that wires routes, UI components, hooks, and a shared core library into a Supabase-backed application.

@@ -1,6 +1,0 @@
-- Shared domain shapes live in `types.ts` and are imported by every stage; modules never redefine `CandidatePlace` or `PreferenceProfile` locally.
-- Configuration constants (weights, defaults, multipliers) are exported as `as const` objects at the top of their file so tests compare against them instead of hard-coded numbers.
-- Stochastic behavior is parameterized via injected functions (e.g. `rng: () => number` in `ClusterParams`) rather than calling `Math.random` directly, enabling deterministic tests.
-- Pipeline stages expose both results and metadata (`FunnelResult.stages`/`stats`, `ScoredPlace.reasons`, `MealSelection.rung`, `BudgetWidening.widenedBy`) so callers can log or render why each decision was made.
-- Fallback/degradation logic is expressed as explicit rung cascades (dietary ladder, budget widening, visit-duration ladder) that always return a non-empty result instead of throwing.
-- Static mappings use exhaustive `Record<Interest, ...>` structures so adding a union member in `types.ts` produces a compile-time miss if the bridge row is missing.

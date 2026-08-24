@@ -1,0 +1,1 @@
+Google Maps JavaScript API (Places Library New) — Text Search and Nearby Search with field masks; relies directly on `google.maps.places.Place` and `google.maps.Map` types rather than a typed SDK wrapper.

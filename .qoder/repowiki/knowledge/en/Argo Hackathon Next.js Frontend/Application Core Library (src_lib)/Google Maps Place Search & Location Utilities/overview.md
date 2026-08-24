@@ -1,1 +1,0 @@
-Browser-side utilities for Google Places API (New) search, place normalization, price-level conversion, locality pin clustering, and Google Maps URL detection used by the map UI.

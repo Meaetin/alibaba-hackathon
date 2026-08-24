@@ -1,0 +1,6 @@
+- Field sets are declared as `as const` tuples (`BASE_FIELDS`, `ENTERPRISE_EXTRAS`) and composed into a single `SEARCH_FIELDS` array to keep request payloads and tests in sync.
+- Raw Google Maps responses are funneled through dedicated normalizers (`normalizePlace`, `toPriceLevelOrdinal`, `toPriceRange`) before being exposed as stable domain shapes like `PlaceSearchResult`.
+- Optional/nullable fields on normalized results are carried as optional properties and omitted when empty (e.g. `photoAttributions`, `openingHoursPeriods`, `photos`) to keep persisted payloads lean.
+- Billing-sensitive enrichment is gated behind explicit checks (`placeNeedsDetails`) so Pro-tier search results can be enriched lazily with a cheaper Place Details call instead of always requesting Enterprise fields.
+- Cross-cutting constants (`MAX_RESULTS`, `MAX_RADIUS_M`, `MIN_RADIUS_M`, `MAX_STORED_PHOTOS`) are hoisted at the top of the file and reused across search, normalization, and persistence paths.
+- Dev-only console diagnostics are guarded by `process.env.NODE_ENV !== 'production'` blocks around `console.groupCollapsed` / `console.table` output.

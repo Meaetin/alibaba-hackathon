@@ -1,0 +1,1 @@
+Drizzle ORM over Neon's serverless Postgres driver (`@neondatabase/serverless` + `drizzle-orm/neon-http`); tables use `pg-core` columns including `jsonb`, `uuid`, `timestamptz`, GIN indexes on JSON arrays, and SQL CHECK constraints.

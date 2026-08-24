@@ -1,1 +1,0 @@
-React client components styled with Tailwind CSS and class-variance-authority, built on Radix/Base UI primitives; runtime state via TanStack Query (`QueryProvider`), theming via next-themes with forced light theme, and Supabase realtime for itinerary job notifications.

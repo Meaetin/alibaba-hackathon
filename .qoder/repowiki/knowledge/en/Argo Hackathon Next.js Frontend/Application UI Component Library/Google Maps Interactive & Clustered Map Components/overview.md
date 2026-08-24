@@ -1,1 +1,0 @@
-React components that render Google Maps with location pins, route polylines, hover detail cards, place search, and clustered markers for itinerary and collection views.

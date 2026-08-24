@@ -1,1 +1,0 @@
-TypeScript with React Query for caching across `api_clients` and `supabase_layer`; Google Maps Platform APIs via `maps`; Supabase client via `supabase_layer`; motion/react animation presets via `motion`; Next.js environment variables (`NEXT_PUBLIC_SITE_URL`) for site-origin configuration.

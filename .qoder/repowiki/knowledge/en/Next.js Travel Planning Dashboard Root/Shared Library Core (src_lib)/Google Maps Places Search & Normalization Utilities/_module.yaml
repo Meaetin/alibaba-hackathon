@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: lib_core/maps
+title: Google Maps Places Search & Normalization Utilities
+scope:
+    - src/lib/maps/
+source_files: []
+depends_on: []
+related_to: []

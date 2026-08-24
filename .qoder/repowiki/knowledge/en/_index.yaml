@@ -3,11 +3,11 @@ schema_version: 1
 locale: en-US
 branch: main
 nodes_managed: true
-exported_at: "2026-08-20T16:15:23Z"
+exported_at: "2026-08-24T08:18:08Z"
 modules:
     "":
-        dir_name: Argo Hackathon Next.js Frontend
-        title: Argo Hackathon Next.js Frontend
+        dir_name: Next.js Travel Planning Dashboard Root
+        title: Next.js Travel Planning Dashboard Root
         scope:
             - docs/
             - .gitignore
@@ -50,7 +50,8 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to: []
+        related_to:
+            - path: lib_core/api_clients
     app_routes/home:
         dir_name: Dashboard Home Page (Recent Content & Creation Hub)
         title: Dashboard Home Page (Recent Content & Creation Hub)
@@ -60,7 +61,6 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: components_ui/cards
             - path: lib_core/supabase_layer
     app_routes/itineraries:
         dir_name: Itineraries Routes (List, Detail & Public View)
@@ -71,7 +71,7 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: lib_core/api_clients
+            - path: components_ui/itinerary/core_itinerary
     app_routes/links:
         dir_name: Links Management & Detail Pages
         title: Links Management & Detail Pages
@@ -81,7 +81,7 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: hooks_contexts
+            - path: lib_core/api_clients
     components_ui:
         dir_name: Application UI Component Library
         title: Application UI Component Library
@@ -120,8 +120,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: app_routes/home
+        related_to: []
     components_ui/detail_views:
         dir_name: Detail Views & Itinerary Cards
         title: Detail Views & Itinerary Cards
@@ -151,7 +150,7 @@ modules:
         children: []
         depends_on: []
         related_to:
-            - path: components_ui/itinerary/tabs
+            - path: app_routes/itineraries
     components_ui/itinerary/tabs:
         dir_name: Itinerary Detail Tabs
         title: Itinerary Detail Tabs
@@ -160,8 +159,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: components_ui/itinerary/core_itinerary
+        related_to: []
     components_ui/layout_and_dashboard:
         dir_name: Main Layout & Dashboard Action UI
         title: Main Layout & Dashboard Action UI
@@ -171,9 +169,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: components_ui/modals
-            - path: components_ui/navbar
+        related_to: []
     components_ui/map:
         dir_name: Google Maps Interactive & Clustered Map Components
         title: Google Maps Interactive & Clustered Map Components
@@ -182,8 +178,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: lib_core/maps
+        related_to: []
     components_ui/modals:
         dir_name: Modal & Dialog UI Components
         title: Modal & Dialog UI Components
@@ -192,8 +187,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: components_ui/layout_and_dashboard
+        related_to: []
     components_ui/navbar:
         dir_name: Application Navbar & Search Overlay
         title: Application Navbar & Search Overlay
@@ -202,8 +196,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: components_ui/layout_and_dashboard
+        related_to: []
     components_ui/primitives:
         dir_name: Base UI Primitives (Design System Components)
         title: Base UI Primitives (Design System Components)
@@ -223,8 +216,7 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: hooks_contexts
+        related_to: []
     components_ui/shared_widgets:
         dir_name: Shared UI Widgets (Calendar, Links, Notes, Skeletons)
         title: Shared UI Widgets (Calendar, Links, Notes, Skeletons)
@@ -246,17 +238,16 @@ modules:
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: app_routes/links
-            - path: components_ui/providers_and_notifications
+        related_to: []
     lib_core:
-        dir_name: Application Core Library (src_lib)
-        title: Application Core Library (src/lib)
+        dir_name: Shared Library Core (src_lib)
+        title: Shared Library Core (src/lib)
         scope:
             - src/lib/
         source_files: []
         children:
             - lib_core/api_clients
+            - lib_core/db
             - lib_core/lib_root_modules
             - lib_core/maps
             - lib_core/motion_and_utils
@@ -265,15 +256,25 @@ modules:
         depends_on: []
         related_to: []
     lib_core/api_clients:
-        dir_name: Backend API Client Layer
-        title: Backend API Client Layer
+        dir_name: Backend REST API Client Library
+        title: Backend REST API Client Library
         scope:
             - src/lib/api/
         source_files: []
         children: []
         depends_on: []
         related_to:
-            - path: app_routes/itineraries
+            - path: app_routes/collections
+            - path: app_routes/links
+    lib_core/db:
+        dir_name: PostgreSQL Schema & Drizzle Data Layer
+        title: PostgreSQL Schema & Drizzle Data Layer
+        scope:
+            - src/lib/db/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
     lib_core/lib_root_modules:
         dir_name: Shared Domain Types & Site Utilities
         title: Shared Domain Types & Site Utilities
@@ -287,15 +288,14 @@ modules:
         depends_on: []
         related_to: []
     lib_core/maps:
-        dir_name: Google Maps Place Search & Location Utilities
-        title: Google Maps Place Search & Location Utilities
+        dir_name: Google Maps Places Search & Normalization Utilities
+        title: Google Maps Places Search & Normalization Utilities
         scope:
             - src/lib/maps/
         source_files: []
         children: []
         depends_on: []
-        related_to:
-            - path: components_ui/map
+        related_to: []
     lib_core/motion_and_utils:
         dir_name: Motion Presets & Shared UI Utilities
         title: Motion Presets & Shared UI Utilities
@@ -307,8 +307,8 @@ modules:
         depends_on: []
         related_to: []
     lib_core/planner_engine:
-        dir_name: Personalized Itinerary Planner Engine
-        title: Personalized Itinerary Planner Engine
+        dir_name: Candidate Funnel & Scoring Pipeline
+        title: Candidate Funnel & Scoring Pipeline
         scope:
             - src/lib/planner/
         source_files: []

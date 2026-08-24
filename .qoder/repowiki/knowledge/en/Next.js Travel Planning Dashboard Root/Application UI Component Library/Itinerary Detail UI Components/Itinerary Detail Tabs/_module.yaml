@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: components_ui/itinerary/tabs
+title: Itinerary Detail Tabs
+scope:
+    - src/components/ui/itinerary/tabs/
+source_files: []
+depends_on: []
+related_to: []

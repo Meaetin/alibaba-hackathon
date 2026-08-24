@@ -1,1 +1,0 @@
-Next.js 15 App Router application that composes routes, UI components, React contexts/hooks, and a shared core library into a Supabase-backed travel planning dashboard.

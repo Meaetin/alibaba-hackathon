@@ -1,0 +1,5 @@
+- Components are grouped by feature area under `src/components/ui/<feature>/` and consume primitives from `@/components/ui/primitives/*` rather than duplicating styling or re-implementing base widgets.
+- Public API surface is exposed through per-folder barrel files (e.g. `ui/index.ts`) that re-export only the most frequently used symbols, while internal components are imported via direct subpath imports.
+- Theme-aware styling uses Tailwind classes combined with class-variance-authority variants defined in each primitive, so higher-level components remain theme-neutral.
+- Root context providers (`QueryProvider`, `ThemeProvider`) wrap the entire application tree once at the app entry point, and child components consume data/theme via hooks instead of props.
+- Feature folders communicate by importing shared primitives and small utility modules rather than importing from sibling feature directories, preserving a strict bottom-up dependency graph.
