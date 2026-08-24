@@ -2,17 +2,16 @@
 
 <cite>
 **Referenced Files in This Document**
-- [index.ts](file://src/components/ui/index.ts)
-- [ThemeProvider.tsx](file://src/components/ThemeProvider.tsx)
 - [Button.tsx](file://src/components/ui/primitives/Button.tsx)
 - [Input.tsx](file://src/components/ui/primitives/Input.tsx)
-- [Menu.tsx](file://src/components/ui/primitives/Menu.tsx)
-- [Popover.tsx](file://src/components/ui/primitives/Popover.tsx)
-- [Sheet.tsx](file://src/components/ui/primitives/Sheet.tsx)
-- [Toast.tsx](file://src/components/ui/primitives/Toast.tsx)
-- [BaseCard.tsx](file://src/components/ui/cards/BaseCard.tsx)
-- [ItineraryCard.tsx](file://src/components/ui/cards/ItineraryCard.tsx)
 - [FormModal.tsx](file://src/components/ui/modals/FormModal.tsx)
+- [Sheet.tsx](file://src/components/ui/primitives/Sheet.tsx)
+- [Popover.tsx](file://src/components/ui/primitives/Popover.tsx)
+- [index.ts](file://src/components/ui/index.ts)
+- [globals.css](file://src/app/globals.css)
+- [motion.css](file://src/styles/tokens/motion.css)
+- [ThemeProvider.tsx](file://src/components/ThemeProvider.tsx)
+- [package.json](file://package.json)
 </cite>
 
 ## Table of Contents
@@ -28,159 +27,151 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document describes the comprehensive UI component library used across the application. It covers the design system principles, theming approach, and the architecture that unifies primitive, compound, and feature-specific components. You will find usage guidance, prop interfaces, styling options, accessibility considerations, and best practices for creating new components while maintaining consistency.
+This document describes the Argo component library and design system implemented in this repository. It focuses on primitive components (Button, Input, Sheet, Popover), feature-specific composition (FormModal), theming via Tailwind CSS with semantic tokens, accessibility patterns, responsive behavior, and guidelines for creating new components consistently.
 
 ## Project Structure
-The component library is organized by responsibility:
-- Primitives: low-level building blocks (Button, Input, Menu, Popover, Sheet, Toast).
-- Cards: compound containers with shared shell and media handling.
-- Modals: dialog-based overlays for forms and confirmations.
-- Utilities and theme: ThemeProvider and shared utilities.
+The UI layer is organized under src/components/ui with a clear separation:
+- primitives: foundational building blocks (Button, Input, Sheet, Popover, etc.)
+- modals: higher-level overlay components composed from primitives and Base UI primitives
+- cards, dashboard, itinerary, map, navbar, skeletons, detail-views: feature-oriented compositions
+- index.ts: a convenience barrel exporting commonly used components
 
 ```mermaid
 graph TB
 subgraph "Primitives"
 B["Button"]
 I["Input"]
-M["Menu"]
-P["Popover"]
 S["Sheet"]
-T["Toast"]
-end
-subgraph "Cards"
-BC["BaseCard"]
-IC["ItineraryCard"]
+P["Popover"]
 end
 subgraph "Modals"
 FM["FormModal"]
 end
-TH["ThemeProvider"]
-IC --> BC
+subgraph "App Shell"
+G["globals.css<br/>Tokens & Theme"]
+T["ThemeProvider"]
+end
+B --> G
+I --> G
+S --> G
+P --> G
 FM --> B
-I --> M
-P --> B
-S --> B
-T --> B
-TH --> B
-TH --> I
-TH --> S
-TH --> FM
+FM --> G
+T --> G
 ```
 
 **Diagram sources**
 - [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
 - [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
-- [Menu.tsx:1-384](file://src/components/ui/primitives/Menu.tsx#L1-L384)
-- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
 - [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
-- [Toast.tsx:1-174](file://src/components/ui/primitives/Toast.tsx#L1-L174)
-- [BaseCard.tsx:1-211](file://src/components/ui/cards/BaseCard.tsx#L1-L211)
-- [ItineraryCard.tsx:1-55](file://src/components/ui/cards/ItineraryCard.tsx#L1-L55)
+- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
 - [FormModal.tsx:1-224](file://src/components/ui/modals/FormModal.tsx#L1-L224)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
 - [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
 
 **Section sources**
 - [index.ts:1-46](file://src/components/ui/index.ts#L1-L46)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
 
 ## Core Components
-This section summarizes the key primitives and their responsibilities.
+This section documents the primitives that form the foundation of the design system.
 
 - Button
-  - Purpose: Primary interactive element with variants, sizes, and icon placement.
-  - Variants: primary, secondary, ghost, outline, dark.
-  - Sizes: xs, sm, md; icon modes: none, leading, trailing, only.
-  - Accessibility: focus-visible ring, disabled state, keyboard support via Base UI.
-  - Styling: class-variance-authority-driven classes, layered decoration for filled variants.
+  - Variants: primary, secondary, ghost, outline, dark
+  - Sizes: xs, sm, md
+  - Icon placement: none, leading, trailing, only
+  - Visuals: layered fill, inset bevel, border ring; motion-aware transitions
+  - Accessibility: focus-visible ring, disabled state, keyboard-friendly
+  - See [Button.tsx:9-42](file://src/components/ui/primitives/Button.tsx#L9-L42) and [Button.tsx:48-67](file://src/components/ui/primitives/Button.tsx#L48-L67)
 
 - Input
-  - Purpose: Text input with leading/trailing icons, clearable behavior, and dropdown selector mode.
-  - Variants: default, underline; sizes: sm, md; icon states computed automatically.
-  - Controlled/uncontrolled value handling; aria-invalid support.
-  - DropdownSelector: selectable menu integration when options are provided.
-
-- Menu
-  - Purpose: Accessible dropdown menus with items, separators, and descriptive items.
-  - Features: alignment, side, offset, collision padding, hover/openOnHover on triggers.
-  - Styles: consistent item sizing, selected state, destructive variant.
-
-- Popover
-  - Purpose: Floating content anchored to a trigger with optional arrow and positioning controls.
-  - Options: side, align, sideOffset, collisionPadding, anchor, openOnHover, delay.
+  - Variants: default, underline
+  - Sizes: sm, md
+  - Icon slots: none, leading, trailing, both (auto-resolved)
+  - Features: controlled/uncontrolled value, clearable, aria-invalid support
+  - DropdownSelector: presentational trigger or menu-backed selection
+  - AddToInput: fixed leading/trailing icon layout
+  - See [Input.tsx:11-70](file://src/components/ui/primitives/Input.tsx#L11-L70), [Input.tsx:93-123](file://src/components/ui/primitives/Input.tsx#L93-L123), [Input.tsx:280-405](file://src/components/ui/primitives/Input.tsx#L280-L405), [Input.tsx:407-503](file://src/components/ui/primitives/Input.tsx#L407-L503)
 
 - Sheet
-  - Purpose: Responsive overlay drawer/modal. Bottom sheet on phone, side drawer on larger screens.
-  - ARIA: title/description exposed via sr-only elements; backdrop-dismiss and focus trap via Base UI.
+  - Responsive presentation: bottom sheet on phone, side drawer on tablet+
+  - Backdrop, focus trap, scroll lock via Base UI Dialog
+  - Accessible title/description via sr-only elements
+  - See [Sheet.tsx:10-26](file://src/components/ui/primitives/Sheet.tsx#L10-L26), [Sheet.tsx:50-97](file://src/components/ui/primitives/Sheet.tsx#L50-L97)
 
-- Toast
-  - Purpose: Non-blocking notifications with auto-dismiss progress bar, thumbnails, actions, and pause/resume on hover.
-  - Accessibility: role alert/status, aria-live regions.
+- Popover
+  - Trigger and content with optional hover-open and delay
+  - Content styling: surface background, edge border, rounded corners, shadow
+  - Optional directional arrow with automatic rotation
+  - See [Popover.tsx:16-31](file://src/components/ui/primitives/Popover.tsx#L16-L31), [Popover.tsx:126-183](file://src/components/ui/primitives/Popover.tsx#L126-L183)
 
-- BaseCard and ItineraryCard
-  - BaseCard: shared card shell with media area, header label, category badge, action menu, selection states, and link/button behavior.
-  - ItineraryCard: concrete card composing BaseCard with CardMedia.
-
-- FormModal
-  - Purpose: Dialog form wrapper with icon/sticker area, title/description, form slot, cancel/submit buttons, loading state, and responsive mobile sheet-like layout.
+- FormModal (feature composition)
+  - Built on Base UI Dialog with responsive mobile sheet-like behavior
+  - Icon treatment: category-based rings/circles or sticker image
+  - Header (title + description), separator, content slot, button group
+  - Submitting state with spinner and label
+  - See [FormModal.tsx:12-48](file://src/components/ui/modals/FormModal.tsx#L12-L48), [FormModal.tsx:78-224](file://src/components/ui/modals/FormModal.tsx#L78-L224)
 
 **Section sources**
 - [Button.tsx:9-132](file://src/components/ui/primitives/Button.tsx#L9-L132)
-- [Input.tsx:11-123](file://src/components/ui/primitives/Input.tsx#L11-L123)
-- [Menu.tsx:16-183](file://src/components/ui/primitives/Menu.tsx#L16-L183)
-- [Popover.tsx:16-88](file://src/components/ui/primitives/Popover.tsx#L16-L88)
-- [Sheet.tsx:10-48](file://src/components/ui/primitives/Sheet.tsx#L10-L48)
-- [Toast.tsx:13-174](file://src/components/ui/primitives/Toast.tsx#L13-L174)
-- [BaseCard.tsx:13-50](file://src/components/ui/cards/BaseCard.tsx#L13-L50)
-- [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
-- [FormModal.tsx:12-76](file://src/components/ui/modals/FormModal.tsx#L12-L76)
+- [Input.tsx:11-513](file://src/components/ui/primitives/Input.tsx#L11-L513)
+- [Sheet.tsx:10-97](file://src/components/ui/primitives/Sheet.tsx#L10-L97)
+- [Popover.tsx:16-200](file://src/components/ui/primitives/Popover.tsx#L16-L200)
+- [FormModal.tsx:12-224](file://src/components/ui/modals/FormModal.tsx#L12-L224)
 
 ## Architecture Overview
-The library follows a layered architecture:
-- Primitives provide accessible, theme-aware building blocks built on Base UI and styled with utility classes and CSS variables.
-- Compound components compose primitives to implement higher-level UX patterns (cards, modals).
-- Theming is centralized via ThemeProvider using next-themes, driving CSS variables for motion and colors.
+The design system follows a layered architecture:
+- Primitives provide accessible, theme-aware building blocks using Base UI primitives and Tailwind CSS utilities.
+- Feature components compose primitives to implement domain-specific UX (e.g., FormModal composes Button and Dialog).
+- Theming is centralized in global CSS tokens mapped to Tailwind theme variables, enabling consistent color, typography, spacing, and motion across components.
 
 ```mermaid
-graph TB
-TH["ThemeProvider<br/>next-themes"]
-PRIMS["Primitives<br/>Button, Input, Menu, Popover, Sheet, Toast"]
-COMPOUND["Compound<br/>BaseCard, ItineraryCard, FormModal"]
-APP["Application Pages"]
-TH --> PRIMS
-TH --> COMPOUND
-PRIMS --> COMPOUND
-COMPOUND --> APP
-PRIMS --> APP
+graph LR
+A["Base UI Primitives<br/>(Dialog, Button, Field, Popover)"] --> B["Argo Primitives<br/>(Button, Input, Sheet, Popover)"]
+B --> C["Feature Components<br/>(FormModal, Cards, etc.)"]
+D["Theme Tokens<br/>(globals.css)"] --> B
+D --> C
+E["Motion Tokens<br/>(motion.css)"] --> B
+E --> C
 ```
 
 **Diagram sources**
-- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
+- [motion.css:1-200](file://src/styles/tokens/motion.css#L1-L200)
 - [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
 - [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
-- [BaseCard.tsx:1-211](file://src/components/ui/cards/BaseCard.tsx#L1-L211)
+- [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
+- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
 - [FormModal.tsx:1-224](file://src/components/ui/modals/FormModal.tsx#L1-L224)
 
 ## Detailed Component Analysis
 
 ### Button
-- Props
-  - Inherits Base UI button props plus:
-    - variant: primary | secondary | ghost | outline | dark
-    - size: xs | sm | md
-    - icon: none | leading | trailing | only
-    - className, children
-- Styling
-  - Uses cva for variant/size/icon combinations; filled variants use layered background, inset bevel, and border ring for crisp edges.
-- Accessibility
-  - Focus-visible ring, disabled state, keyboard interaction handled by Base UI.
+- Purpose: Primary interactive element with multiple visual variants and sizes.
+- Props overview:
+  - variant: primary | secondary | ghost | outline | dark
+  - size: xs | sm | md
+  - icon: none | leading | trailing | only
+  - className, children, plus all Base UI Button props
+- Styling:
+  - Uses class-variance-authority for variant/size/icon combinations
+  - Layered decoration for filled variants (background, inset bevel, top border ring)
+  - Motion-aware transitions via CSS variables
+- Accessibility:
+  - Focus-visible ring and disabled states
+  - Keyboard interaction handled by Base UI
+- Usage pattern:
+  - Wrap text or icons; use icon variants for compact actions
 
 ```mermaid
 classDiagram
 class Button {
-+variant : "primary|secondary|ghost|outline|dark"
-+size : "xs|sm|md"
-+icon : "none|leading|trailing|only"
-+className? : string
-+children? : ReactNode
++variant
++size
++icon
++className
++children
++onClick()
 }
 ```
 
@@ -191,354 +182,292 @@ class Button {
 - [Button.tsx:9-132](file://src/components/ui/primitives/Button.tsx#L9-L132)
 
 ### Input
-- Props
-  - Inherits Field.Control props plus:
-    - variant: default | underline
-    - size: sm | md
-    - icon: leading | trailing | both | none (computed)
-    - hasValue: true | false (computed)
-    - value/defaultValue, placeholder, onChange
-    - clearable, onClear
-    - showDropdown (deprecated; delegates to DropdownSelector)
-    - trailingIcon, icon, iconClassName, inputClassName, trailingIconClassName
-    - aria-invalid
-- Behavior
-  - Controlled/uncontrolled value sync; automatic hasValue detection; clear button renders when clearable and hasValue.
-  - When showDropdown is true, renders DropdownSelector which can optionally open a real Menu when options are provided.
+- Purpose: Text input with flexible icon slots, validation states, and optional dropdown selection.
+- Props overview:
+  - variant: default | underline
+  - size: sm | md
+  - icon, trailingIcon, iconClassName, trailingIconClassName, inputClassName
+  - value/defaultValue for controlled/uncontrolled usage
+  - clearable, onClear
+  - showDropdown (deprecated alias to DropdownSelector)
+  - aria-invalid and standard field props
+- Behavior:
+  - Auto-detects icon state to adjust padding
+  - Clearable control triggers input/change events programmatically
+  - DropdownSelector integrates Base UI Menu when options provided
+- Accessibility:
+  - aria-invalid propagated
+  - Clear button has aria-label
+- Usage pattern:
+  - Use Input for free-form text
+  - Use DropdownSelector for single-select lists
+  - Use AddToInput for fixed leading/trailing action layouts
 
 ```mermaid
 flowchart TD
-Start(["Input render"]) --> CheckControlled{"value defined?"}
-CheckControlled --> |Yes| UseValue["Use controlled value"]
-CheckControlled --> |No| InternalState["Track internal hasValue"]
-UseValue --> ComputeHasValue["Compute hasValue"]
-InternalState --> ComputeHasValue
-ComputeHasValue --> RenderSlots["Render leading/trailing/clear slots"]
-RenderSlots --> HandleChange{"onChange?"}
-HandleChange --> |Yes| Dispatch["Dispatch change/input events"]
-HandleChange --> |No| End(["Done"])
+Start(["Render Input"]) --> CheckControlled{"Controlled?"}
+CheckControlled --> |Yes| SyncValue["Sync internal hasValue"]
+CheckControlled --> |No| InternalState["Track hasValue internally"]
+SyncValue --> ResolveIcons["Resolve icon state"]
+InternalState --> ResolveIcons
+ResolveIcons --> Render["Render wrapper + Field.Control + optional clear/trailing"]
+Render --> End(["User Interaction"])
 ```
 
 **Diagram sources**
-- [Input.tsx:148-186](file://src/components/ui/primitives/Input.tsx#L148-L186)
-- [Input.tsx:241-275](file://src/components/ui/primitives/Input.tsx#L241-L275)
+- [Input.tsx:148-168](file://src/components/ui/primitives/Input.tsx#L148-L168)
+- [Input.tsx:213-275](file://src/components/ui/primitives/Input.tsx#L213-L275)
 
 **Section sources**
-- [Input.tsx:11-123](file://src/components/ui/primitives/Input.tsx#L11-L123)
-- [Input.tsx:148-275](file://src/components/ui/primitives/Input.tsx#L148-L275)
-- [Input.tsx:284-405](file://src/components/ui/primitives/Input.tsx#L284-L405)
+- [Input.tsx:11-513](file://src/components/ui/primitives/Input.tsx#L11-L513)
 
-### Menu
-- Components
-  - Menu, MenuTrigger, MenuContent, MenuItem, DescriptiveMenuItem, MenuSeparator
-- Props highlights
-  - MenuContent: align, side, sideOffset, positionerClassName
-  - MenuItem: size, icon, variant, selected, leadingIcon, trailingIcon
-  - DescriptiveMenuItem: title, description, leadingIcon
-- Behavior
-  - Positioning via Base UI with collision padding; highlight/selected states; destructive variant for actions.
+### Sheet
+- Purpose: Responsive overlay container (bottom sheet on phone, side drawer on desktop/tablet).
+- Props overview:
+  - open, onOpenChange
+  - side: bottom | right | left (auto-resolved based on breakpoint if omitted)
+  - title, description (sr-only for accessibility)
+  - trigger, children, className
+- Behavior:
+  - Backdrop dismissal, focus trap, scroll lock via Base UI Dialog
+  - Mobile-safe area insets applied
+- Accessibility:
+  - Title/description exposed to assistive tech
+- Usage pattern:
+  - Wrap any content as children; control visibility externally
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
-participant T as "MenuTrigger"
-participant C as "MenuContent"
-participant I as "MenuItem"
-U->>T : "Click/Focus"
-T->>C : "Open"
-C-->>U : "Show menu"
-U->>I : "Select item"
-I-->>U : "onSelect callback"
-C-->>U : "Close on select"
+participant S as "Sheet"
+participant D as "Base UI Dialog"
+U->>S : Open trigger
+S->>D : Root open=true
+D-->>U : Backdrop + Popup rendered
+U->>D : Press Esc / click backdrop
+D-->>S : onOpenChange(false)
 ```
 
 **Diagram sources**
-- [Menu.tsx:192-241](file://src/components/ui/primitives/Menu.tsx#L192-L241)
-- [Menu.tsx:246-301](file://src/components/ui/primitives/Menu.tsx#L246-L301)
+- [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
 
 **Section sources**
-- [Menu.tsx:16-183](file://src/components/ui/primitives/Menu.tsx#L16-L183)
-- [Menu.tsx:192-384](file://src/components/ui/primitives/Menu.tsx#L192-L384)
+- [Sheet.tsx:10-97](file://src/components/ui/primitives/Sheet.tsx#L10-L97)
 
 ### Popover
-- Components
-  - Popover, PopoverTrigger, PopoverContent
-- Props highlights
-  - PopoverTrigger: openOnHover, delay
-  - PopoverContent: side, align, sideOffset, collisionPadding, anchor, arrow
-- Behavior
-  - Portal rendering; optional directional arrow; focus management via Base UI.
+- Purpose: Floating content anchored to a trigger with optional hover-open and directional arrow.
+- Props overview:
+  - Trigger: openOnHover, delay
+  - Content: sideOffset, align, side, arrow, collisionPadding, anchor
+- Behavior:
+  - Positioner handles collision and offset
+  - Arrow rotates automatically based on data-side
+- Accessibility:
+  - Focus management delegated to Base UI
+- Usage pattern:
+  - Use for contextual help, tooltips, or small panels
 
 ```mermaid
 sequenceDiagram
-participant U as "User"
-participant T as "PopoverTrigger"
+participant T as "Trigger"
 participant PC as "PopoverContent"
-U->>T : "Hover/Click"
-T->>PC : "Open with position"
-PC-->>U : "Show popover"
-U->>PC : "Interact"
-PC-->>U : "Close on outside click"
+participant BP as "Base UI Popover"
+T->>BP : open/hover event
+BP-->>PC : render Popup with Positioner
+PC-->>T : position relative to anchor/trigger
 ```
 
 **Diagram sources**
-- [Popover.tsx:97-121](file://src/components/ui/primitives/Popover.tsx#L97-L121)
+- [Popover.tsx:104-121](file://src/components/ui/primitives/Popover.tsx#L104-L121)
 - [Popover.tsx:126-183](file://src/components/ui/primitives/Popover.tsx#L126-L183)
 
 **Section sources**
-- [Popover.tsx:16-88](file://src/components/ui/primitives/Popover.tsx#L16-L88)
-- [Popover.tsx:97-183](file://src/components/ui/primitives/Popover.tsx#L97-L183)
-
-### Sheet
-- Props
-  - open, onOpenChange, side (bottom/right/left), title, description, trigger, children, className
-- Behavior
-  - Responsive presentation: bottom sheet on phone, side drawer on larger screens; accessible via Base UI Dialog.
-
-```mermaid
-flowchart TD
-Open["Open Sheet"] --> Side{"isPhone?"}
-Side --> |Yes| Bottom["Bottom sheet layout"]
-Side --> |No| Right["Right drawer layout"]
-Bottom --> Render["Render portal with backdrop"]
-Right --> Render
-Render --> Close["Close on backdrop or Esc"]
-```
-
-**Diagram sources**
-- [Sheet.tsx:57-91](file://src/components/ui/primitives/Sheet.tsx#L57-L91)
-
-**Section sources**
-- [Sheet.tsx:10-48](file://src/components/ui/primitives/Sheet.tsx#L10-L48)
-- [Sheet.tsx:57-91](file://src/components/ui/primitives/Sheet.tsx#L57-L91)
-
-### Toast
-- Container
-  - ToastContainer renders a portal at the page root with AnimatePresence for enter/exit animations.
-- Props (via context)
-  - title, description, thumbnail, action, duration, variant, id
-- Behavior
-  - Auto-dismiss with progress bar; pause/resume on hover; role/alert semantics for errors.
-
-```mermaid
-sequenceDiagram
-participant App as "App"
-participant TC as "ToastContainer"
-participant T as "Toast Item"
-App->>TC : "Add toast"
-TC->>T : "Render with animation"
-T-->>TC : "Auto-dismiss after duration"
-App->>TC : "Remove toast"
-TC-->>App : "Cleanup"
-```
-
-**Diagram sources**
-- [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
-
-**Section sources**
-- [Toast.tsx:13-174](file://src/components/ui/primitives/Toast.tsx#L13-L174)
-
-### BaseCard and ItineraryCard
-- BaseCard
-  - Provides media area, header with category badge and label, optional kebab menu with actions, selection styles, and link/button behavior with keyboard support.
-- ItineraryCard
-  - Composes BaseCard with CardMedia and itinerary-specific icon variant.
-
-```mermaid
-classDiagram
-class BaseCard {
-+cardClass : string
-+media : ReactNode
-+label : string
-+href? : string
-+onClick?() : void
-+onDelete?() : void
-+onAddToCollection?() : void
-+onAddToItinerary?() : void
-+isSelected? : boolean
-+isSelectingMode? : boolean
-}
-class ItineraryCard {
-+imageUrl? : string
-+imageAlt? : string
-+imageAspect? : string
-+gradient? : string
-}
-ItineraryCard --> BaseCard : "composes"
-```
-
-**Diagram sources**
-- [BaseCard.tsx:20-50](file://src/components/ui/cards/BaseCard.tsx#L20-L50)
-- [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
-
-**Section sources**
-- [BaseCard.tsx:13-211](file://src/components/ui/cards/BaseCard.tsx#L13-L211)
-- [ItineraryCard.tsx:8-55](file://src/components/ui/cards/ItineraryCard.tsx#L8-L55)
+- [Popover.tsx:16-200](file://src/components/ui/primitives/Popover.tsx#L16-L200)
 
 ### FormModal
-- Props
-  - trigger, open, onOpenChange, variant, icon, stickerUrl, title, description, children, cancelLabel, submitLabel, submittingLabel, onSubmit, onCancel, cancelCloses, submitDisabled, isSubmitting
-- Behavior
-  - Dialog-based modal with responsive mobile sheet-like layout; supports submitting state with spinner; accessible title/description via Base UI.
+- Purpose: Accessible modal dialog for forms with category-themed iconography and responsive mobile behavior.
+- Props overview:
+  - trigger, open, onOpenChange
+  - variant (for icon colors): link | collection | itinerary | location | brand | neutral
+  - icon or stickerUrl
+  - title, description, children (form content slot)
+  - cancelLabel, submitLabel, submittingLabel
+  - onSubmit, onCancel, cancelCloses, submitDisabled, isSubmitting
+- Behavior:
+  - Mobile: full-width bottom sheet with handle; desktop: centered popup
+  - Integrates Base UI Dialog for focus management and backdrop
+  - Button group uses Button primitive
+- Accessibility:
+  - Dialog semantics, titles, descriptions, and keyboard navigation via Base UI
+- Usage pattern:
+  - Wrap form fields in children; manage submission state with isSubmitting
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
 participant FM as "FormModal"
-participant F as "Form"
-U->>FM : "Open"
-FM-->>U : "Show modal"
-U->>F : "Submit"
-F-->>FM : "onSubmit(event)"
-FM-->>U : "Close or stay open"
+participant D as "Base UI Dialog"
+participant BTN as "Button"
+U->>FM : Click trigger
+FM->>D : open=true
+D-->>U : Show popup/sheet
+U->>FM : Submit form
+FM->>BTN : Disable while submitting
+FM-->>U : Close on success or cancel
 ```
 
 **Diagram sources**
-- [FormModal.tsx:78-217](file://src/components/ui/modals/FormModal.tsx#L78-L217)
-
-**Section sources**
-- [FormModal.tsx:12-76](file://src/components/ui/modals/FormModal.tsx#L12-L76)
 - [FormModal.tsx:78-224](file://src/components/ui/modals/FormModal.tsx#L78-L224)
 
+**Section sources**
+- [FormModal.tsx:12-224](file://src/components/ui/modals/FormModal.tsx#L12-L224)
+
 ## Dependency Analysis
-Key dependencies and relationships:
-- Base UI provides accessible primitives (Dialog, Menu, Popover, Field, Button).
-- class-variance-authority drives variant composition for consistent styling.
-- next-themes powers ThemeProvider for theme context.
-- Utility functions (cn) merge classes consistently.
+- External dependencies:
+  - @base-ui/react provides accessible primitives (Dialog, Button, Field, Popover, Menu)
+  - class-variance-authority drives variant/size/icon combinations
+  - lucide-react supplies icons
+  - next-themes powers theme context
+  - Tailwind CSS v4 with custom theme tokens defines colors, typography, and effects
+- Internal coupling:
+  - Feature components depend on primitives (e.g., FormModal depends on Button)
+  - All primitives consume semantic tokens from globals.css via Tailwind classes
+  - Motion tokens are referenced for consistent timing/easing
 
 ```mermaid
-graph LR
-BA["@base-ui/react"]
-CVA["class-variance-authority"]
-NT["next-themes"]
-UTIL["lib/utils (cn)"]
-Button --> BA
-Input --> BA
-Menu --> BA
-Popover --> BA
-Sheet --> BA
-FormModal --> BA
-Button --> CVA
-Input --> CVA
-Menu --> CVA
-Popover --> CVA
-Sheet --> CVA
-FormModal --> CVA
-ThemeProvider --> NT
-All["All Components"] --> UTIL
+graph TB
+Pkg["@base-ui/react"] --> Btn["Button"]
+Pkg --> Inp["Input"]
+Pkg --> Sh["Sheet"]
+Pkg --> Po["Popover"]
+Pkg --> Fm["FormModal"]
+CVA["class-variance-authority"] --> Btn
+CVA --> Inp
+CVA --> Sh
+CVA --> Po
+CVA --> Fm
+Tail["Tailwind + globals.css"] --> Btn
+Tail --> Inp
+Tail --> Sh
+Tail --> Po
+Tail --> Fm
+NextThemes["next-themes"] --> Theme["ThemeProvider"]
 ```
 
 **Diagram sources**
-- [Button.tsx:1-10](file://src/components/ui/primitives/Button.tsx#L1-L10)
-- [Input.tsx:1-10](file://src/components/ui/primitives/Input.tsx#L1-L10)
-- [Menu.tsx:1-10](file://src/components/ui/primitives/Menu.tsx#L1-L10)
-- [Popover.tsx:1-10](file://src/components/ui/primitives/Popover.tsx#L1-L10)
-- [Sheet.tsx:1-10](file://src/components/ui/primitives/Sheet.tsx#L1-L10)
-- [FormModal.tsx:1-10](file://src/components/ui/modals/FormModal.tsx#L1-L10)
+- [package.json:12-33](file://package.json#L12-L33)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
+- [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
+- [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
+- [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
+- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
+- [FormModal.tsx:1-224](file://src/components/ui/modals/FormModal.tsx#L1-L224)
 - [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
 
 **Section sources**
-- [Button.tsx:1-10](file://src/components/ui/primitives/Button.tsx#L1-L10)
-- [Input.tsx:1-10](file://src/components/ui/primitives/Input.tsx#L1-L10)
-- [Menu.tsx:1-10](file://src/components/ui/primitives/Menu.tsx#L1-L10)
-- [Popover.tsx:1-10](file://src/components/ui/primitives/Popover.tsx#L1-L10)
-- [Sheet.tsx:1-10](file://src/components/ui/primitives/Sheet.tsx#L1-L10)
-- [FormModal.tsx:1-10](file://src/components/ui/modals/FormModal.tsx#L1-L10)
-- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [package.json:12-33](file://package.json#L12-L33)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
 
 ## Performance Considerations
-- Prefer primitives for small, reusable pieces; compose into compound components to avoid duplication.
-- Use cva variants to minimize conditional class logic and keep render paths predictable.
-- Leverage Base UI’s portals and positioning to reduce reflows in overlays.
-- For lists and heavy cards, consider lazy rendering and memoization where appropriate.
-- Respect reduced motion preferences (e.g., Toast respects prefers-reduced-motion).
+- Prefer primitives for common interactions to reduce duplication and ensure optimized rendering.
+- Use class-variance-authority to minimize conditional class logic at runtime.
+- Keep large overlays (modals/sheets) lightweight; defer heavy content until opened.
+- Leverage Base UI’s focus management and portal rendering to avoid reflows outside the viewport.
+- Use motion tokens for consistent, GPU-friendly transitions.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common issues and resolutions:
-- Input not clearing
-  - Ensure clearable is enabled and onClear is either provided or the internal clear path is reachable; verify hasValue state updates.
-  - Section sources
-    - [Input.tsx:170-186](file://src/components/ui/primitives/Input.tsx#L170-L186)
-- DropdownSelector not opening menu
-  - Confirm options array is provided; without options it acts as a presentational trigger.
-  - Section sources
-    - [Input.tsx:379-401](file://src/components/ui/primitives/Input.tsx#L379-L401)
-- Menu items not focusing correctly
-  - Ensure MenuContent is within Menu and items are direct children; check collisionPadding if clipping occurs.
-  - Section sources
-    - [Menu.tsx:214-241](file://src/components/ui/primitives/Menu.tsx#L214-L241)
-- Popover arrow clipped
-  - Increase sideOffset or adjust collisionPadding; ensure parent containers do not clip overflow.
-  - Section sources
-    - [Popover.tsx:126-183](file://src/components/ui/primitives/Popover.tsx#L126-L183)
-- Sheet not closing on Escape
-  - Verify open state is controlled and onOpenChange updates state; Base UI handles focus trap and escape.
-  - Section sources
-    - [Sheet.tsx:57-91](file://src/components/ui/primitives/Sheet.tsx#L57-L91)
-- Toast not dismissing
-  - Check duration and paused state; ensure ToastContainer is mounted and context provider is available.
-  - Section sources
-    - [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
+- Input not clearing:
+  - Ensure clearable is true and onClear is either provided or the internal ref mechanism can set value and dispatch input/change events.
+  - See [Input.tsx:170-186](file://src/components/ui/primitives/Input.tsx#L170-L186)
+- DropdownSelector not opening:
+  - Provide options array to enable menu mode; otherwise it renders as a presentational trigger.
+  - See [Input.tsx:379-401](file://src/components/ui/primitives/Input.tsx#L379-L401)
+- Modal not closing on Escape:
+  - Confirm Base UI Dialog is used and open state is controlled; see [FormModal.tsx:101-116](file://src/components/ui/modals/FormModal.tsx#L101-L116)
+- Sheet not responsive:
+  - Verify breakpoint hook returns expected values; side auto-resolves based on isPhone.
+  - See [Sheet.tsx:67-69](file://src/components/ui/primitives/Sheet.tsx#L67-L69)
+- Popover arrow misaligned:
+  - Adjust sideOffset or collisionPadding; arrow rotation relies on data-side attributes.
+  - See [Popover.tsx:141-177](file://src/components/ui/primitives/Popover.tsx#L141-L177)
+
+**Section sources**
+- [Input.tsx:170-186](file://src/components/ui/primitives/Input.tsx#L170-L186)
+- [Input.tsx:379-401](file://src/components/ui/primitives/Input.tsx#L379-L401)
+- [FormModal.tsx:101-116](file://src/components/ui/modals/FormModal.tsx#L101-L116)
+- [Sheet.tsx:67-69](file://src/components/ui/primitives/Sheet.tsx#L67-L69)
+- [Popover.tsx:141-177](file://src/components/ui/primitives/Popover.tsx#L141-L177)
 
 ## Conclusion
-This component library provides a cohesive, accessible, and theme-aware foundation for building consistent user interfaces. By combining primitives with compound patterns, teams can scale features rapidly while preserving design integrity. Follow the guidelines below to maintain consistency and accessibility across the application.
+The Argo component library provides a cohesive, accessible, and theme-driven UI system built on Base UI and Tailwind CSS. Primitives offer consistent interaction patterns and visual language, while feature components like FormModal demonstrate composition strategies. The tokenized theme ensures consistency across surfaces, content, edges, actions, categories, and typography, with motion tokens unifying animations.
+
+[No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
-### Design System Principles
-- Consistency through primitives: reuse Button, Input, Menu, Popover, Sheet, Toast rather than ad-hoc implementations.
-- Variant-driven styling: define all visual states via cva variants to keep changes localized and testable.
-- Accessibility first: rely on Base UI for focus management, ARIA attributes, and keyboard interactions.
-- Theme via CSS variables: centralize colors, motion, and spacing tokens through ThemeProvider and utility classes.
+### Design Tokens and Theming
+- Semantic tokens define Surface, Content, Glyph, Edge, Action, Category, Shadows, Typography, and Calendar colors.
+- Light and dark themes are defined via CSS variables and mapped into Tailwind’s @theme inline block.
+- Motion tokens are imported for consistent animation timing and easing.
 
-### Theming Approach
-- ThemeProvider wraps the app with next-themes, enabling light/dark themes and CSS variable consumption.
-- Motion tokens and color tokens are consumed via CSS variables referenced in component classes.
+```mermaid
+graph LR
+Vars["CSS Variables<br/>(light/dark)"] --> Theme["@theme inline<br/>Tailwind tokens"]
+Theme --> Classes["Utility Classes<br/>used by components"]
+Motion["motion.css"] --> Classes
+```
+
+**Diagram sources**
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
+- [motion.css:1-200](file://src/styles/tokens/motion.css#L1-L200)
 
 **Section sources**
-- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [globals.css:12-784](file://src/app/globals.css#L12-L784)
+- [motion.css:1-200](file://src/styles/tokens/motion.css#L1-L200)
 
-### Prop Interfaces Summary
-- Button: variant, size, icon, className, children, plus Base UI button props.
-- Input: variant, size, icon, hasValue, value/defaultValue, placeholder, onChange, clearable, onClear, trailingIcon, icon, iconClassName, inputClassName, trailingIconClassName, aria-invalid.
-- Menu: Menu, MenuTrigger, MenuContent (align, side, sideOffset, positionerClassName), MenuItem (size, icon, variant, selected, leadingIcon, trailingIcon), DescriptiveMenuItem (title, description, leadingIcon), MenuSeparator.
-- Popover: Popover, PopoverTrigger (openOnHover, delay), PopoverContent (side, align, sideOffset, collisionPadding, anchor, arrow).
-- Sheet: open, onOpenChange, side, title, description, trigger, children, className.
-- Toast: container renders from context; individual toasts include title, description, thumbnail, action, duration, variant, id.
-- BaseCard: cardClass, media, label, href, onClick, onDelete, onAddToCollection, onAddToItinerary, disabled, isSelected, isSelectingMode.
-- ItineraryCard: imageUrl, imageAlt, imageAspect, gradient, plus inherited BaseCard props.
-- FormModal: trigger, open, onOpenChange, variant, icon, stickerUrl, title, description, children, cancelLabel, submitLabel, submittingLabel, onSubmit, onCancel, cancelCloses, submitDisabled, isSubmitting.
+### Creating New Components: Guidelines
+- Composition hierarchy:
+  - Start with a primitive if reusable across features; otherwise build a feature-specific component that composes primitives.
+- Styling:
+  - Use Tailwind utility classes and semantic tokens; avoid hard-coded colors.
+  - For multi-variant components, prefer class-variance-authority.
+- Accessibility:
+  - Rely on Base UI primitives for complex behaviors (Dialog, Popover, Field).
+  - Ensure proper roles, labels, and keyboard navigation.
+- Responsiveness:
+  - Use breakpoints and mobile-first considerations; test bottom-sheet vs side-drawer patterns.
+- Testing strategy:
+  - Unit tests: verify prop handling, state changes, and event callbacks.
+  - Integration tests: validate user flows (open/close, select, submit).
+  - Visual regression: snapshot key variants and responsive states.
+  - Accessibility audits: check focus order, ARIA attributes, and screen reader announcements.
+
+[No sources needed since this section provides general guidance]
+
+### Example Usage Patterns
+- Button:
+  - Primary action: use variant="primary", size="md"
+  - Icon-only: use icon="only" with appropriate size
+  - See [Button.tsx:69-132](file://src/components/ui/primitives/Button.tsx#L69-L132)
+- Input:
+  - Controlled text field with clearable and validation: set value, onChange, aria-invalid
+  - Dropdown selection: pass options and onValueChange to DropdownSelector
+  - See [Input.tsx:93-123](file://src/components/ui/primitives/Input.tsx#L93-L123), [Input.tsx:280-405](file://src/components/ui/primitives/Input.tsx#L280-L405)
+- Sheet:
+  - Control open state; rely on Base UI for focus and backdrop
+  - See [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
+- Popover:
+  - Hover-triggered help panel with arrow pointing to target
+  - See [Popover.tsx:104-121](file://src/components/ui/primitives/Popover.tsx#L104-L121), [Popover.tsx:126-183](file://src/components/ui/primitives/Popover.tsx#L126-L183)
+- FormModal:
+  - Wrap form fields in children; manage isSubmitting and submitDisabled
+  - See [FormModal.tsx:78-224](file://src/components/ui/modals/FormModal.tsx#L78-L224)
 
 **Section sources**
 - [Button.tsx:69-132](file://src/components/ui/primitives/Button.tsx#L69-L132)
-- [Input.tsx:93-123](file://src/components/ui/primitives/Input.tsx#L93-L123)
-- [Menu.tsx:130-183](file://src/components/ui/primitives/Menu.tsx#L130-L183)
-- [Popover.tsx:57-88](file://src/components/ui/primitives/Popover.tsx#L57-L88)
-- [Sheet.tsx:30-48](file://src/components/ui/primitives/Sheet.tsx#L30-L48)
-- [BaseCard.tsx:20-50](file://src/components/ui/cards/BaseCard.tsx#L20-L50)
-- [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
-- [FormModal.tsx:50-76](file://src/components/ui/modals/FormModal.tsx#L50-L76)
-
-### Accessibility Checklist
-- Provide meaningful labels and roles (e.g., alerts for error toasts).
-- Ensure focus-visible states are visible and consistent.
-- Use aria-invalid for validation feedback on inputs.
-- Keep overlays accessible: titles, descriptions, backdrop-dismiss, and keyboard navigation.
-
-**Section sources**
-- [Toast.tsx:108-111](file://src/components/ui/primitives/Toast.tsx#L108-L111)
-- [Input.tsx:241-275](file://src/components/ui/primitives/Input.tsx#L241-L275)
-- [Sheet.tsx:70-91](file://src/components/ui/primitives/Sheet.tsx#L70-L91)
-
-### Creating New Components: Guidelines
-- Start with a primitive if it is a single-purpose UI element; otherwise build a compound component that composes primitives.
-- Define variants and sizes using cva; keep defaults sensible and explicit.
-- Expose minimal, stable props; prefer composition over configuration.
-- Integrate with ThemeProvider tokens and utility classes; avoid hard-coded colors or spacing.
-- Implement accessibility from the start: roles, labels, focus management, and keyboard support.
-- Test edge cases: disabled, loading, empty states, long text truncation, and responsive layouts.
-
-[No sources needed since this section provides general guidance]
+- [Input.tsx:93-405](file://src/components/ui/primitives/Input.tsx#L93-L405)
+- [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
+- [Popover.tsx:104-183](file://src/components/ui/primitives/Popover.tsx#L104-L183)
+- [FormModal.tsx:78-224](file://src/components/ui/modals/FormModal.tsx#L78-L224)

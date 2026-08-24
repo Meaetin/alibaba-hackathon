@@ -5,16 +5,18 @@
 - [Button.tsx](file://src/components/ui/primitives/Button.tsx)
 - [Input.tsx](file://src/components/ui/primitives/Input.tsx)
 - [Avatar.tsx](file://src/components/ui/primitives/Avatar.tsx)
-- [Pill.tsx](file://src/components/ui/primitives/Pill.tsx)
+- [Breadcrumb.tsx](file://src/components/ui/primitives/Breadcrumb.tsx)
+- [BaseCard.tsx](file://src/components/ui/cards/BaseCard.tsx)
 - [Sheet.tsx](file://src/components/ui/primitives/Sheet.tsx)
-- [Popover.tsx](file://src/components/ui/primitives/Popover.tsx)
-- [Switch.tsx](file://src/components/ui/primitives/Switch.tsx)
-- [Tooltip.tsx](file://src/components/ui/primitives/Tooltip.tsx)
 - [Menu.tsx](file://src/components/ui/primitives/Menu.tsx)
-- [ProgressBar.tsx](file://src/components/ui/primitives/ProgressBar.tsx)
+- [Popover.tsx](file://src/components/ui/primitives/Popover.tsx)
+- [Tab.tsx](file://src/components/ui/primitives/Tab.tsx)
+- [Switch.tsx](file://src/components/ui/primitives/Switch.tsx)
 - [Toast.tsx](file://src/components/ui/primitives/Toast.tsx)
-- [Separator.tsx](file://src/components/ui/primitives/Separator.tsx)
+- [Tooltip.tsx](file://src/components/ui/primitives/Tooltip.tsx)
+- [Pill.tsx](file://src/components/ui/primitives/Pill.tsx)
 - [index.ts](file://src/components/ui/index.ts)
+- [ThemeProvider.tsx](file://src/components/ThemeProvider.tsx)
 </cite>
 
 ## Table of Contents
@@ -27,445 +29,625 @@
 7. Performance Considerations
 8. Troubleshooting Guide
 9. Conclusion
-10. Appendices
 
 ## Introduction
-This document explains the primitive component system that forms the foundation of the UI layer. It covers foundational building blocks such as Button, Input, Modal-like Sheet, Avatar, Pill, and other primitives like Popover, Tooltip, Menu, Switch, ProgressBar, Toast, and Separator. For each component you will find:
-- Prop interfaces and variants
-- Usage patterns and examples (described conceptually)
-- Styling customization options via class names and tokens
-- Accessibility considerations baked into the components
-- Design principles guiding consistency across the library
-
-The primitives are built on Base UI primitives for robust behavior (focus management, keyboard navigation, ARIA), with styling composed through class-variance-authority and utility classes.
+This document describes the primitive component foundation of Argo’s design system. It covers base UI building blocks such as Button, Input, Avatar, Breadcrumb, Card shell, Sheet (modal-like overlay), Menu, Popover, Tab, Switch, Toast, Tooltip, and Pill. For each component, you will find prop interfaces, styling options, accessibility features, usage guidance, responsive behavior, theme integration, and performance considerations. The primitives are designed to be consistent, accessible, and theme-aware, enabling higher-level components to compose rich experiences while preserving design integrity.
 
 ## Project Structure
-Primitive components live under src/components/ui/primitives. Each file encapsulates a single concern (e.g., Button, Input, Popover). A barrel at src/components/ui/index.ts re-exports a curated subset for convenient imports elsewhere in the app.
+The primitives live under src/components/ui/primitives and are consumed via direct imports or a convenience barrel at src/components/ui/index.ts. Theme configuration is provided by src/components/ThemeProvider.tsx using next-themes.
 
 ```mermaid
 graph TB
-subgraph "Primitives"
-B["Button"]
-I["Input"]
-AV["Avatar"]
-P["Pill"]
-S["Sheet"]
-PO["Popover"]
-T["Tooltip"]
-M["Menu"]
-SW["Switch"]
-PB["ProgressBar"]
-TO["Toast"]
-SE["Separator"]
-end
-subgraph "Base UI"
-BU["@base-ui/react/*"]
-end
-B --> BU
-I --> BU
-PO --> BU
-T --> BU
-M --> BU
-SW --> BU
-PB --> BU
-S --> BU
+A["App Shell"] --> B["Theme Provider<br/>next-themes"]
+A --> C["Primitives Barrel<br/>@/components/ui"]
+C --> D["Button"]
+C --> E["Input"]
+C --> F["Avatar"]
+C --> G["Breadcrumb"]
+C --> H["BaseCard"]
+C --> I["Sheet"]
+C --> J["Menu"]
+C --> K["Popover"]
+C --> L["Tab"]
+C --> M["Switch"]
+C --> N["Toast"]
+C --> O["Tooltip"]
+C --> P["Pill"]
 ```
 
 **Diagram sources**
-- [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
-- [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
-- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
-- [Tooltip.tsx:1-185](file://src/components/ui/primitives/Tooltip.tsx#L1-L185)
-- [Menu.tsx:1-384](file://src/components/ui/primitives/Menu.tsx#L1-L384)
-- [Switch.tsx:1-104](file://src/components/ui/primitives/Switch.tsx#L1-L104)
-- [ProgressBar.tsx:1-66](file://src/components/ui/primitives/ProgressBar.tsx#L1-L66)
-- [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
+- [index.ts:15-46](file://src/components/ui/index.ts#L15-L46)
+- [ThemeProvider.tsx:5-15](file://src/components/ThemeProvider.tsx#L5-L15)
 
 **Section sources**
 - [index.ts:1-46](file://src/components/ui/index.ts#L1-L46)
+- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
 
 ## Core Components
-Below is a concise overview of each primitive’s purpose, props, variants, styling hooks, and accessibility notes.
+Below is a concise overview of each primitive with its key props, variants, accessibility, and behavior.
 
 - Button
-  - Purpose: Primary interactive action with multiple visual styles and sizes.
-  - Props: variant (primary, secondary, ghost, outline, dark), size (xs, sm, md), icon placement (none, leading, trailing, only), plus all base button attributes.
-  - Styling: Uses CVA variants; supports custom className; layered decoration for filled variants (background, inset bevel, border ring).
-  - Accessibility: Focus-visible ring, disabled state, semantic button element.
-  - Section sources
-    - [Button.tsx:9-42](file://src/components/ui/primitives/Button.tsx#L9-L42)
-    - [Button.tsx:44-67](file://src/components/ui/primitives/Button.tsx#L44-L67)
-    - [Button.tsx:69-132](file://src/components/ui/primitives/Button.tsx#L69-L132)
+  - Purpose: Primary interactive element with multiple visual styles and sizes.
+  - Props: variant (primary, secondary, ghost, outline, dark), size (xs, sm, md), icon placement (none, leading, trailing, only), plus standard button attributes.
+  - Styling: Uses class-variance-authority for variants; layered decorations for filled variants; motion tokens for transitions.
+  - Accessibility: Focus-visible ring, disabled state, keyboard support via Base UI button primitive.
+  - Usage: Use for actions; choose variant to match hierarchy and context.
 
 - Input
-  - Purpose: Text input with optional leading/trailing icons, clear button, and dropdown selector mode.
-  - Props: variant (default, underline), size (sm, md), icon slots, controlled/uncontrolled value, clearable, onClear, aria-invalid, plus field control attributes.
-  - Styling: Asymmetric padding based on icon presence; focus states; inner shadow when hasValue; underline variant for minimal look.
-  - Accessibility: aria-invalid support; clear button with aria-label; keyboard-friendly.
-  - Section sources
-    - [Input.tsx:11-70](file://src/components/ui/primitives/Input.tsx#L11-L70)
-    - [Input.tsx:93-123](file://src/components/ui/primitives/Input.tsx#L93-L123)
-    - [Input.tsx:125-276](file://src/components/ui/primitives/Input.tsx#L125-L276)
-
-- DropdownSelector (part of Input module)
-  - Purpose: Selects from a list or acts as a presentational trigger.
-  - Props: value/defaultValue, placeholder, options array, onValueChange, menuClassName, icon slots, aria-invalid.
-  - Behavior: When options provided, opens a Base UI Menu; otherwise renders a styled button.
-  - Section sources
-    - [Input.tsx:284-405](file://src/components/ui/primitives/Input.tsx#L284-L405)
-
-- AddToInput (part of Input module)
-  - Purpose: Input with fixed leading and trailing slots (always both).
-  - Props: value/defaultValue, icon, trailingIcon, size, aria-invalid.
-  - Section sources
-    - [Input.tsx:411-503](file://src/components/ui/primitives/Input.tsx#L411-L503)
+  - Purpose: Text input with optional icons, clear action, and dropdown selector mode.
+  - Props: variant (default, underline), size (sm, md), icon slots (leading/trailing), controlled/uncontrolled value, clearable, onClear, aria-invalid, plus Field.Control attributes.
+  - Styling: Asymmetric padding based on icon presence; focus states with ring and inner shadow; supports DropdownSelector when showDropdown is true.
+  - Accessibility: aria-invalid wiring; clear button has aria-label; keyboard-friendly.
+  - Usage: Prefer controlled inputs; use DropdownSelector for selection patterns.
 
 - Avatar
-  - Purpose: Displays user identity via initials, image, or icon.
-  - Props: name, src, alt, initials, type (initial, image, icon), size (sm, md, lg), icon override.
-  - Styling: Rounded full, size-driven typography, hover/active opacity transitions.
-  - Accessibility: Image alt text; defaults to accessible label fallback.
-  - Section sources
-    - [Avatar.tsx:9-31](file://src/components/ui/primitives/Avatar.tsx#L9-L31)
-    - [Avatar.tsx:40-53](file://src/components/ui/primitives/Avatar.tsx#L40-L53)
-    - [Avatar.tsx:83-127](file://src/components/ui/primitives/Avatar.tsx#L83-L127)
+  - Purpose: Identity indicator via initials, image, or icon.
+  - Props: name, src, alt, initials, type (initial, image, icon), size (sm, md, lg), icon.
+  - Styling: Rounded full container; border style varies by type; hover/active opacity changes.
+  - Accessibility: Image alt text; semantic role via div container.
+  - Usage: Display user identity consistently across lists and headers.
 
-- Pill
-  - Purpose: Tag-like selectable chip with optional leading icon and remove action.
-  - Props: type (default, selected, input), leadingIcon, onClick, onRemove, disabled.
-  - Styling: Rounded-full, focus-visible ring, selected state with brand colors and inset shadows.
-  - Accessibility: role="checkbox", aria-checked for selected; remove button with aria-label.
-  - Section sources
-    - [Pill.tsx:8-34](file://src/components/ui/primitives/Pill.tsx#L8-L34)
-    - [Pill.tsx:36-43](file://src/components/ui/primitives/Pill.tsx#L36-L43)
-    - [Pill.tsx:45-87](file://src/components/ui/primitives/Pill.tsx#L45-L87)
+- Breadcrumb
+  - Purpose: Navigation trail with previous/current semantics.
+  - Props: BreadcrumbItem step (previous, current), icon; BreadcrumbSeparator; Breadcrumb wraps items.
+  - Styling: Previous steps are interactive buttons; current step is non-interactive label; separators auto-inserted.
+  - Accessibility: nav landmark, aria-current="page" on current item, aria-hidden on separators.
+  - Usage: Compose Breadcrumb with BreadcrumbItem and let it insert separators automatically.
 
-- Sheet (Modal-like overlay)
-  - Purpose: Responsive overlay panel (bottom sheet on phone, side drawer on tablet+).
-  - Props: open, onOpenChange, side (bottom, left, right), title, description, children, trigger, className.
-  - Behavior: Backdrop-dismiss, focus trap, scroll lock via Base UI Dialog; responsive side resolution.
-  - Accessibility: sr-only title/description; proper dialog semantics.
-  - Section sources
-    - [Sheet.tsx:10-28](file://src/components/ui/primitives/Sheet.tsx#L10-L28)
-    - [Sheet.tsx:30-48](file://src/components/ui/primitives/Sheet.tsx#L30-L48)
-    - [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
+- BaseCard
+  - Purpose: Shared card shell with media, header, and optional action menu.
+  - Props: cardClass, media, label, iconVariant, href/prefetchHref, onClick, onDelete/onAddToCollection/onAddToItinerary, disabled, isSelected/isSelectingMode.
+  - Styling: Hover/focus states; selected state with brand border; action menu appears on hover/select.
+  - Accessibility: Keyboard activation for clickable cards; aria-disabled; focus rings.
+  - Usage: Build entity cards by providing media and label; attach actions via callbacks.
 
-- Popover
-  - Purpose: Floating content anchored to a trigger with optional arrow and collision handling.
-  - Props: Trigger (openOnHover, delay), Content (side, align, sideOffset, arrow, collisionPadding, anchor).
-  - Styling: Surface, border, rounded-xl, shadow-default; directional arrow SVG.
-  - Accessibility: Focus ring; portal-based positioning.
-  - Section sources
-    - [Popover.tsx:16-31](file://src/components/ui/primitives/Popover.tsx#L16-L31)
-    - [Popover.tsx:57-88](file://src/components/ui/primitives/Popover.tsx#L57-L88)
-    - [Popover.tsx:97-200](file://src/components/ui/primitives/Popover.tsx#L97-L200)
-
-- Tooltip
-  - Purpose: Contextual hint bubble with consistent timing and arrow.
-  - Props: Provider (delay, closeDelay), Trigger, Content (side, align, sideOffset).
-  - Styling: Surface, border, rounded-lg, shadow-default; directional arrow SVG.
-  - Accessibility: Portal-based; respects motion preferences.
-  - Section sources
-    - [Tooltip.tsx:15-37](file://src/components/ui/primitives/Tooltip.tsx#L15-L37)
-    - [Tooltip.tsx:63-88](file://src/components/ui/primitives/Tooltip.tsx#L63-L88)
-    - [Tooltip.tsx:98-185](file://src/components/ui/primitives/Tooltip.tsx#L98-L185)
+- Sheet
+  - Purpose: Responsive overlay panel (bottom on phone, side drawer on tablet+).
+  - Props: open, onOpenChange, side (auto or forced), title, description, trigger, children, className.
+  - Styling: Backdrop, safe-area insets, min-height adjustments for form controls.
+  - Accessibility: Dialog semantics, focus trap, Esc dismissal, sr-only title/description.
+  - Usage: Wrap content in Sheet for modals/side panels; control visibility from parent.
 
 - Menu
-  - Purpose: Accessible dropdown menu with items, separators, and descriptive items.
-  - Props: Root/Trigger/Content (align, side, sideOffset, positionerClassName), MenuItem (size, icon, variant, selected), DescriptiveMenuItem (title, description, leadingIcon).
-  - Styling: Surface, border, rounded-2xl, shadow-default; item states and icon spacing.
-  - Accessibility: Keyboard navigation, focus management via Base UI.
-  - Section sources
-    - [Menu.tsx:16-86](file://src/components/ui/primitives/Menu.tsx#L16-L86)
-    - [Menu.tsx:111-124](file://src/components/ui/primitives/Menu.tsx#L111-L124)
-    - [Menu.tsx:130-183](file://src/components/ui/primitives/Menu.tsx#L130-L183)
-    - [Menu.tsx:192-384](file://src/components/ui/primitives/Menu.tsx#L192-L384)
+  - Purpose: Floating list of actions/options with alignment and positioning.
+  - Props: MenuRoot, MenuTrigger, MenuContent (align, side, sideOffset, positionerClassName), MenuItem (size, icon, variant, selected), DescriptiveMenuItem, MenuSeparator.
+  - Styling: Consistent item heights, icon spacing, destructive variant, selected states.
+  - Accessibility: Base UI menu behaviors; keyboard navigation; focus management.
+  - Usage: Attach Menu to triggers; provide options and handlers.
+
+- Popover
+  - Purpose: Lightweight floating content with optional arrow and anchor support.
+  - Props: PopoverRoot, PopoverTrigger (openOnHover, delay), PopoverContent (side, align, sideOffset, arrow, collisionPadding, anchor).
+  - Styling: Surface, border, rounded corners, shadow; directional arrow.
+  - Accessibility: Focus ring on popup; portal-based positioning.
+  - Usage: Show contextual info or small forms near triggers.
+
+- Tab
+  - Purpose: Underline-style tab with selected/disabled states.
+  - Props: size (md, sm), icon (none, leading, only), selected, disabled, leadingIcon, children.
+  - Styling: Reserved bottom border to avoid layout shift; brand underline when selected.
+  - Accessibility: role="tab", aria-selected, aria-disabled.
+  - Usage: Pair with tab panels managed by your state.
 
 - Switch
-  - Purpose: Toggle control with two sizes and branded checked state.
+  - Purpose: Binary toggle with two sizes.
   - Props: size (sm, md), checked/defaultChecked, onCheckedChange, disabled, name, label.
-  - Styling: Track bevel, thumb transition, focus-visible ring.
-  - Accessibility: aria-label via label prop; keyboard operable via Base UI.
-  - Section sources
-    - [Switch.tsx:9-35](file://src/components/ui/primitives/Switch.tsx#L9-L35)
-    - [Switch.tsx:37-45](file://src/components/ui/primitives/Switch.tsx#L37-L45)
-    - [Switch.tsx:47-104](file://src/components/ui/primitives/Switch.tsx#L47-L104)
-
-- ProgressBar
-  - Purpose: Linear progress indicator with optional label and auto-fill animation.
-  - Props: value, max, label, formatLabel, showLabel, autoFill, labelClassName.
-  - Styling: Track with inset shadow; pill-shaped fill with brand/info token colors.
-  - Accessibility: Semantic progress root; tabular numbers for values.
-  - Section sources
-    - [ProgressBar.tsx:7-18](file://src/components/ui/primitives/ProgressBar.tsx#L7-L18)
-    - [ProgressBar.tsx:20-66](file://src/components/ui/primitives/ProgressBar.tsx#L20-L66)
+  - Styling: Track bevel, thumb animation, focus ring.
+  - Accessibility: Base UI switch semantics; aria-label via label prop.
+  - Usage: Toggle settings or modes.
 
 - Toast
-  - Purpose: Dismissible notification with optional thumbnail, description, action, and auto-dismiss progress bar.
-  - Props: Consumes global toast context; container renders per-toast properties (variant, thumbnail, description, action, duration).
-  - Styling: Card with subtle borders/shadows; animated entrance/exit; progress drain bar.
-  - Accessibility: aria-live regions; role="alert" for errors; pause/resume on hover.
-  - Section sources
-    - [Toast.tsx:13-45](file://src/components/ui/primitives/Toast.tsx#L13-L45)
-    - [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
+  - Purpose: Non-blocking notifications with optional thumbnail, description, and action.
+  - Props: Consumes global toast store; renders ToastContainer with AnimatePresence.
+  - Styling: Auto-dismiss progress bar; variants include error; action button styled with Button.
+  - Accessibility: aria-live regions; alert vs status roles.
+  - Usage: Add toasts via context; container renders into body portal.
 
-- Separator
-  - Purpose: Visual divider with horizontal or vertical orientation.
-  - Props: orientation (horizontal, vertical), className.
-  - Styling: 1px rule using edge token; padded hit area wrapper.
-  - Accessibility: Semantic separator via Base UI.
-  - Section sources
-    - [Separator.tsx:7-35](file://src/components/ui/primitives/Separator.tsx#L7-L35)
-    - [Separator.tsx:41-68](file://src/components/ui/primitives/Separator.tsx#L41-L68)
+- Tooltip
+  - Purpose: Contextual hints with configurable timing and arrow.
+  - Props: TooltipProvider (delay, closeDelay), TooltipRoot, Trigger, Content (side, align, sideOffset).
+  - Styling: Surface bubble, border, shadow; directional arrow.
+  - Accessibility: Base UI tooltip behaviors; portal positioning.
+  - Usage: Wrap interactive elements to explain purpose.
+
+- Pill
+  - Purpose: Inline selectable tag with optional remove action.
+  - Props: type (default, selected, input), leadingIcon, onClick, onRemove, disabled.
+  - Styling: Selected state uses brand fill and inset shadows; focus ring.
+  - Accessibility: role="checkbox", aria-checked.
+  - Usage: Represent filters, tags, or selections.
+
+**Section sources**
+- [Button.tsx:9-74](file://src/components/ui/primitives/Button.tsx#L9-L74)
+- [Input.tsx:11-123](file://src/components/ui/primitives/Input.tsx#L11-L123)
+- [Avatar.tsx:9-53](file://src/components/ui/primitives/Avatar.tsx#L9-L53)
+- [Breadcrumb.tsx:15-37](file://src/components/ui/primitives/Breadcrumb.tsx#L15-L37)
+- [BaseCard.tsx:13-50](file://src/components/ui/cards/BaseCard.tsx#L13-L50)
+- [Sheet.tsx:10-48](file://src/components/ui/primitives/Sheet.tsx#L10-L48)
+- [Menu.tsx:16-183](file://src/components/ui/primitives/Menu.tsx#L16-L183)
+- [Popover.tsx:16-88](file://src/components/ui/primitives/Popover.tsx#L16-L88)
+- [Tab.tsx:11-48](file://src/components/ui/primitives/Tab.tsx#L11-L48)
+- [Switch.tsx:9-45](file://src/components/ui/primitives/Switch.tsx#L9-L45)
+- [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
+- [Tooltip.tsx:28-88](file://src/components/ui/primitives/Tooltip.tsx#L28-L88)
+- [Pill.tsx:8-43](file://src/components/ui/primitives/Pill.tsx#L8-L43)
 
 ## Architecture Overview
-The primitives follow a consistent architecture:
-- Behavior layer: Base UI primitives provide robust, accessible interactions (Dialog, Popover, Tooltip, Menu, Switch, Progress, Field).
-- Styling layer: class-variance-authority defines variants and compound variants; utility classes compose layout, color, and motion.
-- Composition layer: Primitives combine Base UI + CVA + utility classes to produce reusable, theme-aware components.
-- Integration: Consumers import directly from subpaths or via the ui barrel.
+The primitives are built on Base UI primitives for robust interaction models (focus, keyboard, portal, positioning) and styled with Tailwind and class-variance-authority. Theme tokens come from CSS variables and next-themes. Higher-order components compose primitives to build feature-specific UIs.
 
 ```mermaid
-graph LR
-Consumer["App Code"] --> Barrel["ui/index.ts"]
-Consumer --> Direct["primitives/*"]
-Direct --> BaseUI["@base-ui/react/*"]
-Direct --> CVA["class-variance-authority"]
-Direct --> Utils["lib/utils (cn)"]
-BaseUI --> Runtime["Browser DOM / ARIA"]
+graph TB
+subgraph "Interaction Primitives"
+BUI["@base-ui/react"]
+end
+subgraph "Styling"
+CVA["class-variance-authority"]
+TW["Tailwind + CSS Variables"]
+end
+subgraph "Theme"
+NT["next-themes"]
+end
+subgraph "Argo Primitives"
+BTN["Button"]
+INP["Input"]
+AVT["Avatar"]
+BRD["Breadcrumb"]
+CARD["BaseCard"]
+SHEET["Sheet"]
+MENU["Menu"]
+POPOVER["Popover"]
+TAB["Tab"]
+SW["Switch"]
+TOAST["Toast"]
+TLT["Tooltip"]
+PILL["Pill"]
+end
+BUI --> BTN
+BUI --> INP
+BUI --> SHEET
+BUI --> MENU
+BUI --> POPOVER
+BUI --> TLT
+CVA --> BTN
+CVA --> INP
+CVA --> AVT
+CVA --> BRD
+CVA --> CARD
+CVA --> SHEET
+CVA --> MENU
+CVA --> POPOVER
+CVA --> TAB
+CVA --> SW
+CVA --> PILL
+TW --> BTN
+TW --> INP
+TW --> AVT
+TW --> BRD
+TW --> CARD
+TW --> SHEET
+TW --> MENU
+TW --> POPOVER
+TW --> TAB
+TW --> SW
+TW --> TOAST
+TW --> TLT
+TW --> PILL
+NT --> TW
 ```
 
 **Diagram sources**
-- [index.ts:1-46](file://src/components/ui/index.ts#L1-L46)
-- [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
-- [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
-- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
-- [Tooltip.tsx:1-185](file://src/components/ui/primitives/Tooltip.tsx#L1-L185)
-- [Menu.tsx:1-384](file://src/components/ui/primitives/Menu.tsx#L1-L384)
-- [Switch.tsx:1-104](file://src/components/ui/primitives/Switch.tsx#L1-L104)
-- [ProgressBar.tsx:1-66](file://src/components/ui/primitives/ProgressBar.tsx#L1-L66)
-- [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
+- [Button.tsx:3-7](file://src/components/ui/primitives/Button.tsx#L3-L7)
+- [Input.tsx:3-8](file://src/components/ui/primitives/Input.tsx#L3-L8)
+- [Sheet.tsx:3-8](file://src/components/ui/primitives/Sheet.tsx#L3-L8)
+- [Menu.tsx:3-10](file://src/components/ui/primitives/Menu.tsx#L3-L10)
+- [Popover.tsx:3-10](file://src/components/ui/primitives/Popover.tsx#L3-L10)
+- [Tooltip.tsx:3-9](file://src/components/ui/primitives/Tooltip.tsx#L3-L9)
+- [ThemeProvider.tsx:3-12](file://src/components/ThemeProvider.tsx#L3-L12)
 
 ## Detailed Component Analysis
 
 ### Button
-- Variants: primary, secondary, ghost, outline, dark; sizes xs/sm/md; icon placement none/leading/trailing/only.
-- Decoration: Filled variants use layered spans for background, inset bevel, and top border ring to keep edges crisp.
-- Customization: Pass className to extend; leverage CVA variants for standard changes.
-- Accessibility: Focus-visible ring, disabled state, native button semantics.
+- Prop interface: variant, size, icon placement, plus Base UI button props.
+- Styling: Variants define color and background; compound variants adjust sizing for icon-only buttons; layered decoration for filled variants.
+- Accessibility: Focus-visible ring, disabled state, keyboard interactions via Base UI.
+- Usage example path: See Button exports and variants.
+- Responsive/theme: Inherits theme colors; motion tokens drive transitions.
 
 ```mermaid
 flowchart TD
-Start(["Render Button"]) --> Resolve["Resolve variant/size/icon"]
-Resolve --> Decorate{"Filled variant?"}
-Decorate --> |Yes| Layers["Render bg/inset/ring layers"]
-Decorate --> |No| Skip["Skip decoration layers"]
+Start(["Render Button"]) --> Compute["Resolve variant/size/icon"]
+Compute --> Decorate{"Filled variant?"}
+Decorate --> |Yes| Layers["Render bg/bevel/ring layers"]
+Decorate --> |No| SkipLayers["Skip decoration layers"]
 Layers --> Children["Render children"]
-Skip --> Children
-Children --> End(["Done"])
+SkipLayers --> Children
+Children --> End(["Interactive Button"])
 ```
 
 **Diagram sources**
-- [Button.tsx:9-42](file://src/components/ui/primitives/Button.tsx#L9-L42)
-- [Button.tsx:44-67](file://src/components/ui/primitives/Button.tsx#L44-L67)
-- [Button.tsx:76-132](file://src/components/ui/primitives/Button.tsx#L76-L132)
+- [Button.tsx:44-127](file://src/components/ui/primitives/Button.tsx#L44-L127)
 
 **Section sources**
-- [Button.tsx:9-42](file://src/components/ui/primitives/Button.tsx#L9-L42)
-- [Button.tsx:44-67](file://src/components/ui/primitives/Button.tsx#L44-L67)
-- [Button.tsx:69-132](file://src/components/ui/primitives/Button.tsx#L69-L132)
+- [Button.tsx:9-74](file://src/components/ui/primitives/Button.tsx#L9-L74)
+- [Button.tsx:76-131](file://src/components/ui/primitives/Button.tsx#L76-L131)
 
-### Input, DropdownSelector, AddToInput
-- Input: Controlled/uncontrolled value, clearable, icon slots, variants default/underline, sizes sm/md.
-- DropdownSelector: Options-driven selection with Base UI Menu; falls back to presentational button if no options.
-- AddToInput: Always both icon slots; symmetric padding; controlled/uncontrolled value.
+### Input
+- Prop interface: variant, size, icon slots, controlled/uncontrolled value, clearable, onClear, aria-invalid.
+- Styling: Default and underline variants; asymmetric padding based on icon presence; focus ring and inner shadow; clear button in trailing slot.
+- Accessibility: aria-invalid; clear button labeled; keyboard-friendly.
+- Usage example path: See Input, DropdownSelector, AddToInput exports.
+- Responsive/theme: Adapts to theme tokens; motion durations applied.
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
 participant I as "Input"
-participant DS as "DropdownSelector"
-participant M as "Menu"
-U->>I : Type/click
-I->>I : Update internalHasValue (if uncontrolled)
-alt showDropdown or options provided
-I->>DS : Render selector
-DS->>M : Open menu with options
-M-->>DS : Selected option
-DS-->>U : onValueChange(value)
-else regular input
-I-->>U : onChange(event)
-end
+participant FC as "Field.Control"
+U->>I : Type / Clear / Select
+I->>FC : Update value / placeholder
+I->>I : Compute hasValue & iconState
+I-->>U : Visual feedback (focus ring, inner shadow)
+Note over I,FC : Controlled or uncontrolled mode supported
 ```
 
 **Diagram sources**
 - [Input.tsx:125-276](file://src/components/ui/primitives/Input.tsx#L125-L276)
-- [Input.tsx:284-405](file://src/components/ui/primitives/Input.tsx#L284-L405)
 
 **Section sources**
-- [Input.tsx:11-70](file://src/components/ui/primitives/Input.tsx#L11-L70)
-- [Input.tsx:93-123](file://src/components/ui/primitives/Input.tsx#L93-L123)
+- [Input.tsx:11-123](file://src/components/ui/primitives/Input.tsx#L11-L123)
 - [Input.tsx:125-276](file://src/components/ui/primitives/Input.tsx#L125-L276)
-- [Input.tsx:284-405](file://src/components/ui/primitives/Input.tsx#L284-L405)
-- [Input.tsx:411-503](file://src/components/ui/primitives/Input.tsx#L411-L503)
 
 ### Avatar
-- Modes: initial (name-derived initials), image (src/alt), icon (customizable Lucide icon).
-- Sizes: sm/md/lg with corresponding typography and icon sizing.
-- Accessibility: Alt text for images; initials fallback.
+- Prop interface: name, src, alt, initials, type, size, icon.
+- Styling: Rounded full container; border varies by type; hover/active opacity.
+- Accessibility: Alt text for images; semantic container.
+- Usage example path: See Avatar export and types.
+- Responsive/theme: Scales with typography tokens; theme-aware colors.
+
+```mermaid
+flowchart TD
+Start(["Render Avatar"]) --> Decide{"Type"}
+Decide --> |image| Img["Render img with src/alt"]
+Decide --> |icon| Icon["Render icon with size class"]
+Decide --> |initial| Init["Compute initials from name"]
+Img --> End(["Avatar"])
+Icon --> End
+Init --> End
+```
+
+**Diagram sources**
+- [Avatar.tsx:83-120](file://src/components/ui/primitives/Avatar.tsx#L83-L120)
 
 **Section sources**
-- [Avatar.tsx:9-31](file://src/components/ui/primitives/Avatar.tsx#L9-L31)
-- [Avatar.tsx:40-53](file://src/components/ui/primitives/Avatar.tsx#L40-L53)
-- [Avatar.tsx:83-127](file://src/components/ui/primitives/Avatar.tsx#L83-L127)
+- [Avatar.tsx:9-53](file://src/components/ui/primitives/Avatar.tsx#L9-L53)
+- [Avatar.tsx:83-120](file://src/components/ui/primitives/Avatar.tsx#L83-L120)
 
-### Pill
-- Types: default, selected, input; supports leadingIcon and removable X.
-- Accessibility: role="checkbox", aria-checked for selected; remove button aria-label.
+### Breadcrumb
+- Prop interface: BreadcrumbItem step (previous/current), icon; BreadcrumbSeparator; Breadcrumb wraps items.
+- Styling: Previous steps are interactive; current step is non-interactive; separators auto-inserted.
+- Accessibility: nav landmark, aria-current, aria-hidden separators.
+- Usage example path: See Breadcrumb exports.
+- Responsive/theme: Uses theme tokens for text and borders.
 
-**Section sources**
-- [Pill.tsx:8-34](file://src/components/ui/primitives/Pill.tsx#L8-L34)
-- [Pill.tsx:36-43](file://src/components/ui/primitives/Pill.tsx#L36-L43)
-- [Pill.tsx:45-87](file://src/components/ui/primitives/Pill.tsx#L45-L87)
+```mermaid
+sequenceDiagram
+participant P as "Parent"
+participant BC as "Breadcrumb"
+participant BI as "BreadcrumbItem"
+P->>BC : Provide children (items)
+BC->>BC : Filter valid elements
+loop For each item
+BC->>BI : Render item (previous/current)
+BC->>BC : Insert separator between items
+end
+BC-->>P : Accessible breadcrumb markup
+```
 
-### Sheet (Modal-like)
-- Behavior: Backdrop-dismiss, focus trap, scroll lock via Base UI Dialog; responsive side (bottom/right/left).
-- Accessibility: sr-only title/description; proper dialog semantics.
-
-**Section sources**
-- [Sheet.tsx:10-28](file://src/components/ui/primitives/Sheet.tsx#L10-L28)
-- [Sheet.tsx:30-48](file://src/components/ui/primitives/Sheet.tsx#L30-L48)
-- [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
-
-### Popover
-- Features: Hover/focus triggers, configurable alignment/side/offset, collision padding, optional arrow.
-- Styling: Surface, border, rounded-xl, shadow-default; arrow SVG rotates by side.
-
-**Section sources**
-- [Popover.tsx:16-31](file://src/components/ui/primitives/Popover.tsx#L16-L31)
-- [Popover.tsx:57-88](file://src/components/ui/primitives/Popover.tsx#L57-L88)
-- [Popover.tsx:97-200](file://src/components/ui/primitives/Popover.tsx#L97-L200)
-
-### Tooltip
-- Features: Global provider for consistent delays; trigger/content composition; arrow.
-- Styling: Surface, border, rounded-lg, shadow-default; arrow SVG rotates by side.
+**Diagram sources**
+- [Breadcrumb.tsx:105-123](file://src/components/ui/primitives/Breadcrumb.tsx#L105-L123)
 
 **Section sources**
-- [Tooltip.tsx:15-37](file://src/components/ui/primitives/Tooltip.tsx#L15-L37)
-- [Tooltip.tsx:63-88](file://src/components/ui/primitives/Tooltip.tsx#L63-L88)
-- [Tooltip.tsx:98-185](file://src/components/ui/primitives/Tooltip.tsx#L98-L185)
+- [Breadcrumb.tsx:15-79](file://src/components/ui/primitives/Breadcrumb.tsx#L15-L79)
+- [Breadcrumb.tsx:105-123](file://src/components/ui/primitives/Breadcrumb.tsx#L105-L123)
+
+### BaseCard
+- Prop interface: cardClass, media, label, iconVariant, href/prefetchHref, onClick, action callbacks, disabled, selection flags.
+- Styling: Hover/focus states; selected state with brand border; action menu anchored to kebab.
+- Accessibility: Keyboard activation; aria-disabled; focus rings.
+- Usage example path: See BaseCard export and types.
+- Responsive/theme: Uses theme tokens; prefetch links on hover.
+
+```mermaid
+flowchart TD
+Start(["Render BaseCard"]) --> CheckHref{"href provided?"}
+CheckHref --> |Yes| Link["Render <Link> wrapper"]
+CheckHref --> |No| Div["Render <div> with role=button"]
+Link --> Actions{"Actions provided?"}
+Div --> Actions
+Actions --> |Yes| Menu["Render action menu on hover/click"]
+Actions --> |No| End(["Card"])
+Menu --> End
+```
+
+**Diagram sources**
+- [BaseCard.tsx:161-203](file://src/components/ui/cards/BaseCard.tsx#L161-L203)
+
+**Section sources**
+- [BaseCard.tsx:13-50](file://src/components/ui/cards/BaseCard.tsx#L13-L50)
+- [BaseCard.tsx:57-203](file://src/components/ui/cards/BaseCard.tsx#L57-L203)
+
+### Sheet
+- Prop interface: open, onOpenChange, side (auto/responsive), title, description, trigger, children, className.
+- Styling: Backdrop, safe-area insets, min-height for form controls.
+- Accessibility: Dialog semantics, focus trap, Esc dismissal, sr-only title/description.
+- Usage example path: See Sheet export and types.
+- Responsive/theme: Chooses bottom vs right based on breakpoint; theme-aware surfaces.
+
+```mermaid
+sequenceDiagram
+participant T as "Trigger"
+participant S as "Sheet"
+participant D as "Dialog.Root"
+T->>S : Click / open
+S->>D : Open dialog
+D-->>S : Portal with backdrop + popup
+S-->>T : Close on backdrop/Esc
+```
+
+**Diagram sources**
+- [Sheet.tsx:57-90](file://src/components/ui/primitives/Sheet.tsx#L57-L90)
+
+**Section sources**
+- [Sheet.tsx:10-48](file://src/components/ui/primitives/Sheet.tsx#L10-L48)
+- [Sheet.tsx:57-90](file://src/components/ui/primitives/Sheet.tsx#L57-L90)
 
 ### Menu
-- Items: Standard and descriptive items; separators; icon axes (none/leading/trailing/both); sizes; destructive variant.
-- Positioning: Align, side, sideOffset, collisionPadding; z-index via positionerClassName.
+- Prop interface: MenuRoot, MenuTrigger, MenuContent (align, side, sideOffset, positionerClassName), MenuItem (size, icon, variant, selected), DescriptiveMenuItem, MenuSeparator.
+- Styling: Item heights, icon spacing, destructive variant, selected states.
+- Accessibility: Base UI menu behaviors; keyboard navigation; focus management.
+- Usage example path: See Menu exports and types.
+- Responsive/theme: Positioning adapts to viewport; theme tokens for surfaces.
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant MT as "MenuTrigger"
+participant MC as "MenuContent"
+participant MI as "MenuItem"
+U->>MT : Click/Focus
+MT->>MC : Open menu
+U->>MI : Navigate/Select
+MI-->>U : Callback onValueChange
+U->>MC : Close (Esc/blur)
+```
+
+**Diagram sources**
+- [Menu.tsx:192-240](file://src/components/ui/primitives/Menu.tsx#L192-L240)
+- [Menu.tsx:246-300](file://src/components/ui/primitives/Menu.tsx#L246-L300)
 
 **Section sources**
-- [Menu.tsx:16-86](file://src/components/ui/primitives/Menu.tsx#L16-L86)
-- [Menu.tsx:111-124](file://src/components/ui/primitives/Menu.tsx#L111-L124)
-- [Menu.tsx:130-183](file://src/components/ui/primitives/Menu.tsx#L130-L183)
-- [Menu.tsx:192-384](file://src/components/ui/primitives/Menu.tsx#L192-L384)
+- [Menu.tsx:16-183](file://src/components/ui/primitives/Menu.tsx#L16-L183)
+- [Menu.tsx:192-300](file://src/components/ui/primitives/Menu.tsx#L192-L300)
+
+### Popover
+- Prop interface: PopoverRoot, PopoverTrigger (openOnHover, delay), PopoverContent (side, align, sideOffset, arrow, collisionPadding, anchor).
+- Styling: Surface, border, rounded corners, shadow; directional arrow.
+- Accessibility: Focus ring on popup; portal-based positioning.
+- Usage example path: See Popover exports and types.
+- Responsive/theme: Positioning adapts to viewport; theme tokens for surfaces.
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant PT as "PopoverTrigger"
+participant PC as "PopoverContent"
+U->>PT : Hover/Focus
+PT->>PC : Open popover
+U->>PC : Interact/Close
+PC-->>U : Dismiss on outside click/Esc
+```
+
+**Diagram sources**
+- [Popover.tsx:126-181](file://src/components/ui/primitives/Popover.tsx#L126-L181)
+
+**Section sources**
+- [Popover.tsx:16-88](file://src/components/ui/primitives/Popover.tsx#L16-L88)
+- [Popover.tsx:126-181](file://src/components/ui/primitives/Popover.tsx#L126-L181)
+
+### Tab
+- Prop interface: size, icon, selected, disabled, leadingIcon, children.
+- Styling: Reserved bottom border; brand underline when selected; hover/active states.
+- Accessibility: role="tab", aria-selected, aria-disabled.
+- Usage example path: See Tab export and types.
+- Responsive/theme: Uses theme tokens for text and borders.
+
+```mermaid
+flowchart TD
+Start(["Render Tab"]) --> State{"selected/disabled"}
+State --> |selected| Brand["Brand underline + emphasis"]
+State --> |disabled| Dim["Muted + pointer-events-none"]
+State --> |default| Normal["Default state"]
+Brand --> End(["Tab"])
+Dim --> End
+Normal --> End
+```
+
+**Diagram sources**
+- [Tab.tsx:50-82](file://src/components/ui/primitives/Tab.tsx#L50-L82)
+
+**Section sources**
+- [Tab.tsx:11-48](file://src/components/ui/primitives/Tab.tsx#L11-L48)
+- [Tab.tsx:50-82](file://src/components/ui/primitives/Tab.tsx#L50-L82)
 
 ### Switch
-- Sizes: sm/md with precise track/thumb dimensions and travel distances.
-- States: Checked/unchecked with brand/bevel tokens; focus-visible ring.
+- Prop interface: size, checked/defaultChecked, onCheckedChange, disabled, name, label.
+- Styling: Track bevel, thumb animation, focus ring.
+- Accessibility: Base UI switch semantics; aria-label via label prop.
+- Usage example path: See Switch export and types.
+- Responsive/theme: Motion tokens for transitions; theme tokens for colors.
+
+```mermaid
+flowchart TD
+Start(["Render Switch"]) --> Size{"size"}
+Size --> Track["Apply track classes"]
+Track --> Thumb{"checked?"}
+Thumb --> |Yes| CheckedThumb["Brand thumb + shadow"]
+Thumb --> |No| UncheckedThumb["Neutral thumb + shadow"]
+CheckedThumb --> End(["Switch"])
+UncheckedThumb --> End
+```
+
+**Diagram sources**
+- [Switch.tsx:47-95](file://src/components/ui/primitives/Switch.tsx#L47-L95)
 
 **Section sources**
-- [Switch.tsx:9-35](file://src/components/ui/primitives/Switch.tsx#L9-L35)
-- [Switch.tsx:37-45](file://src/components/ui/primitives/Switch.tsx#L37-L45)
-- [Switch.tsx:47-104](file://src/components/ui/primitives/Switch.tsx#L47-L104)
-
-### ProgressBar
-- Modes: Manual width transition or auto-fill animation; clamped value; optional label formatting.
-- Styling: Track with inset shadow; pill-shaped fill with info token colors.
-
-**Section sources**
-- [ProgressBar.tsx:7-18](file://src/components/ui/primitives/ProgressBar.tsx#L7-L18)
-- [ProgressBar.tsx:20-66](file://src/components/ui/primitives/ProgressBar.tsx#L20-L66)
+- [Switch.tsx:9-45](file://src/components/ui/primitives/Switch.tsx#L9-L45)
+- [Switch.tsx:47-95](file://src/components/ui/primitives/Switch.tsx#L47-L95)
 
 ### Toast
-- Features: Thumbnail, description, action button, auto-dismiss with progress drain; pause/resume on hover.
-- Accessibility: aria-live regions; role="alert" for error variant.
+- Prop interface: Consumes global toast store; renders ToastContainer with AnimatePresence.
+- Styling: Auto-dismiss progress bar; variants include error; action button styled with Button.
+- Accessibility: aria-live regions; alert vs status roles.
+- Usage example path: See ToastContainer and ProgressBar.
+- Responsive/theme: Uses theme tokens; motion presets for animations.
 
-**Section sources**
-- [Toast.tsx:13-45](file://src/components/ui/primitives/Toast.tsx#L13-L45)
+```mermaid
+sequenceDiagram
+participant App as "App"
+participant TC as "ToastContainer"
+participant PR as "ProgressBar"
+App->>TC : toasts[]
+TC->>PR : duration/paused
+PR-->>TC : Animation updates
+TC-->>App : Remove on dismiss/action
+```
+
+**Diagram sources**
 - [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
 
-### Separator
-- Orientation: Horizontal or vertical; 1px rule with edge token; padded hit area.
+**Section sources**
+- [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
+
+### Tooltip
+- Prop interface: TooltipProvider (delay, closeDelay), TooltipRoot, Trigger, Content (side, align, sideOffset).
+- Styling: Surface bubble, border, shadow; directional arrow.
+- Accessibility: Base UI tooltip behaviors; portal positioning.
+- Usage example path: See Tooltip exports and types.
+- Responsive/theme: Uses theme tokens; motion presets for transitions.
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant TT as "TooltipTrigger"
+participant TP as "TooltipProvider"
+participant TC as "TooltipContent"
+U->>TT : Hover/Focus
+TT->>TP : Inherit delay config
+TP->>TC : Show after delay
+U->>TC : Move away
+TC-->>U : Hide after closeDelay
+```
+
+**Diagram sources**
+- [Tooltip.tsx:98-169](file://src/components/ui/primitives/Tooltip.tsx#L98-L169)
 
 **Section sources**
-- [Separator.tsx:7-35](file://src/components/ui/primitives/Separator.tsx#L7-L35)
-- [Separator.tsx:41-68](file://src/components/ui/primitives/Separator.tsx#L41-L68)
+- [Tooltip.tsx:28-88](file://src/components/ui/primitives/Tooltip.tsx#L28-L88)
+- [Tooltip.tsx:98-169](file://src/components/ui/primitives/Tooltip.tsx#L98-L169)
+
+### Pill
+- Prop interface: type, leadingIcon, onClick, onRemove, disabled.
+- Styling: Selected state uses brand fill and inset shadows; focus ring.
+- Accessibility: role="checkbox", aria-checked.
+- Usage example path: See Pill export and types.
+- Responsive/theme: Uses theme tokens for colors and borders.
+
+```mermaid
+flowchart TD
+Start(["Render Pill"]) --> Mode{"type"}
+Mode --> |default| Def["Default styles"]
+Mode --> |selected| Sel["Brand fill + inset shadows"]
+Mode --> |input| Inp["Transparent bg"]
+Def --> End(["Pill"])
+Sel --> End
+Inp --> End
+```
+
+**Diagram sources**
+- [Pill.tsx:45-80](file://src/components/ui/primitives/Pill.tsx#L45-L80)
+
+**Section sources**
+- [Pill.tsx:8-43](file://src/components/ui/primitives/Pill.tsx#L8-L43)
+- [Pill.tsx:45-80](file://src/components/ui/primitives/Pill.tsx#L45-L80)
 
 ## Dependency Analysis
-- Base UI dependency: All primitives rely on @base-ui/react for accessible behaviors (Dialog, Popover, Tooltip, Menu, Switch, Progress, Field).
-- Styling dependencies: class-variance-authority for variants; utility classes for layout and tokens; cn helper for class merging.
-- Internal dependencies: Some primitives depend on others (e.g., Toast uses Button; Input uses Menu).
+- Interaction layer: Base UI provides robust primitives for focus, keyboard, portals, and positioning used by Button, Input, Sheet, Menu, Popover, Tooltip.
+- Styling layer: class-variance-authority defines variants; Tailwind utilities apply tokens; CSS variables drive motion and theme colors.
+- Theme layer: next-themes sets attribute-based theming consumed by CSS variables.
+- Composition: BaseCard composes Button and CategoryBadge; Input can delegate to Menu for dropdowns; Toast consumes context and renders Button.
 
 ```mermaid
 graph LR
-Button["Button"] --> BaseUI["@base-ui/react/button"]
-Input["Input"] --> BaseUI2["@base-ui/react/field"]
-Input --> Menu["Menu"]
-Sheet["Sheet"] --> BaseUI3["@base-ui/react/dialog"]
-Popover["Popover"] --> BaseUI4["@base-ui/react/popover"]
-Tooltip["Tooltip"] --> BaseUI5["@base-ui/react/tooltip"]
-MenuComp["Menu"] --> BaseUI6["@base-ui/react/menu"]
-Switch["Switch"] --> BaseUI7["@base-ui/react/switch"]
-ProgressBar["ProgressBar"] --> BaseUI8["@base-ui/react/progress"]
-Toast["Toast"] --> Button
+BT["Button"] --> BUI["@base-ui/react/button"]
+IN["Input"] --> BUI2["@base-ui/react/field"]
+SH["Sheet"] --> BUI3["@base-ui/react/dialog"]
+ME["Menu"] --> BUI4["@base-ui/react/menu"]
+PO["Popover"] --> BUI5["@base-ui/react/popover"]
+TL["Tooltip"] --> BUI6["@base-ui/react/tooltip"]
+TH["next-themes"] --> VAR["CSS Variables"]
+CVA["class-variance-authority"] --> STY["Tailwind Styles"]
+VAR --> UI["All Primitives"]
+STY --> UI
 ```
 
 **Diagram sources**
-- [Button.tsx:1-132](file://src/components/ui/primitives/Button.tsx#L1-L132)
-- [Input.tsx:1-513](file://src/components/ui/primitives/Input.tsx#L1-L513)
-- [Sheet.tsx:1-97](file://src/components/ui/primitives/Sheet.tsx#L1-L97)
-- [Popover.tsx:1-200](file://src/components/ui/primitives/Popover.tsx#L1-L200)
-- [Tooltip.tsx:1-185](file://src/components/ui/primitives/Tooltip.tsx#L1-L185)
-- [Menu.tsx:1-384](file://src/components/ui/primitives/Menu.tsx#L1-L384)
-- [Switch.tsx:1-104](file://src/components/ui/primitives/Switch.tsx#L1-L104)
-- [ProgressBar.tsx:1-66](file://src/components/ui/primitives/ProgressBar.tsx#L1-L66)
-- [Toast.tsx:1-174](file://src/components/ui/primitives/Toast.tsx#L1-L174)
+- [Button.tsx:3-7](file://src/components/ui/primitives/Button.tsx#L3-L7)
+- [Input.tsx:3-8](file://src/components/ui/primitives/Input.tsx#L3-L8)
+- [Sheet.tsx:3-8](file://src/components/ui/primitives/Sheet.tsx#L3-L8)
+- [Menu.tsx:3-10](file://src/components/ui/primitives/Menu.tsx#L3-L10)
+- [Popover.tsx:3-10](file://src/components/ui/primitives/Popover.tsx#L3-L10)
+- [Tooltip.tsx:3-9](file://src/components/ui/primitives/Tooltip.tsx#L3-L9)
+- [ThemeProvider.tsx:3-12](file://src/components/ThemeProvider.tsx#L3-L12)
 
 **Section sources**
-- [index.ts:1-46](file://src/components/ui/index.ts#L1-L46)
+- [index.ts:15-46](file://src/components/ui/index.ts#L15-L46)
+- [ThemeProvider.tsx:3-12](file://src/components/ThemeProvider.tsx#L3-L12)
 
 ## Performance Considerations
-- Prefer controlled inputs where possible to avoid unnecessary re-renders; Input tracks hasValue internally for uncontrolled usage.
-- Use autoFill for ProgressBar animations to leverage CSS animations instead of JS loops.
-- Avoid heavy child trees inside overlays (Sheet/Popover/Tooltip) to maintain smooth interactions.
-- Leverage motion-reduce media queries respected by motion utilities to respect user preferences.
+- Prefer controlled inputs where possible to keep state predictable; Input tracks internal hasValue only when uncontrolled.
+- Use lazy rendering for overlays (Sheet, Menu, Popover, Tooltip) via Base UI portals to avoid unnecessary DOM work.
+- Avoid heavy re-renders in menus by memoizing items and minimizing prop churn.
+- Respect reduced motion preferences (Toast respects useReducedMotion).
+- Keep icon sizes consistent to prevent layout shifts (Tabs reserve bottom border; Inputs compute iconState to adjust padding).
+- Use prefetchHref on BaseCard to preload linked pages on hover.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-- Input not clearing: Ensure clearable is true and onClear either updates state or clears the underlying input; check that hasValue reflects current value.
-- DropdownSelector not opening: Provide options to enable Base UI Menu; otherwise it remains a presentational trigger.
-- Sheet not trapping focus: Verify it is used within a Dialog context (provided by Sheet) and that trigger/open state is managed correctly.
-- Tooltip/Popover positioning issues: Adjust sideOffset, align, and collisionPadding; ensure anchor is set if rendering in complex layouts.
-- Menu items not focusing: Confirm MenuContent is rendered within a Menu and that items are direct children; verify z-index stacking via positionerClassName if needed.
-- Toast not dismissing: Check duration and paused state; ensure ToastContainer is mounted and context is available.
+- Input not clearing: Ensure clearable is enabled and onClear handler or native clearing logic is wired; verify ref handling for controlled inputs.
+- DropdownSelector not opening: When options are provided, ensure Menu integration is present; otherwise it renders as a presentational trigger.
+- Breadcrumbs missing separators: Only valid elements are counted; ensure children are valid React elements.
+- Sheet not closing: Confirm open/onOpenChange are controlled; backdrop and Esc are handled by Base UI Dialog.
+- Menu items not focusing: Ensure MenuContent is rendered within a portal and that collisionPadding is sufficient for viewport constraints.
+- Popover clipping: Adjust collisionPadding or use anchor to position relative to a specific element.
+- Tabs layout shift: The reserved bottom border prevents shifts; ensure selected state toggles correctly.
+- Switch not updating: Verify checked/defaultChecked and onCheckedChange are wired; label prop sets aria-label for accessibility.
+- Toast not visible: Ensure ToastContainer is mounted and toasts are added via context; check paused state if hovering.
+- Tooltip not appearing: Check provider delay/closeDelay; ensure trigger is interactive and positioned within viewport.
 
 **Section sources**
-- [Input.tsx:125-276](file://src/components/ui/primitives/Input.tsx#L125-L276)
-- [Input.tsx:284-405](file://src/components/ui/primitives/Input.tsx#L284-L405)
-- [Sheet.tsx:57-97](file://src/components/ui/primitives/Sheet.tsx#L57-L97)
-- [Popover.tsx:97-200](file://src/components/ui/primitives/Popover.tsx#L97-L200)
-- [Menu.tsx:192-384](file://src/components/ui/primitives/Menu.tsx#L192-L384)
+- [Input.tsx:170-186](file://src/components/ui/primitives/Input.tsx#L170-L186)
+- [Input.tsx:316-403](file://src/components/ui/primitives/Input.tsx#L316-L403)
+- [Breadcrumb.tsx:105-123](file://src/components/ui/primitives/Breadcrumb.tsx#L105-L123)
+- [Sheet.tsx:57-90](file://src/components/ui/primitives/Sheet.tsx#L57-L90)
+- [Menu.tsx:214-240](file://src/components/ui/primitives/Menu.tsx#L214-L240)
+- [Popover.tsx:126-181](file://src/components/ui/primitives/Popover.tsx#L126-L181)
+- [Tab.tsx:50-82](file://src/components/ui/primitives/Tab.tsx#L50-L82)
+- [Switch.tsx:47-95](file://src/components/ui/primitives/Switch.tsx#L47-L95)
 - [Toast.tsx:47-174](file://src/components/ui/primitives/Toast.tsx#L47-L174)
+- [Tooltip.tsx:98-169](file://src/components/ui/primitives/Tooltip.tsx#L98-L169)
 
 ## Conclusion
-The primitive component system provides a cohesive, accessible, and customizable foundation for the application’s UI. By combining Base UI’s robust behaviors with a consistent styling approach (CVA + utility classes), each primitive offers predictable APIs, clear customization points, and strong accessibility. Use these primitives as building blocks for higher-level components to maintain design consistency and reduce duplication across the codebase.
+The primitive components form a cohesive, accessible, and theme-aware foundation for Argo’s design system. By leveraging Base UI for interaction, class-variance-authority for styling, and next-themes for theming, these components maintain consistency and scalability. Use the documented props and patterns to customize responsibly, ensuring accessibility and performance are preserved across the application.
 
 [No sources needed since this section summarizes without analyzing specific files]
-
-## Appendices
-
-### Extending Primitives Guidelines
-- Keep variants aligned with design tokens (colors, sizes, spacing).
-- Use className to extend rather than overriding internals; prefer compound variants for combinations.
-- Maintain accessibility: preserve focus rings, roles, and ARIA attributes; test with keyboard and screen readers.
-- Compose primitives: build complex UIs by composing primitives (e.g., Menu + Button + Tooltip) rather than creating monolithic components.
-- Export types: always export TypeScript types alongside components for consumer safety.
-
-[No sources needed since this section provides general guidance]

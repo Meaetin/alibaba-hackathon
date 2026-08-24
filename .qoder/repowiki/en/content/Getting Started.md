@@ -4,270 +4,262 @@
 **Referenced Files in This Document**
 - [package.json](file://package.json)
 - [next.config.js](file://next.config.js)
-- [.env.local.example](file://.env.local.example)
-- [AGENTS.md](file://AGENTS.md)
 - [tsconfig.json](file://tsconfig.json)
+- [postcss.config.js](file://postcss.config.js)
+- [.env.local.example](file://.env.local.example)
 - [src/lib/supabase/client.ts](file://src/lib/supabase/client.ts)
-- [src/lib/api/client.ts](file://src/lib/api/client.ts)
+- [src/components/ui/map/GoogleMapDetail.tsx](file://src/components/ui/map/GoogleMapDetail.tsx)
+- [src/components/ui/map/GoogleMapCluster.tsx](file://src/components/ui/map/GoogleMapCluster.tsx)
+- [src/app/globals.css](file://src/app/globals.css)
 </cite>
 
 ## Table of Contents
-1. Introduction
-2. Project Structure
-3. Core Components
-4. Architecture Overview
-5. Detailed Component Analysis
-6. Dependency Analysis
-7. Performance Considerations
-8. Troubleshooting Guide
-9. Conclusion
+1. [Introduction](#introduction)
+2. [Project Structure](#project-structure)
+3. [Core Components](#core-components)
+4. [Architecture Overview](#architecture-overview)
+5. [Detailed Component Analysis](#detailed-component-analysis)
+6. [Dependency Analysis](#dependency-analysis)
+7. [Performance Considerations](#performance-considerations)
+8. [Troubleshooting Guide](#troubleshooting-guide)
+9. [Conclusion](#conclusion)
+10. [Appendices](#appendices)
 
 ## Introduction
-This guide helps you set up and run the Argo AI-Powered Itinerary Planner locally. You will learn the project’s purpose, technology stack, environment setup, and step-by-step instructions to install dependencies, configure Supabase and Google Maps, and verify a successful installation.
-
-The application is a Next.js 15 + React 19 frontend that uses:
-- TanStack Query for data fetching and caching
-- Supabase (browser client) for authentication and database access
-- A REST backend integration point that sends the Supabase JWT as a bearer token
-- Google Maps for map features on key pages
+This guide helps you set up and run the Argo platform locally, configure required services (Supabase and Google Maps), and understand the development workflow using Next.js with Turbopack. It also explains key configuration files and provides verification steps to ensure a successful setup.
 
 ## Project Structure
-At a high level:
-- App shell and routes live under src/app
-- UI components are organized by feature under src/components
-- Data access is split between:
-  - src/lib/supabase for direct Supabase browser queries and realtime
-  - src/lib/api for REST calls to an external API using Supabase auth tokens
-- Environment variables define Supabase, API, and Google Maps configuration
+Argo is a Next.js 15 App Router application built with React 19 and TypeScript. The UI layer uses Tailwind CSS v4 with a CSS-first design system defined in the global stylesheet. Supabase is used for data and authentication, while Google Maps powers location features.
 
 ```mermaid
 graph TB
-subgraph "Frontend"
-A["Next.js App<br/>src/app"]
-B["Components<br/>src/components"]
-C["Data Layer<br/>src/lib/supabase & src/lib/api"]
-end
-D["Supabase<br/>Auth + Database"]
-E["REST Backend<br/>NEXT_PUBLIC_API_URL"]
-F["Google Maps"]
-A --> C
-C --> D
-C --> E
-A --> F
+A["Next.js App<br/>src/app/*"] --> B["Components<br/>src/components/ui/*"]
+A --> C["Hooks & Queries<br/>src/hooks/*"]
+A --> D["Libraries<br/>src/lib/*"]
+D --> E["Supabase Client<br/>src/lib/supabase/client.ts"]
+D --> F["Maps Integration<br/>src/components/ui/map/*"]
+A --> G["Styles<br/>src/app/globals.css"]
 ```
 
-[No sources needed since this diagram shows conceptual workflow, not actual code structure]
+**Diagram sources**
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
+- [src/components/ui/map/GoogleMapDetail.tsx:23-26](file://src/components/ui/map/GoogleMapDetail.tsx#L23-L26)
+- [src/app/globals.css:1-6](file://src/app/globals.css#L1-L6)
 
 **Section sources**
-- [package.json:1-50](file://package.json#L1-L50)
-- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [package.json:1-45](file://package.json#L1-L45)
 - [AGENTS.md:6-10](file://AGENTS.md#L6-L10)
 
 ## Core Components
-Key runtime pieces you need to know for setup:
-- Supabase browser client reads NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY from environment variables.
-- The REST API client reads NEXT_PUBLIC_API_URL and attaches the Supabase session access token as a Bearer token for authenticated requests.
-- Google Maps requires three environment variables; without them, map-enabled pages degrade gracefully.
+- Development server: Uses Next.js with Turbopack enabled via scripts.
+- Build and start: Standard Next.js build and production start commands.
+- Linting and type checking: ESLint via Next.js and TypeScript type checks.
 
-Environment variables required:
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-- NEXT_PUBLIC_API_URL
-- NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-- NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT
-- NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK
+Key scripts:
+- dev: next dev --turbopack
+- build: next build
+- start: next start
+- lint: next lint
+- type-check: tsc --noEmit
 
 **Section sources**
-- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
-- [.env.local.example:1-12](file://.env.local.example#L1-L12)
-- [AGENTS.md:72-76](file://AGENTS.md#L72-L76)
+- [package.json:5-11](file://package.json#L5-L11)
 
 ## Architecture Overview
-The app runs entirely in the browser with two backends:
-- Supabase for auth and database via the browser client
-- A REST backend accessed through a typed fetch wrapper that injects the Supabase JWT
+The app integrates Supabase for data/auth and Google Maps for location-based features. Environment variables drive these integrations at runtime.
 
 ```mermaid
 sequenceDiagram
-participant Dev as "Developer Browser"
-participant Next as "Next.js App"
+participant Dev as "Developer"
+participant Next as "Next.js Dev Server"
+participant Env as "Environment Variables"
 participant SB as "Supabase Client"
-participant API as "REST Backend"
-Dev->>Next : Open app
-Next->>SB : createClient() with env vars
-Note over Next,SB : Auth state read from Supabase session
-Next->>API : authFetch(path, options)
-API->>SB : getSession() to get access_token
-SB-->>API : access_token or null
-API-->>Next : JSON response or error
+participant GM as "Google Maps Components"
+Dev->>Next : Run "npm run dev"
+Next->>Env : Read NEXT_PUBLIC_* variables
+Next->>SB : Initialize client with URL and anon key
+Next->>GM : Initialize API provider with API key and map IDs
+Note over Next,GM : Features like /home, /collections/**, /itineraries/** depend on configured keys
 ```
 
 **Diagram sources**
+- [package.json:5-11](file://package.json#L5-L11)
+- [.env.local.example:1-12](file://.env.local.example#L1-L12)
 - [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
-- [src/lib/api/client.ts:48-83](file://src/lib/api/client.ts#L48-L83)
-
-**Section sources**
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
-- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
+- [src/components/ui/map/GoogleMapDetail.tsx:23-26](file://src/components/ui/map/GoogleMapDetail.tsx#L23-L26)
 
 ## Detailed Component Analysis
 
-### Environment Setup and Configuration
-Follow these steps to prepare your local environment:
+### Installation and Environment Setup
+- Node.js: Use a modern LTS version compatible with Next.js 15 and React 19.
+- Install dependencies:
+  - npm: npm install
+  - yarn: yarn install
+- Environment variables:
+  - Copy .env.local.example to .env.local and fill in values.
+  - Required keys:
+    - NEXT_PUBLIC_SUPABASE_URL
+    - NEXT_PUBLIC_SUPABASE_ANON_KEY
+    - NEXT_PUBLIC_API_URL (optional placeholder)
+    - NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    - NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT
+    - NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK
 
-1. Install Node.js (recommended LTS) and ensure npm is available.
-2. Clone the repository and open the project root.
-3. Copy the example environment file to your local environment file:
-   - Create .env.local from .env.local.example
-4. Fill in the required values:
-   - Supabase URL and anon key
-   - REST backend URL (default points to localhost:8080)
-   - Google Maps API key and light/dark map IDs
-5. Save the file.
-
-Verification tips:
-- Confirm .env.local exists and contains all six keys.
-- Ensure NEXT_PUBLIC_API_URL matches where your backend is running.
-- If maps do not load, check that the Google Maps API key and map IDs are correct.
+Verification:
+- Start the dev server and navigate to routes that use maps or data to confirm environment variables are loaded.
 
 **Section sources**
 - [.env.local.example:1-12](file://.env.local.example#L1-L12)
-- [AGENTS.md:72-76](file://AGENTS.md#L72-L76)
+- [package.json:5-11](file://package.json#L5-L11)
 
-### Installation and Running Locally
-1. Install dependencies:
-   - Run npm install at the project root.
-2. Start the development server:
-   - Run npm run dev.
-3. Open the app in your browser at the printed local address.
-
-Notes:
-- The dev script uses Turbopack for faster builds.
-- TypeScript strict mode is enabled; type errors will be surfaced during development.
+### Running the Development Server
+- Command: npm run dev
+- Uses Turbopack for faster builds and reloads.
 
 **Section sources**
-- [package.json:5-12](file://package.json#L5-L12)
+- [package.json:5-11](file://package.json#L5-L11)
+
+### Building for Production
+- Command: npm run build
+- Produces optimized assets for deployment.
+
+**Section sources**
+- [package.json:5-11](file://package.json#L5-L11)
+
+### Linting and Type Checking
+- Lint: npm run lint
+- Type check: npm run type-check
+
+**Section sources**
+- [package.json:5-11](file://package.json#L5-L11)
+
+### Configuration Files
+
+#### Next.js Configuration
+- Enables React Strict Mode and disables dev indicators.
+- Optimizes specific package imports.
+- Configures allowed remote image patterns including Supabase storage.
+
+**Section sources**
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+
+#### TypeScript Settings
+- Target ES2022, strict mode enabled.
+- Module resolution set to bundler.
+- Path alias @/* mapped to ./src/*.
+
+**Section sources**
 - [tsconfig.json:1-29](file://tsconfig.json#L1-L29)
 
-### Supabase Integration
-- The Supabase browser client is created with environment variables.
-- Authentication state is read from the Supabase session when making API calls.
-- All routes are currently open; sign-out is a stub until auth is re-enabled.
-
-What you must configure:
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-If you plan to use the REST backend:
-- Ensure NEXT_PUBLIC_API_URL points to your running service.
-- Requests will include the Supabase access token as a Bearer header when a session exists.
+#### PostCSS and Tailwind v4
+- PostCSS uses the Tailwind v4 plugin.
+- Styles are imported from src/app/globals.css where the design tokens and theme live.
 
 **Section sources**
+- [postcss.config.js:1-6](file://postcss.config.js#L1-L6)
+- [src/app/globals.css:1-6](file://src/app/globals.css#L1-L6)
+
+### Setting Up Supabase
+- Create a Supabase project and obtain:
+  - Project URL
+  - Anon key
+- Add them to .env.local:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+- The browser client reads these variables to initialize the Supabase SDK.
+
+**Section sources**
+- [.env.local.example:1-6](file://.env.local.example#L1-L6)
 - [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
-- [src/lib/api/client.ts:48-83](file://src/lib/api/client.ts#L48-L83)
-- [AGENTS.md:55-59](file://AGENTS.md#L55-L59)
 
-### Google Maps Integration
-Map-enabled pages require:
-- NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
-- NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT
-- NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK
-
-Without these, affected pages degrade gracefully but maps will not render.
+### Setting Up Google Maps
+- Obtain a Google Maps API key and create two map styles (light and dark).
+- Add to .env.local:
+  - NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+  - NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT
+  - NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_DARK
+- Map components read these variables to render interactive maps.
 
 **Section sources**
 - [.env.local.example:8-12](file://.env.local.example#L8-L12)
-- [AGENTS.md:72-76](file://AGENTS.md#L72-L76)
-
-### Build and Production
-- Build the app with npm run build.
-- Start the production server with npm run start.
-
-These commands are provided by Next.js and configured in package scripts.
-
-**Section sources**
-- [package.json:5-12](file://package.json#L5-L12)
+- [src/components/ui/map/GoogleMapDetail.tsx:23-26](file://src/components/ui/map/GoogleMapDetail.tsx#L23-L26)
+- [src/components/ui/map/GoogleMapCluster.tsx:9-11](file://src/components/ui/map/GoogleMapCluster.tsx#L9-L11)
 
 ## Dependency Analysis
-The project relies on a modern web stack:
-- Next.js 15 with React 19
-- Tailwind CSS v4 (CSS-first design system)
-- TanStack Query for data management
-- Supabase JS client for auth and database
-- Google Maps via @vis.gl/react-google-maps
-- Vitest for tests
+Top-level dependencies include Next.js, React, TanStack Query, Supabase JS, Google Maps integration, and Tailwind CSS v4.
 
 ```mermaid
 graph LR
-P["package.json"]
-N["next.config.js"]
-T["tsconfig.json"]
-S["src/lib/supabase/client.ts"]
-A["src/lib/api/client.ts"]
-P --> N
-P --> T
-P --> S
-P --> A
-N --> |Remote images| S
-A --> |Bearer token| S
+Pkg["package.json"] --> N["next"]
+Pkg --> R["react / react-dom"]
+Pkg --> TQ["@tanstack/react-query"]
+Pkg --> SB["@supabase/supabase-js"]
+Pkg --> GM["@vis.gl/react-google-maps"]
+Pkg --> TW["tailwindcss"]
 ```
 
 **Diagram sources**
-- [package.json:14-35](file://package.json#L14-L35)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-- [tsconfig.json:22-24](file://tsconfig.json#L22-L24)
-- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
+- [package.json:12-43](file://package.json#L12-L43)
 
 **Section sources**
-- [package.json:14-48](file://package.json#L14-L48)
-- [next.config.js:1-18](file://next.config.js#L1-L18)
-- [tsconfig.json:1-29](file://tsconfig.json#L1-L29)
+- [package.json:12-43](file://package.json#L12-L43)
 
 ## Performance Considerations
-- Development uses Turbopack for fast refresh and builds.
-- Image optimization allows remote patterns for Unsplash, UI avatars, and Supabase storage public objects.
-- Strict TypeScript settings help catch issues early and improve maintainability.
+- Development uses Turbopack for fast rebuilds and HMR.
+- Image optimization allows only specified remote domains to reduce risk and improve performance.
+- Tailwind v4 is CSS-first; keep token definitions centralized in globals.css to avoid duplication.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-Common setup issues and resolutions:
+Common issues and resolutions:
 
 - Missing environment variables
-  - Symptom: Runtime errors or degraded features (maps blank).
-  - Fix: Ensure .env.local contains all six keys listed above.
+  - Symptom: Maps do not load or show errors; Supabase calls fail.
+  - Resolution: Ensure all NEXT_PUBLIC_* variables are present in .env.local and match expected formats.
+
+- Google Maps API key invalid or missing
+  - Symptom: Map components fail to initialize.
+  - Resolution: Verify API key and both map style IDs are correct and enabled in your Google Cloud project.
 
 - Supabase client initialization fails
-  - Symptom: Errors when creating the Supabase client.
-  - Fix: Verify NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are set and valid.
+  - Symptom: Network or auth errors when accessing data.
+  - Resolution: Confirm Supabase URL and anon key are set and valid.
 
-- REST API returns 401 Unauthorized
-  - Symptom: API calls fail with “Not authenticated”.
-  - Fix: Ensure a Supabase session exists; the API client attaches the access token only when a session is present.
+- Remote images blocked
+  - Symptom: Images from external hosts do not display.
+  - Resolution: Add allowed hostnames to Next.js images.remotePatterns if necessary.
 
-- Map pages do not render
-  - Symptom: Maps are missing or broken.
-  - Fix: Provide NEXT_PUBLIC_GOOGLE_MAPS_API_KEY and both map IDs. Without them, pages degrade gracefully.
+- Dev server not starting
+  - Symptom: Port conflicts or dependency errors.
+  - Resolution: Clear node_modules and reinstall dependencies; ensure Node.js version compatibility.
 
-- Cannot reach the backend
-  - Symptom: Network errors when calling the REST API.
-  - Fix: Check NEXT_PUBLIC_API_URL and confirm the backend is running and reachable.
-
-- Type errors during development
-  - Symptom: TypeScript errors blocking builds or IDE feedback.
-  - Fix: Review types and fix mismatches; strict mode is enabled.
-
-- Tests
-  - Run unit tests with npm test.
+Verification steps:
+- Run npm run dev and open the app in a browser.
+- Check that map tiles load on pages that require Google Maps.
+- Confirm Supabase connectivity by attempting a simple query or observing empty states gracefully.
 
 **Section sources**
-- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
-- [src/lib/api/client.ts:48-83](file://src/lib/api/client.ts#L48-L83)
 - [.env.local.example:1-12](file://.env.local.example#L1-L12)
-- [AGENTS.md:72-76](file://AGENTS.md#L72-L76)
-- [package.json:5-12](file://package.json#L5-L12)
+- [next.config.js:8-14](file://next.config.js#L8-L14)
+- [src/lib/supabase/client.ts:1-9](file://src/lib/supabase/client.ts#L1-L9)
+- [src/components/ui/map/GoogleMapDetail.tsx:23-26](file://src/components/ui/map/GoogleMapDetail.tsx#L23-L26)
 
 ## Conclusion
-You now have everything needed to set up, configure, and run the Argo AI-Powered Itinerary Planner locally. After installing dependencies and configuring environment variables for Supabase, the REST backend, and Google Maps, start the development server and verify that pages load correctly. Use the troubleshooting guide if you encounter common issues during setup.
+You now have the essential steps to install, configure, and run the Argo platform locally. With Supabase and Google Maps properly configured, you can develop features across collections, itineraries, links, and home experiences. Use the provided scripts for development, building, linting, and type checking to maintain code quality and performance.
+
+[No sources needed since this section summarizes without analyzing specific files]
+
+## Appendices
+
+### Quick Commands Reference
+- Install dependencies: npm install
+- Start dev server: npm run dev
+- Build production: npm run build
+- Start production: npm start
+- Lint code: npm run lint
+- Type check: npm run type-check
+
+**Section sources**
+- [package.json:5-11](file://package.json#L5-L11)

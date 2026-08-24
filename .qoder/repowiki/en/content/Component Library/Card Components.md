@@ -4,17 +4,17 @@
 **Referenced Files in This Document**
 - [BaseCard.tsx](file://src/components/ui/cards/BaseCard.tsx)
 - [CardMedia.tsx](file://src/components/ui/cards/CardMedia.tsx)
-- [CollectionCard.tsx](file://src/components/ui/cards/CollectionCard.tsx)
 - [ItineraryCard.tsx](file://src/components/ui/cards/ItineraryCard.tsx)
-- [LocationCard.tsx](file://src/components/ui/cards/LocationCard.tsx)
+- [CollectionCard.tsx](file://src/components/ui/cards/CollectionCard.tsx)
 - [LinkCard.tsx](file://src/components/ui/cards/LinkCard.tsx)
-- [constants.ts](file://src/components/ui/cards/constants.ts)
+- [LocationCard.tsx](file://src/components/ui/cards/LocationCard.tsx)
 - [RecentCard.tsx](file://src/components/ui/cards/RecentCard.tsx)
+- [constants.ts](file://src/components/ui/cards/constants.ts)
 - [CardActionMenu.tsx](file://src/components/ui/dashboard/CardActionMenu.tsx)
-- [CardGridSkeleton.tsx](file://src/components/ui/skeletons/CardGridSkeleton.tsx)
+- [useLocationPhoto.ts](file://src/hooks/useLocationPhoto.ts)
 - [home/page.tsx](file://src/app/home/page.tsx)
-- [collections/[id]/page.tsx](file://src/app/collections/[id]/page.tsx)
-- [links/[id]/page.tsx](file://src/app/links/[id]/page.tsx)
+- [AddToDestinationModal.tsx](file://src/components/ui/modals/AddToDestinationModal.tsx)
+- [SearchDropdown.tsx](file://src/components/ui/navbar/SearchDropdown.tsx)
 </cite>
 
 ## Table of Contents
@@ -30,409 +30,486 @@
 10. Appendices
 
 ## Introduction
-This document explains the card component system used across the application. It covers the shared foundation (BaseCard), specialized cards (CollectionCard, ItineraryCard, LocationCard, LinkCard), media handling via CardMedia, content layout and interactive behaviors, customization patterns, responsive design considerations, integration with pages, performance optimization for large collections, and accessibility best practices.
+This document explains Argo’s card component system: a composable, accessible, and responsive set of UI cards used across the application to represent itineraries, collections, links, locations, and recent items. It covers the BaseCard foundation, specialized card implementations, media handling, content layout strategies, interactive behaviors (including selection and action menus), lifecycle states (loading, error, empty), performance techniques, accessibility considerations, and guidelines for creating new card types while maintaining visual consistency.
 
 ## Project Structure
-The card system is organized under a dedicated UI folder:
-- Base shell and behavior: BaseCard
-- Media slot: CardMedia
-- Specialized cards: CollectionCard, ItineraryCard, LocationCard, LinkCard
-- Shared utilities: constants for grid row heights
-- Related components: CardActionMenu (per-card actions), RecentCard (compact preview), skeleton placeholders
+The card system lives under src/components/ui/cards and is composed of:
+- A shared shell: BaseCard
+- Media container: CardMedia
+- Specialized cards: ItineraryCard, CollectionCard, LinkCard, LocationCard
+- Compact recent item: RecentCard
+- Shared utilities/constants: constants.ts
+- Shared menu: CardActionMenu (owned by BaseCard)
+- Data hook for destination photos: useLocationPhoto
+- Usage examples in pages and modals: home page, AddToDestination modal, Search dropdown
 
 ```mermaid
 graph TB
 subgraph "Cards"
 BC["BaseCard"]
 CM["CardMedia"]
-CC["CollectionCard"]
 IC["ItineraryCard"]
-LC["LocationCard"]
-LKC["LinkCard"]
+CC["CollectionCard"]
+LC["LinkCard"]
+LOC["LocationCard"]
 RC["RecentCard"]
 end
-subgraph "Actions"
+subgraph "Shared"
 CAM["CardActionMenu"]
+ULPH["useLocationPhoto"]
+CONS["constants.ts"]
 end
-subgraph "Pages"
+subgraph "Usage"
 HOME["home/page.tsx"]
-COL["collections/[id]/page.tsx"]
-LINKS["links/[id]/page.tsx"]
+ADM["AddToDestinationModal.tsx"]
+SD["SearchDropdown.tsx"]
 end
-CC --> BC
 IC --> BC
+CC --> BC
 LC --> BC
-LKC --> BC
-RC --> CC
+LOC --> BC
+RC -.->|uses grid from| CC
 BC --> CAM
-HOME --> CC
+CC --> CM
+IC --> CM
+LOC --> CM
+CC --> ULPH
 HOME --> IC
+HOME --> CC
 HOME --> LC
-HOME --> LKC
-COL --> LC
-LINKS --> LC
+HOME --> LOC
+ADM --> CC
+ADM --> IC
+SD --> RC
+HOME --> CONS
 ```
 
 **Diagram sources**
 - [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
 - [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
-- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
 - [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
-- [LocationCard.tsx:30-48](file://src/components/ui/cards/LocationCard.tsx#L30-L48)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
 - [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
+- [LocationCard.tsx:30-47](file://src/components/ui/cards/LocationCard.tsx#L30-L47)
+- [RecentCard.tsx:27-58](file://src/components/ui/cards/RecentCard.tsx#L27-L58)
 - [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
-- [home/page.tsx:892-914](file://src/app/home/page.tsx#L892-L914)
-- [collections/[id]/page.tsx:976-988](file://src/app/collections/[id]/page.tsx#L976-L988)
-- [links/[id]/page.tsx:10-12](file://src/app/links/[id]/page.tsx#L10-L12)
-
-**Section sources**
-- [BaseCard.tsx:13-50](file://src/components/ui/cards/BaseCard.tsx#L13-L50)
-- [CardMedia.tsx:7-21](file://src/components/ui/cards/CardMedia.tsx#L7-L21)
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
+- [AddToDestinationModal.tsx:129-239](file://src/components/ui/modals/AddToDestinationModal.tsx#L129-L239)
+- [SearchDropdown.tsx:122-150](file://src/components/ui/navbar/SearchDropdown.tsx#L122-L150)
 - [constants.ts:1-8](file://src/components/ui/cards/constants.ts#L1-L8)
 
-## Core Components
-- BaseCard: Shared shell providing selection state, header with category badge, optional kebab menu, keyboard and focus behavior, link vs button rendering, and hover states.
-- CardMedia: Standardized media frame that renders custom children, an image with error fallback, gradient, or placeholder; supports aspect ratio control.
-- Specialized Cards:
-  - CollectionCard: Multi-image grid or single image/gradient fallback using CardMedia; integrates location photo hook for Unsplash fallback.
-  - ItineraryCard: Single image/gradient media with itinerary-specific icon variant.
-  - LocationCard: Single image/gradient media with location-specific icon variant.
-  - LinkCard: Phone-frame thumbnail with optional image or gradient; subtle tilt on hover/selection.
-- CardActionMenu: Per-card context menu anchored to fixed coordinates; exposes Add to Collection, Add to Itinerary, Delete.
-
-Key responsibilities:
-- Composition: Each specialized card composes BaseCard and supplies its own media via CardMedia or custom slots.
-- Interactions: BaseCard handles click, Enter/Space activation, right-click menu positioning, and prefetching when hovering non-link cards.
-- Accessibility: Focus rings, aria-disabled, semantic roles, and alt text propagation through CardMedia.
-
 **Section sources**
-- [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
-- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
-- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
-- [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
-- [LocationCard.tsx:30-48](file://src/components/ui/cards/LocationCard.tsx#L30-L48)
-- [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
-- [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
+- [BaseCard.tsx:1-211](file://src/components/ui/cards/BaseCard.tsx#L1-L211)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [ItineraryCard.tsx:1-55](file://src/components/ui/cards/ItineraryCard.tsx#L1-L55)
+- [CollectionCard.tsx:1-115](file://src/components/ui/cards/CollectionCard.tsx#L1-L115)
+- [LinkCard.tsx:1-79](file://src/components/ui/cards/LinkCard.tsx#L1-L79)
+- [LocationCard.tsx:1-55](file://src/components/ui/cards/LocationCard.tsx#L1-L55)
+- [RecentCard.tsx:1-65](file://src/components/ui/cards/RecentCard.tsx#L1-L65)
+- [constants.ts:1-8](file://src/components/ui/cards/constants.ts#L1-L8)
+- [CardActionMenu.tsx:1-115](file://src/components/ui/dashboard/CardActionMenu.tsx#L1-L115)
+- [useLocationPhoto.ts:1-65](file://src/hooks/useLocationPhoto.ts#L1-L65)
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
+- [AddToDestinationModal.tsx:129-239](file://src/components/ui/modals/AddToDestinationModal.tsx#L129-L239)
+- [SearchDropdown.tsx:122-150](file://src/components/ui/navbar/SearchDropdown.tsx#L122-L150)
 
-## Architecture Overview
-The card system follows a composition pattern:
-- BaseCard defines the common shell and interaction model.
-- Specialized cards extend BaseCard by providing type-specific media and icon variants.
-- CardMedia centralizes media rendering and fallback logic.
-- Pages compose these cards into grids/lists and wire up actions (delete, add to collection/itinerary).
-
-```mermaid
-sequenceDiagram
-participant Page as "Page"
-participant Card as "Specialized Card"
-participant Base as "BaseCard"
-participant Menu as "CardActionMenu"
-participant Router as "Next Router"
-Page->>Card : Render with props (label, media, actions)
-Card->>Base : Pass cardClass, iconVariant, label, media, actions
-Base->>Base : Compute styles, handle hover/focus/select
-Base->>Router : Prefetch href on hover (if provided)
-Base-->>Page : Rendered card with header and media
-Page->>Base : User clicks / presses Enter/Space
-Base-->>Page : Invoke onClick or navigate via Link
-Page->>Base : Open kebab menu (or right-click)
-Base->>Menu : Show menu at coords with actions
-Menu-->>Page : Execute onDelete/onAddToCollection/onAddToItinerary
-```
-
-**Diagram sources**
-- [BaseCard.tsx:85-109](file://src/components/ui/cards/BaseCard.tsx#L85-L109)
-- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
-- [CardActionMenu.tsx:63-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L63-L113)
-
-## Detailed Component Analysis
-
-### BaseCard
-- Purpose: Provides consistent card shell, selection state, header, and action menu integration.
-- Props: cardClass, className, style, media, label, iconVariant, href, prefetchHref, onClick, onDelete, onAddToCollection, onAddToItinerary, disabled, isSelected, isSelectingMode.
-- Behavior:
-  - Renders either a Link or a div with role="button" depending on href.
-  - Keyboard support: Enter/Space triggers click when focused.
-  - Right-click opens CardActionMenu at cursor or kebab anchor.
-  - Hover-based prefetch via Next router when prefetchHref is set.
-  - Selection styling and disabled states.
-- Accessibility:
-  - Focus-visible ring and outline-none for clean focus.
-  - aria-disabled reflects disabled prop.
-  - Semantic role="button" for non-link cards.
-
-```mermaid
-flowchart TD
-Start(["Render BaseCard"]) --> Decide{"href provided?"}
-Decide --> |Yes| LinkNode["Render <Link> with cardClassName"]
-Decide --> |No| ButtonNode["Render div role='button' with cardClassName"]
-LinkNode --> Actions{"Any menu actions?"}
-ButtonNode --> Actions
-Actions --> |Yes| Menu["Attach CardActionMenu anchored to coords"]
-Actions --> |No| End(["Done"])
-Menu --> End
-```
-
-**Diagram sources**
-- [BaseCard.tsx:111-118](file://src/components/ui/cards/BaseCard.tsx#L111-L118)
-- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
-- [CardActionMenu.tsx:63-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L63-L113)
+## Core Components
+- BaseCard: The foundational card shell providing consistent structure, keyboard navigation, hover/focus states, optional link/button behavior, selection styling, and an integrated kebab menu with right-click support. It accepts a media slot, label, category badge variant, href/prefetch, and action callbacks.
+- CardMedia: A standardized media frame that renders either custom children (e.g., multi-image grids), a single image with error fallback, a gradient placeholder, or a plain placeholder. Supports aspect ratio and alt text fallbacks.
+- Specialized Cards:
+  - ItineraryCard: Uses CardMedia with itinerary-specific icon variant.
+  - CollectionCard: Renders a 2×2 image grid when multiple images exist; otherwise falls back to single image, Unsplash photo via useLocationPhoto, gradient, or placeholder.
+  - LinkCard: Renders a phone-frame thumbnail with optional image, gradient, or placeholder; includes subtle tilt on hover/selection.
+  - LocationCard: Uses CardMedia with location-specific icon variant.
+- RecentCard: Compact tile for recently viewed items, reusing the collection image grid when available, otherwise showing a single image or a category badge.
+- CardActionMenu: Per-card actions (Add to Collection, Add to Itinerary, Delete) anchored at fixed coordinates; owned by BaseCard but configured by pages.
 
 **Section sources**
 - [BaseCard.tsx:20-50](file://src/components/ui/cards/BaseCard.tsx#L20-L50)
 - [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
+- [CardMedia.tsx:7-21](file://src/components/ui/cards/CardMedia.tsx#L7-L21)
+- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
+- [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
+- [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
+- [CollectionCard.tsx:10-55](file://src/components/ui/cards/CollectionCard.tsx#L10-L55)
+- [CollectionCard.tsx:57-77](file://src/components/ui/cards/CollectionCard.tsx#L57-L77)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [LinkCard.tsx:8-27](file://src/components/ui/cards/LinkCard.tsx#L8-L27)
+- [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
+- [LocationCard.tsx:8-28](file://src/components/ui/cards/LocationCard.tsx#L8-L28)
+- [LocationCard.tsx:30-47](file://src/components/ui/cards/LocationCard.tsx#L30-L47)
+- [RecentCard.tsx:9-25](file://src/components/ui/cards/RecentCard.tsx#L9-L25)
+- [RecentCard.tsx:27-58](file://src/components/ui/cards/RecentCard.tsx#L27-L58)
+- [CardActionMenu.tsx:10-18](file://src/components/ui/dashboard/CardActionMenu.tsx#L10-L18)
+- [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
 
-### CardMedia
-- Purpose: Centralized media frame with consistent rounded corners and overflow handling.
-- Rendering order:
-  1) Custom children (e.g., multi-image grid)
-  2) Image with alt fallback to label
-  3) Gradient background
-  4) Placeholder box
-- Supports aspect ratio via Tailwind class injection.
-- Error handling: Switches to fallback if image fails to load.
+## Architecture Overview
+The card system follows a composition pattern:
+- BaseCard provides the shell, interaction model, and menu integration.
+- Each specialized card composes BaseCard and supplies its own media and semantic identity (cardClass, iconVariant).
+- CardMedia centralizes media rendering and fallback logic.
+- Pages wire up actions (delete, add-to-collection/itinerary) and data (images, gradients, labels).
 
 ```mermaid
-flowchart TD
-S(["Enter CardMedia"]) --> HasChildren{"children provided?"}
-HasChildren --> |Yes| RenderChildren["Render children inside frame"]
-HasChildren --> |No| HasImage{"imageUrl present?"}
-HasImage --> |Yes & no error| RenderImage["Render img with object-cover"]
-HasImage --> |Error| FallbackCheck{"gradient provided?"}
-HasImage --> |No| FallbackCheck
-FallbackCheck --> |Yes| RenderGradient["Render gradient box"]
-FallbackCheck --> |No| RenderPlaceholder["Render placeholder box"]
-RenderChildren --> E(["Exit"])
-RenderImage --> E
-RenderGradient --> E
-RenderPlaceholder --> E
+sequenceDiagram
+participant Page as "Page (home)"
+participant Card as "Specialized Card"
+participant Base as "BaseCard"
+participant Menu as "CardActionMenu"
+participant Hook as "useLocationPhoto"
+Page->>Card : render with props (label, media, actions)
+Card->>Base : mount with cardClass, iconVariant, media
+Base->>Base : compute styles, focus/hover/select states
+Base->>Menu : open/close based on kebab/right-click coords
+Note over Base,Menu : Actions are provided by Page via callbacks
+Card->>Hook : fetch destination photo (if applicable)
+Hook-->>Card : url/isPending
+Card->>Base : pass media (image/grid/gradient/placeholder)
+Base-->>Page : onClick/href/onKeyDown events
 ```
 
 **Diagram sources**
-- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
+- [BaseCard.tsx:81-159](file://src/components/ui/cards/BaseCard.tsx#L81-L159)
+- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
+- [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
+
+## Detailed Component Analysis
+
+### BaseCard
+Responsibilities:
+- Provides a consistent card shell with media area and header (category badge + label).
+- Supports both navigational (Link) and interactive (button-like div) modes.
+- Implements keyboard accessibility (Enter/Space activation), focus rings, disabled state, and aria-disabled.
+- Offers selection styling when isSelected is true and supports rubber-band selection mode.
+- Integrates a kebab menu with right-click support, anchored to fixed coordinates.
+
+Key interactions:
+- Hover/focus: background and border transitions.
+- Selection: brand border and surface-alt background.
+- Prefetch: prefetches href on mouse enter when provided.
+- Action menu: opens on kebab click or right-click; closes before executing actions.
+
+Accessibility:
+- Focusable element with role="button" when not using Link.
+- aria-disabled reflects disabled prop.
+- Kebab button has aria-label for screen readers.
+
+Performance:
+- Lightweight state for menu open/coords.
+- No heavy computations inside render.
+
+**Section sources**
+- [BaseCard.tsx:13-18](file://src/components/ui/cards/BaseCard.tsx#L13-L18)
+- [BaseCard.tsx:20-50](file://src/components/ui/cards/BaseCard.tsx#L20-L50)
+- [BaseCard.tsx:57-118](file://src/components/ui/cards/BaseCard.tsx#L57-L118)
+- [BaseCard.tsx:120-159](file://src/components/ui/cards/BaseCard.tsx#L120-L159)
+- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
+
+#### Class Diagram: BaseCard and Specialized Cards
+```mermaid
+classDiagram
+class BaseCard {
++string cardClass
++ReactNode media
++string label
++string? href
++string? prefetchHref
++function? onClick
++function? onDelete
++function? onAddToCollection
++function? onAddToItinerary
++boolean? disabled
++boolean? isSelected
++boolean? isSelectingMode
+}
+class ItineraryCard {
++string? imageUrl
++string? imageAlt
++string? imageAspect
++string? gradient
+}
+class CollectionCard {
++string[]? images
++string? imageAspect
++string? gradient
++string? fallbackQuery
+}
+class LinkCard {
++string? imageUrl
++string? imageAlt
++string? gradient
+}
+class LocationCard {
++string? imageUrl
++string? imageAlt
++string? imageAspect
++string? gradient
+}
+ItineraryCard --> BaseCard : "composes"
+CollectionCard --> BaseCard : "composes"
+LinkCard --> BaseCard : "composes"
+LocationCard --> BaseCard : "composes"
+```
+
+**Diagram sources**
+- [BaseCard.tsx:20-50](file://src/components/ui/cards/BaseCard.tsx#L20-L50)
+- [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
+- [CollectionCard.tsx:57-77](file://src/components/ui/cards/CollectionCard.tsx#L57-L77)
+- [LinkCard.tsx:8-27](file://src/components/ui/cards/LinkCard.tsx#L8-L27)
+- [LocationCard.tsx:8-28](file://src/components/ui/cards/LocationCard.tsx#L8-L28)
+
+### CardMedia
+Responsibilities:
+- Centralizes media rendering with a consistent rounded frame.
+- Renders custom children (e.g., multi-image grid) when provided.
+- Falls back through image → gradient → placeholder.
+- Handles image errors by switching to fallback paths.
+- Supports aspect ratios via Tailwind classes.
+
+Error handling:
+- Tracks image load errors and switches to fallback automatically.
+
+Accessibility:
+- Accepts imageAlt; if absent, uses label as fallback alt text.
 
 **Section sources**
 - [CardMedia.tsx:7-21](file://src/components/ui/cards/CardMedia.tsx#L7-L21)
 - [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
 
-### CollectionCard
-- Purpose: Displays collections with a multi-image grid or a single image/gradient fallback.
-- Media: Uses CardMedia; passes images to a grid component when available; otherwise uses Unsplash fallback via hook or gradient/placeholder.
-- Icon variant: "collection".
-
-```mermaid
-classDiagram
-class CollectionCard {
-+images? : string[]
-+imageAspect? : string
-+gradient? : string
-+fallbackQuery? : string
-}
-class BaseCard
-class CardMedia
-CollectionCard --> BaseCard : "composes"
-CollectionCard --> CardMedia : "renders media"
-```
-
-**Diagram sources**
-- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
-- [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
-- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
-
-**Section sources**
-- [CollectionCard.tsx:10-55](file://src/components/ui/cards/CollectionCard.tsx#L10-L55)
-- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
-
 ### ItineraryCard
-- Purpose: Represents an itinerary with a single image or gradient media.
-- Icon variant: "itinerary".
+- Wraps BaseCard with itinerary-specific icon variant and CardMedia.
+- Supports image, aspect ratio, and gradient.
+
+Usage example:
+- Rendered in dashboard feed with label, thumbnail, and delete action.
 
 **Section sources**
 - [ItineraryCard.tsx:8-28](file://src/components/ui/cards/ItineraryCard.tsx#L8-L28)
 - [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
+- [home/page.tsx:659-660](file://src/app/home/page.tsx#L659-L660)
 
-### LocationCard
-- Purpose: Represents a location with a single image or gradient media.
-- Icon variant: "location".
+### CollectionCard
+- Renders a 2×2 image grid when multiple images are present.
+- Otherwise uses CardMedia with single image, Unsplash fallback via useLocationPhoto, gradient, or placeholder.
+- Supports image aspect and gradient.
+
+Data flow:
+- useLocationPhoto resolves a destination photo based on region/country/seed, with caching and pending state.
 
 **Section sources**
-- [LocationCard.tsx:8-28](file://src/components/ui/cards/LocationCard.tsx#L8-L28)
-- [LocationCard.tsx:30-48](file://src/components/ui/cards/LocationCard.tsx#L30-L48)
+- [CollectionCard.tsx:10-55](file://src/components/ui/cards/CollectionCard.tsx#L10-L55)
+- [CollectionCard.tsx:57-77](file://src/components/ui/cards/CollectionCard.tsx#L57-L77)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
+
+#### Flowchart: CollectionCard Media Resolution
+```mermaid
+flowchart TD
+Start(["Render CollectionCard"]) --> CheckImages{"Has preview images?"}
+CheckImages --> |Yes| Grid["Render 2x2 image grid"]
+CheckImages --> |No| UseMedia["Render CardMedia"]
+UseMedia --> HasImage{"imageUrl provided?"}
+HasImage --> |Yes| ShowImage["Show image with error fallback"]
+HasImage --> |No| HasGradient{"gradient provided?"}
+HasGradient --> |Yes| ShowGradient["Show gradient frame"]
+HasGradient --> |No| ShowPlaceholder["Show placeholder frame"]
+Grid --> End(["Done"])
+ShowImage --> End
+ShowGradient --> End
+ShowPlaceholder --> End
+```
+
+**Diagram sources**
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
 
 ### LinkCard
-- Purpose: Presents a link with a phone-frame thumbnail; tilts slightly on hover/selection.
-- Media: Optional image or gradient; falls back to placeholder.
-- Icon variant: "link".
+- Renders a phone-frame thumbnail with optional image, gradient, or placeholder.
+- Applies a subtle rotation on hover/selection for visual feedback.
 
 **Section sources**
 - [LinkCard.tsx:8-27](file://src/components/ui/cards/LinkCard.tsx#L8-L27)
 - [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
 
+### LocationCard
+- Wraps BaseCard with location-specific icon variant and CardMedia.
+- Supports image, aspect ratio, and gradient.
+
+**Section sources**
+- [LocationCard.tsx:8-28](file://src/components/ui/cards/LocationCard.tsx#L8-L28)
+- [LocationCard.tsx:30-47](file://src/components/ui/cards/LocationCard.tsx#L30-L47)
+
+### RecentCard
+- Compact tile for recently viewed items.
+- Reuses CollectionCard’s image grid when preview images exist; otherwise shows a single image or category badge.
+- Wrapped in a tooltip displaying the label.
+
+**Section sources**
+- [RecentCard.tsx:9-25](file://src/components/ui/cards/RecentCard.tsx#L9-L25)
+- [RecentCard.tsx:27-58](file://src/components/ui/cards/RecentCard.tsx#L27-L58)
+- [SearchDropdown.tsx:122-150](file://src/components/ui/navbar/SearchDropdown.tsx#L122-L150)
+
 ### CardActionMenu
-- Purpose: Contextual per-card menu with Add to Collection, Add to Itinerary, and Delete actions.
-- Positioning: Anchored to fixed coordinates computed from kebab click or right-click.
-- Integration: Owned by BaseCard; pages supply callbacks.
+- Owned by BaseCard; displays “Add to Collection”, “Add to Itinerary”, and “Delete”.
+- Anchored at fixed viewport coordinates to support both kebab click and right-click contexts.
+- Non-destructive Delete style per design system.
 
 **Section sources**
 - [CardActionMenu.tsx:10-18](file://src/components/ui/dashboard/CardActionMenu.tsx#L10-L18)
 - [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
 
-### RecentCard
-- Purpose: Compact preview card for recent items, reusing CollectionImageGrid for previews.
-- Behavior: Wraps a Link with a Tooltip showing the label.
-
-**Section sources**
-- [RecentCard.tsx:17-58](file://src/components/ui/cards/RecentCard.tsx#L17-L58)
-- [CollectionCard.tsx:10-55](file://src/components/ui/cards/CollectionCard.tsx#L10-L55)
-
 ## Dependency Analysis
 - BaseCard depends on:
   - CategoryBadge for icon variants
-  - CardActionMenu for contextual actions
-  - Next Link and Router for navigation and prefetch
+  - Button for kebab trigger
+  - CardActionMenu for actions
+  - Next.js Link/router for navigation and prefetch
 - Specialized cards depend on BaseCard and optionally CardMedia.
-- Pages consume specialized cards and provide data and actions.
+- CollectionCard additionally depends on useLocationPhoto for Unsplash fallback.
+- Pages provide data and action wiring (e.g., home page maps entity types to card components and actions).
 
 ```mermaid
 graph LR
-Base["BaseCard"] --> Badge["CategoryBadge"]
-Base --> Menu["CardActionMenu"]
-Base --> Next["Next Link/Router"]
-CC["CollectionCard"] --> Base
+Base["BaseCard"] --> Menu["CardActionMenu"]
+Base --> Badge["CategoryBadge"]
+Base --> Btn["Button"]
+Base --> Link["Next Link/router"]
 IC["ItineraryCard"] --> Base
-LC["LocationCard"] --> Base
-LKC["LinkCard"] --> Base
-CC --> CM["CardMedia"]
-IC --> CM
-LC --> CM
-LKC -.-> CM
-Home["home/page.tsx"] --> CC
-Home --> IC
+CC["CollectionCard"] --> Base
+LC["LinkCard"] --> Base
+LOC["LocationCard"] --> Base
+CC --> Hook["useLocationPhoto"]
+Home["home/page.tsx"] --> IC
+Home --> CC
 Home --> LC
-Home --> LKC
-Col["collections/[id]/page.tsx"] --> LC
-Links["links/[id]/page.tsx"] --> LC
+Home --> LOC
 ```
 
 **Diagram sources**
 - [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
 - [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
 - [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
-- [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
-- [LocationCard.tsx:30-48](file://src/components/ui/cards/LocationCard.tsx#L30-L48)
-- [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
-- [home/page.tsx:892-914](file://src/app/home/page.tsx#L892-L914)
-- [collections/[id]/page.tsx:976-988](file://src/app/collections/[id]/page.tsx#L976-L988)
-- [links/[id]/page.tsx:10-12](file://src/app/links/[id]/page.tsx#L10-L12)
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
 
 **Section sources**
 - [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
-- [CardActionMenu.tsx:52-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L52-L113)
-- [home/page.tsx:892-914](file://src/app/home/page.tsx#L892-L914)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
 
 ## Performance Considerations
-- Virtualization and pagination:
-  - Use infinite scroll hooks and pagination to avoid rendering large lists at once.
-  - Combine with skeletons for perceived performance during loading.
-- Image optimization:
-  - Prefer lazy loading and appropriate sizing; use CardMedia’s error fallback to prevent broken images.
-  - For collections, limit thumbnails to a small number (e.g., up to 4) to reduce DOM size.
-- Prefetching:
-  - Use prefetchHref on BaseCard to preload destinations on hover for faster navigation.
-- Grid sizing:
-  - Use CSS variables for consistent card heights and grid rows to minimize reflows.
-- Skeletons:
-  - Provide lightweight skeleton placeholders while data loads to improve UX.
+- Image loading:
+  - CardMedia handles image errors and falls back to gradient/placeholder without remounting.
+  - useLocationPhoto caches results and separates pending vs no-photo states to avoid unnecessary loading indicators.
+- Navigation and prefetch:
+  - BaseCard prefetches linked destinations on hover when prefetchHref is provided.
+- Rendering efficiency:
+  - Minimal state in BaseCard (menu open/coords); specialized cards keep props simple.
+  - CollectionCard’s grid only renders up to four tiles to limit DOM size.
+- Layout stability:
+  - Aspect ratios and fixed heights reduce layout shifts.
+  - constants.ts defines row height class for link cards to ensure stable grid rows.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
 Common issues and resolutions:
-- Kebab menu not appearing:
-  - Ensure at least one action callback is provided (onDelete, onAddToCollection, onAddToItinerary) so BaseCard renders the kebab and menu.
-- Right-click menu not opening:
-  - Verify that hasMenuActions is true and that the page does not intercept contextmenu events before BaseCard.
-- Images not displaying:
-  - Check imageUrl validity; CardMedia will fall back to gradient or placeholder on error.
-- Selection state not updating:
-  - Confirm isSelected and isSelectingMode are passed correctly to BaseCard for visual feedback.
-- Large list performance:
-  - Implement virtualization/infinite scroll and ensure only visible cards render heavy content.
+- Images not showing:
+  - Ensure imageUrl is provided; CardMedia will fall back to gradient or placeholder. If an image fails to load, it automatically switches to fallback.
+  - For collections without images, use fallbackQuery to resolve a destination photo via useLocationPhoto.
+- Menu not opening:
+  - Verify that at least one action callback (onDelete, onAddToCollection, onAddToItinerary) is provided; otherwise, the kebab is hidden.
+  - Confirm that coords are passed correctly when opening via right-click.
+- Accessibility problems:
+  - When using BaseCard as a button (no href), ensure tabIndex and onKeyDown are handled (BaseCard does this internally).
+  - Provide meaningful label and imageAlt for screen readers.
+- Selection state not visible:
+  - Pass isSelected=true when in selecting mode; BaseCard applies brand border and surface-alt background.
 
 **Section sources**
-- [BaseCard.tsx:81-109](file://src/components/ui/cards/BaseCard.tsx#L81-L109)
 - [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
-- [CardGridSkeleton.tsx:7-22](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L7-L22)
+- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+- [BaseCard.tsx:81-159](file://src/components/ui/cards/BaseCard.tsx#L81-L159)
+- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
 
 ## Conclusion
-The card system provides a robust, composable foundation for consistent UI across collections, itineraries, locations, and links. BaseCard standardizes interactions and accessibility, while CardMedia centralizes media handling. Specialized cards tailor visuals and semantics per entity type. Pages integrate these components into responsive layouts, leveraging prefetching, skeletons, and action menus for a smooth user experience.
+Argo’s card system centers around a robust BaseCard shell and a flexible CardMedia layer, enabling consistent, accessible, and performant cards across the app. Specialized cards compose these primitives to deliver tailored experiences for itineraries, collections, links, locations, and recent items. Pages integrate cards with data and actions, while hooks and utilities handle media resolution and performance optimizations. Following the guidelines below ensures new card types remain visually consistent and maintainable.
 
 [No sources needed since this section summarizes without analyzing specific files]
 
 ## Appendices
 
-### Card Composition Patterns
-- Compose BaseCard with a specialized cardClass and iconVariant.
-- Supply media via CardMedia or custom children for complex layouts (e.g., multi-image grid).
-- Wire actions (onClick, onDelete, onAddToCollection, onAddToItinerary) for interactivity.
+### Guidelines for Creating New Card Types
+- Compose BaseCard:
+  - Set cardClass for semantic identification.
+  - Choose iconVariant for the category badge.
+  - Provide label and media (via CardMedia or custom children).
+- Media strategy:
+  - Prefer CardMedia for single images, gradients, or placeholders.
+  - Use custom children for complex layouts (e.g., multi-image grids).
+  - Implement error fallbacks and aspect ratios.
+- Interactions:
+  - Wire href/prefetchHref for navigation and prefetching.
+  - Provide onClick for non-link usage.
+  - Supply action callbacks (onDelete, onAddToCollection, onAddToItinerary) to enable the kebab menu.
+- Accessibility:
+  - Ensure label is descriptive; provide imageAlt where applicable.
+  - Maintain focus management and keyboard activation.
+- Visual consistency:
+  - Follow existing spacing, typography, and color tokens via Tailwind classes.
+  - Respect selection and hover states defined by BaseCard.
 
-**Section sources**
-- [BaseCard.tsx:57-204](file://src/components/ui/cards/BaseCard.tsx#L57-L204)
-- [CollectionCard.tsx:79-107](file://src/components/ui/cards/CollectionCard.tsx#L79-L107)
+[No sources needed since this section provides general guidance]
 
-### Media Handling
-- Priority: children > imageUrl > gradient > placeholder.
-- Aspect ratio control via Tailwind classes.
-- Error fallback ensures graceful degradation.
-
-**Section sources**
-- [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
-
-### Content Layout Options
-- Single image, gradient, or placeholder for ItineraryCard and LocationCard.
-- Multi-image grid for CollectionCard.
-- Phone-frame thumbnail for LinkCard with subtle rotation on hover/selection.
-
-**Section sources**
-- [ItineraryCard.tsx:30-48](file://src/components/ui/cards/ItineraryCard.tsx#L30-L48)
-- [LocationCard.tsx:30-48](file://src/components/ui/cards/LocationCard.tsx#L30-L48)
-- [CollectionCard.tsx:10-55](file://src/components/ui/cards/CollectionCard.tsx#L10-L55)
-- [LinkCard.tsx:29-71](file://src/components/ui/cards/LinkCard.tsx#L29-L71)
-
-### Interactive Behaviors
-- Click, Enter/Space activation, hover-based prefetch.
-- Context menu via kebab or right-click with anchored positioning.
-- Selection mode with visual indicators.
-
-**Section sources**
-- [BaseCard.tsx:85-109](file://src/components/ui/cards/BaseCard.tsx#L85-L109)
-- [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
-- [CardActionMenu.tsx:63-113](file://src/components/ui/dashboard/CardActionMenu.tsx#L63-L113)
-
-### Responsive Design Considerations
-- Use container queries and grid columns to adapt card counts per viewport.
-- Maintain consistent card heights via CSS variables for predictable layouts.
-- Provide skeletons to match final card dimensions during loading.
+### Responsive Design Patterns
+- Use aspect ratios for media to maintain proportions across breakpoints.
+- Leverage container queries and CSS variables for adaptive grid layouts (see constants.ts for row height).
+- Keep media slots lightweight; prefer lazy loading and caching for images.
 
 **Section sources**
 - [constants.ts:1-8](file://src/components/ui/cards/constants.ts#L1-L8)
-- [CardGridSkeleton.tsx:7-22](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L7-L22)
 
-### Integration with Other Components
-- Pages render cards within responsive grids and attach actions (e.g., delete, save to collection/itinerary).
-- Menus and modals coordinate with cards for batch operations and creation flows.
-
-**Section sources**
-- [home/page.tsx:892-914](file://src/app/home/page.tsx#L892-L914)
-- [collections/[id]/page.tsx:976-988](file://src/app/collections/[id]/page.tsx#L976-L988)
-- [links/[id]/page.tsx:10-12](file://src/app/links/[id]/page.tsx#L10-L12)
-
-### Accessibility Best Practices
-- Ensure all actionable cards are keyboard accessible (focusable, Enter/Space).
-- Provide meaningful alt text via CardMedia or labels.
-- Use aria-disabled for disabled states and maintain visible focus indicators.
-- Avoid overriding contextmenu unless necessary; preserve right-click menu where supported.
+### Accessibility Checklist
+- Keyboard:
+  - Cards are focusable and activatable via Enter/Space when used as buttons.
+- Screen readers:
+  - Labels and alt texts are provided; kebab button has an aria-label.
+- State:
+  - Disabled state is reflected via aria-disabled and pointer-events.
+  - Selection state is visually distinct and announced via context.
 
 **Section sources**
 - [BaseCard.tsx:161-204](file://src/components/ui/cards/BaseCard.tsx#L161-L204)
+- [BaseCard.tsx:120-159](file://src/components/ui/cards/BaseCard.tsx#L120-L159)
+
+### Lifecycle, Loading States, and Error Handling
+- Loading:
+  - useLocationPhoto exposes isPending to indicate fetching; pages can show skeletons or spinners accordingly.
+- Errors:
+  - CardMedia switches to fallback on image error.
+  - Menus close before executing actions to prevent lingering overlays.
+- Empty states:
+  - Fallback to gradient or placeholder when no media is available.
+
+**Section sources**
+- [useLocationPhoto.ts:21-63](file://src/hooks/useLocationPhoto.ts#L21-L63)
 - [CardMedia.tsx:30-62](file://src/components/ui/cards/CardMedia.tsx#L30-L62)
+- [BaseCard.tsx:107-159](file://src/components/ui/cards/BaseCard.tsx#L107-L159)
+
+### Integration Examples
+- Dashboard feed:
+  - Maps entity types to appropriate card components and wires delete/add-to-destination actions.
+- Add-to-destination modal:
+  - Uses CollectionCard and ItineraryCard to select targets; integrates creation flows.
+- Search dropdown:
+  - Displays RecentCard for quick access to recently viewed items.
+
+**Section sources**
+- [home/page.tsx:638-679](file://src/app/home/page.tsx#L638-L679)
+- [AddToDestinationModal.tsx:129-239](file://src/components/ui/modals/AddToDestinationModal.tsx#L129-L239)
+- [SearchDropdown.tsx:122-150](file://src/components/ui/navbar/SearchDropdown.tsx#L122-L150)

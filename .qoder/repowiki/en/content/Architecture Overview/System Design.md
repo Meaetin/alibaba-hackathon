@@ -2,329 +2,281 @@
 
 <cite>
 **Referenced Files in This Document**
-- [layout.tsx](file://src/app/layout.tsx)
-- [page.tsx](file://src/app/page.tsx)
-- [home/layout.tsx](file://src/app/home/layout.tsx)
-- [collections/layout.tsx](file://src/app/collections/layout.tsx)
-- [itineraries/layout.tsx](file://src/app/itineraries/layout.tsx)
-- [links/layout.tsx](file://src/app/links/layout.tsx)
-- [QueryProvider.tsx](file://src/components/QueryProvider.tsx)
-- [ThemeProvider.tsx](file://src/components/ThemeProvider.tsx)
-- [ToastContext.tsx](file://src/contexts/ToastContext.tsx)
-- [Tooltip.tsx](file://src/components/ui/primitives/Tooltip.tsx)
-- [MainLayout.tsx](file://src/components/ui/layout/MainLayout.tsx)
-- [queryClient.ts](file://src/lib/query/queryClient.ts)
-- [site.ts](file://src/lib/site.ts)
+- [package.json](file://package.json)
 - [next.config.js](file://next.config.js)
+- [tsconfig.json](file://tsconfig.json)
+- [postcss.config.js](file://postcss.config.js)
+- [src/app/layout.tsx](file://src/app/layout.tsx)
+- [src/app/page.tsx](file://src/app/page.tsx)
+- [src/app/home/layout.tsx](file://src/app/home/layout.tsx)
+- [src/app/collections/layout.tsx](file://src/app/collections/layout.tsx)
+- [src/app/itineraries/layout.tsx](file://src/app/itineraries/layout.tsx)
+- [src/components/QueryProvider.tsx](file://src/components/QueryProvider.tsx)
+- [src/components/ThemeProvider.tsx](file://src/components/ThemeProvider.tsx)
+- [src/contexts/ToastContext.tsx](file://src/contexts/ToastContext.tsx)
+- [src/lib/query/queryClient.ts](file://src/lib/query/queryClient.ts)
+- [src/lib/site.ts](file://src/lib/site.ts)
 </cite>
 
 ## Table of Contents
-1. [Introduction](#introduction)
-2. [Project Structure](#project-structure)
-3. [Core Components](#core-components)
-4. [Architecture Overview](#architecture-overview)
-5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
+1. Introduction
+2. Project Structure
+3. Core Components
+4. Architecture Overview
+5. Detailed Component Analysis
+6. Dependency Analysis
+7. Performance Considerations
+8. Troubleshooting Guide
+9. Conclusion
 
 ## Introduction
-This document describes the system design of the Argo application built with Next.js App Router. It explains the root layout configuration, global providers (QueryProvider, ThemeProvider, ToastProvider), and how they wrap the application. It also clarifies the separation between server-side rendering and client-side components, metadata management, and performance optimizations implemented via Next.js configuration and component patterns.
+This document describes the system design of the Argo platform, a Next.js-based itinerary planner application. It covers the App Router structure, server-side and client-side rendering strategies, application bootstrap, root layout composition with provider hierarchy, build configuration, TypeScript setup, development environment architecture, system boundaries, external service dependencies, deployment topology, scalability considerations, performance optimizations, and security architecture.
 
 ## Project Structure
-Argo uses a feature-oriented folder structure under src:
-- app/: Next.js App Router routes and layouts
-  - Root layout defines global providers, metadata, and viewport settings
-  - Feature layouts (home, collections, itineraries, links) compose a shared MainLayout for consistent UI chrome
-- components/: Reusable UI primitives and feature-specific components
-  - Global providers live here (QueryProvider, ThemeProvider)
-  - Shared UI primitives include Tooltip, Toast, etc.
-- contexts/: React contexts for cross-cutting concerns (toasts, navigation loading, sidebar visibility)
-- lib/: Utilities, API clients, query configuration, and site constants
+Argo uses the Next.js App Router with feature-oriented directories under src/app (home, collections, itineraries, links). Each route group defines its own layout to wrap content in a shared MainLayout shell. The root layout composes global providers for data fetching, theming, notifications, and UI primitives.
 
 ```mermaid
 graph TB
-A["Root Layout<br/>src/app/layout.tsx"] --> B["Global Providers"]
-B --> C["QueryProvider<br/>src/components/QueryProvider.tsx"]
-B --> D["ToastProvider<br/>src/contexts/ToastContext.tsx"]
-B --> E["ThemeProvider<br/>src/components/ThemeProvider.tsx"]
-B --> F["TooltipProvider<br/>src/components/ui/primitives/Tooltip.tsx"]
-A --> G["Feature Layouts"]
-G --> H["Home Layout<br/>src/app/home/layout.tsx"]
-G --> I["Collections Layout<br/>src/app/collections/layout.tsx"]
-G --> J["Itineraries Layout<br/>src/app/itineraries/layout.tsx"]
-G --> K["Links Layout<br/>src/app/links/layout.tsx"]
-H --> L["MainLayout<br/>src/components/ui/layout/MainLayout.tsx"]
-I --> L
-J --> L
-K --> L
+A["Root Layout<br/>src/app/layout.tsx"] --> B["Home Layout<br/>src/app/home/layout.tsx"]
+A --> C["Collections Layout<br/>src/app/collections/layout.tsx"]
+A --> D["Itineraries Layout<br/>src/app/itineraries/layout.tsx"]
+B --> E["Home Page<br/>src/app/home/page.tsx"]
+C --> F["Collections Pages"]
+D --> G["Itinerary Pages"]
 ```
 
 **Diagram sources**
-- [layout.tsx:57-83](file://src/app/layout.tsx#L57-L83)
-- [QueryProvider.tsx:7-13](file://src/components/QueryProvider.tsx#L7-L13)
-- [ThemeProvider.tsx:5-16](file://src/components/ThemeProvider.tsx#L5-L16)
-- [ToastContext.tsx:42-148](file://src/contexts/ToastContext.tsx#L42-L148)
-- [Tooltip.tsx:98-109](file://src/components/ui/primitives/Tooltip.tsx#L98-L109)
-- [home/layout.tsx:5-11](file://src/app/home/layout.tsx#L5-L11)
-- [collections/layout.tsx:5-11](file://src/app/collections/layout.tsx#L5-L11)
-- [itineraries/layout.tsx:5-11](file://src/app/itineraries/layout.tsx#L5-L11)
-- [links/layout.tsx:5-11](file://src/app/links/layout.tsx#L5-L11)
-- [MainLayout.tsx:386-396](file://src/components/ui/layout/MainLayout.tsx#L386-L396)
+- [src/app/layout.tsx:57-80](file://src/app/layout.tsx#L57-L80)
+- [src/app/home/layout.tsx:5-10](file://src/app/home/layout.tsx#L5-L10)
+- [src/app/collections/layout.tsx:5-10](file://src/app/collections/layout.tsx#L5-L10)
+- [src/app/itineraries/layout.tsx:5-10](file://src/app/itineraries/layout.tsx#L5-L10)
 
 **Section sources**
-- [layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
-- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [src/app/layout.tsx:57-80](file://src/app/layout.tsx#L57-L80)
+- [src/app/home/layout.tsx:5-10](file://src/app/home/layout.tsx#L5-L10)
+- [src/app/collections/layout.tsx:5-10](file://src/app/collections/layout.tsx#L5-L10)
+- [src/app/itineraries/layout.tsx:5-10](file://src/app/itineraries/layout.tsx#L5-L10)
 
 ## Core Components
-- Root layout: Defines metadata, viewport, fonts, and wraps children with global providers to provide data fetching, theming, toast notifications, and tooltip behavior across the app.
-- QueryProvider: Wraps the app with TanStack React Query’s QueryClientProvider using a configured QueryClient instance.
-- ThemeProvider: Uses next-themes to manage theme state with class-based attribute toggling.
-- ToastProvider: Provides centralized toast state and lifecycle management (show, pause, resume, remove).
-- TooltipProvider: Centralizes hover timing and provides Base UI tooltip primitives consistently across the app.
-- MainLayout: Shared shell for authenticated areas, including navbar, right sidebar, modals, and navigation loading overlay.
+- Root layout and metadata: Defines site metadata, viewport, fonts, and wraps the app in global providers.
+- Provider hierarchy: QueryProvider (React Query), ToastProvider (user feedback), ThemeProvider (theme context), TooltipProvider (UI tooltips).
+- Data layer: React Query client configured with caching, retry, and stale times.
+- Routing: Root page redirects to /home; feature layouts wrap pages in MainLayout.
 
 Key responsibilities:
-- Data layer: QueryProvider configures caching, retries, and stale times via queryClient.
-- UI layer: ThemeProvider and TooltipProvider standardize appearance and interactions.
-- UX layer: ToastProvider manages user feedback; MainLayout composes navigation and content regions.
+- Global state and services are provided at the root level to ensure consistent behavior across routes.
+- Client-only features (e.g., maps) are dynamically imported to avoid SSR overhead.
 
 **Section sources**
-- [QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
-- [queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
-- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
-- [ToastContext.tsx:1-155](file://src/contexts/ToastContext.tsx#L1-L155)
-- [Tooltip.tsx:1-185](file://src/components/ui/primitives/Tooltip.tsx#L1-L185)
-- [MainLayout.tsx:1-397](file://src/components/ui/layout/MainLayout.tsx#L1-L397)
+- [src/app/layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
+- [src/components/QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
+- [src/components/ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [src/contexts/ToastContext.tsx:1-155](file://src/contexts/ToastContext.tsx#L1-L155)
+- [src/lib/query/queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [src/app/page.tsx:1-6](file://src/app/page.tsx#L1-L6)
 
 ## Architecture Overview
-The application bootstraps through the root layout, which sets up global context providers and metadata. Feature layouts then compose a shared MainLayout that renders page-specific content within a consistent shell. Client-only components are marked with "use client" to ensure interactivity runs on the browser.
+The application follows a layered architecture:
+- Presentation: Next.js App Router pages and components.
+- State and Services: React Query for data fetching and caching; custom contexts for UI state (toasts, theme).
+- External integrations: Supabase (via SDK), Google Maps, analytics/tracking hooks, and job queues for async processing.
+
+Rendering strategy:
+- Server-rendered HTML for SEO-critical pages via Next.js App Router.
+- Client-side interactivity through "use client" components and dynamic imports for heavy or browser-only features (e.g., maps).
+
+Bootstrap process:
+- Root layout renders metadata and providers.
+- Feature layouts apply MainLayout shell.
+- Pages hydrate client-side logic and connect to data services.
+
+```mermaid
+graph TB
+subgraph "Next.js Runtime"
+R["Root Layout<br/>src/app/layout.tsx"]
+H["Home Layout<br/>src/app/home/layout.tsx"]
+P["Home Page<br/>src/app/home/page.tsx"]
+end
+subgraph "Providers"
+QP["QueryProvider"]
+TP["ThemeProvider"]
+TT["ToastProvider"]
+TIP["TooltipProvider"]
+end
+subgraph "Data Layer"
+QC["React Query Client<br/>src/lib/query/queryClient.ts"]
+end
+R --> QP --> TP --> TT --> TIP
+R --> H --> P
+P --> QC
+```
+
+**Diagram sources**
+- [src/app/layout.tsx:57-80](file://src/app/layout.tsx#L57-L80)
+- [src/app/home/layout.tsx:5-10](file://src/app/home/layout.tsx#L5-L10)
+- [src/components/QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
+- [src/components/ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [src/contexts/ToastContext.tsx:1-155](file://src/contexts/ToastContext.tsx#L1-L155)
+- [src/lib/query/queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+
+## Detailed Component Analysis
+
+### Root Layout Composition and Bootstrap
+- Metadata and SEO: Title templates, description, Open Graph, Twitter card, robots settings.
+- Providers order: QueryProvider wraps all data interactions; ToastProvider provides user feedback; ThemeProvider sets theme context; TooltipProvider enables tooltips.
+- Font preconnect and stylesheet injection for performance.
+- Viewport configuration for mobile safe areas.
 
 ```mermaid
 sequenceDiagram
 participant Browser as "Browser"
-participant NextJS as "Next.js Server"
-participant Root as "Root Layout<br/>src/app/layout.tsx"
-participant Providers as "Global Providers"
-participant Feature as "Feature Layout<br/>e.g., home/layout.tsx"
-participant Shell as "MainLayout<br/>src/components/ui/layout/MainLayout.tsx"
-participant Page as "Page Component"
-Browser->>NextJS : Request "/"
-NextJS-->>Browser : HTML + JS bundle
-NextJS->>Root : Render RootLayout
-Root->>Providers : Wrap with QueryProvider, ToastProvider, ThemeProvider, TooltipProvider
-Providers-->>Root : Contexts available
-Root->>Feature : Render feature layout
-Feature->>Shell : Compose MainLayout
-Shell->>Page : Render page content
-Page-->>Browser : Interactive UI
+participant Next as "Next.js Server"
+participant Root as "Root Layout"
+participant Providers as "Providers"
+participant Child as "Page Content"
+Browser->>Next : Request "/"
+Next-->>Browser : Redirect to "/home"
+Browser->>Next : Request "/home"
+Next->>Root : Render Root Layout
+Root->>Providers : Mount QueryProvider, ToastProvider, ThemeProvider, TooltipProvider
+Providers-->>Child : Render children (page content)
+Child-->>Browser : Hydrated UI
 ```
 
 **Diagram sources**
-- [layout.tsx:57-83](file://src/app/layout.tsx#L57-L83)
-- [home/layout.tsx:5-11](file://src/app/home/layout.tsx#L5-L11)
-- [MainLayout.tsx:386-396](file://src/components/ui/layout/MainLayout.tsx#L386-L396)
+- [src/app/page.tsx:1-6](file://src/app/page.tsx#L1-L6)
+- [src/app/layout.tsx:19-80](file://src/app/layout.tsx#L19-L80)
 
-## Detailed Component Analysis
+**Section sources**
+- [src/app/layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
+- [src/app/page.tsx:1-6](file://src/app/page.tsx#L1-L6)
 
-### Root Layout and Metadata Management
-- Metadata: Centralized title templates, description, Open Graph, Twitter card, robots directives, and canonical URL.
-- Viewport: Configured for safe-area insets to support notched devices.
-- Fonts: Preconnect and stylesheet link for external font service; CSS variable injected for font usage.
-- Provider chain: QueryProvider -> ToastProvider -> ThemeProvider -> TooltipProvider wrapping children.
+### Data Fetching and Caching (React Query)
+- Centralized QueryClient configuration with default options for stale time, garbage collection, retries, and focus refetch behavior.
+- QueryProvider injects the client into the component tree.
 
 ```mermaid
 flowchart TD
-Start(["App Boot"]) --> Meta["Define Metadata & Viewport"]
-Meta --> Providers["Wrap Children with Providers"]
-Providers --> Query["QueryProvider (TanStack)"]
-Providers --> Toast["ToastProvider (Context)"]
-Providers --> Theme["ThemeProvider (next-themes)"]
-Providers --> Tooltip["TooltipProvider (Base UI)"]
-Query --> Children["Render Feature Layouts"]
-Toast --> Children
-Theme --> Children
-Tooltip --> Children
-Children --> End(["Interactive Pages"])
+Start(["App Start"]) --> InitQC["Initialize QueryClient"]
+InitQC --> Provide["Provide via QueryProvider"]
+Provide --> UseQueries["Components use queries/mutations"]
+UseQueries --> Cache{"Cache hit?"}
+Cache --> |Yes| ReturnCached["Return cached data"]
+Cache --> |No| Fetch["Fetch from API"]
+Fetch --> UpdateCache["Update cache and invalidate keys"]
+UpdateCache --> ReturnData["Return fresh data"]
 ```
 
 **Diagram sources**
-- [layout.tsx:19-55](file://src/app/layout.tsx#L19-L55)
-- [layout.tsx:57-83](file://src/app/layout.tsx#L57-L83)
+- [src/lib/query/queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [src/components/QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
 
 **Section sources**
-- [layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
-- [site.ts:1-7](file://src/lib/site.ts#L1-L7)
+- [src/lib/query/queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [src/components/QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
 
-### Global Providers
-
-#### QueryProvider
-- Wraps the app with TanStack React Query’s QueryClientProvider.
-- Uses a shared QueryClient configured with default options for caching and retry behavior.
+### Notifications (Toast System)
+- Context-driven toast management with lifecycle control (show, pause, resume, remove).
+- Default duration and per-toast overrides; timers managed via refs to avoid memory leaks.
 
 ```mermaid
 classDiagram
-class QueryProvider {
-+children : ReactNode
+class ToastContextValue {
++showToast(config)
++removeToast(id)
++pauseToast(id)
++resumeToast(id)
++getRemainingTime(id) number
++toasts : Toast[]
++pausedToasts : Set<string>
 }
-class QueryClient {
-+defaultOptions.queries.staleTime
-+defaultOptions.queries.gcTime
-+defaultOptions.queries.retry
-+defaultOptions.queries.refetchOnWindowFocus
+class ToastProvider {
++children
 }
-QueryProvider --> QueryClient : "provides"
+ToastProvider --> ToastContextValue : "provides"
 ```
 
 **Diagram sources**
-- [QueryProvider.tsx:7-13](file://src/components/QueryProvider.tsx#L7-L13)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
+- [src/contexts/ToastContext.tsx:12-36](file://src/contexts/ToastContext.tsx#L12-L36)
+- [src/contexts/ToastContext.tsx:42-148](file://src/contexts/ToastContext.tsx#L42-L148)
 
 **Section sources**
-- [QueryProvider.tsx:1-14](file://src/components/QueryProvider.tsx#L1-L14)
-- [queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [src/contexts/ToastContext.tsx:1-155](file://src/contexts/ToastContext.tsx#L1-L155)
 
-#### ThemeProvider
-- Uses next-themes with class attribute mode.
-- Defaults to light theme and disables transition changes for smoother updates.
+### Theming
+- ThemeProvider wraps the app with next-themes, using class attribute toggling and forced light theme for consistency during development.
 
 **Section sources**
-- [ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
+- [src/components/ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
 
-#### ToastProvider
-- Manages toast lifecycle: show, pause, resume, remove.
-- Maintains timers and remaining time tracking per toast.
-- Exposes useToast hook for consuming components.
-
-```mermaid
-flowchart TD
-Show["showToast(config)"] --> Add["Add to toasts array"]
-Add --> Timer["Start timer (duration)"]
-Timer --> Pause{"Pause requested?"}
-Pause --> |Yes| PauseState["Pause timer<br/>Record remaining"]
-Pause --> |No| AutoHide["Auto-hide after duration"]
-PauseState --> Resume{"Resume requested?"}
-Resume --> |Yes| Restart["Restart timer with remaining"]
-Resume --> |No| Wait["Wait for resume"]
-AutoHide --> Remove["Remove from toasts"]
-Remove --> End(["Done"])
-```
-
-**Diagram sources**
-- [ToastContext.tsx:90-131](file://src/contexts/ToastContext.tsx#L90-L131)
+### Routing and Layouts
+- Root redirect to /home ensures a consistent entry point.
+- Feature layouts apply MainLayout shell for consistent chrome across sections.
 
 **Section sources**
-- [ToastContext.tsx:1-155](file://src/contexts/ToastContext.tsx#L1-L155)
+- [src/app/page.tsx:1-6](file://src/app/page.tsx#L1-L6)
+- [src/app/home/layout.tsx:1-12](file://src/app/home/layout.tsx#L1-L12)
+- [src/app/collections/layout.tsx:1-12](file://src/app/collections/layout.tsx#L1-L12)
+- [src/app/itineraries/layout.tsx:1-12](file://src/app/itineraries/layout.tsx#L1-L12)
 
-#### TooltipProvider
-- Centralizes hover delay and close delay for all tooltips.
-- Provides Base UI primitives (Root, Trigger, Portal, Positioner, Popup, Arrow) with consistent styling.
+## Dependency Analysis
+External dependencies and integration points:
+- Next.js App Router and runtime.
+- React Query for data fetching and caching.
+- Supabase SDK for authentication and database operations.
+- Google Maps integration via @vis.gl/react-google-maps.
+- UI libraries: Base UI, dnd-kit, motion, Tailwind CSS.
 
-**Section sources**
-- [Tooltip.tsx:1-185](file://src/components/ui/primitives/Tooltip.tsx#L1-L185)
-
-### Feature Layouts and MainLayout
-- Feature layouts (home, collections, itineraries, links) are client components that compose MainLayout to provide a consistent shell.
-- MainLayout includes:
-  - Navbar with dynamic visibility based on scroll position
-  - Right sidebar (inline or sheet depending on presentation)
-  - Global modals (New Link, New Collection, New Itinerary)
-  - Navigation loading overlay
-  - Additional providers for navigation state (NavbarVisibilityProvider, NavbarFilterProvider, RightSidebarProvider, NavigationLoadingProvider)
+Build and tooling:
+- Next.js scripts for dev, build, start, lint, type-check.
+- TypeScript strict mode with path aliases.
+- PostCSS with Tailwind v4 plugin.
+- Image optimization with remote patterns for Unsplash, UI avatars, and Supabase storage.
 
 ```mermaid
 graph LR
-FL["Feature Layout<br/>e.g., home/layout.tsx"] --> ML["MainLayout<br/>src/components/ui/layout/MainLayout.tsx"]
-ML --> Nav["Navbar"]
-ML --> Content["Page Content"]
-ML --> Sidebar["Right Sidebar / Sheet"]
-ML --> Modals["Global Modals"]
-ML --> Loading["Navigation Loading Overlay"]
+App["Next.js App"] --> NPM["Dependencies<br/>package.json"]
+App --> TS["TypeScript Config<br/>tsconfig.json"]
+App --> PostCSS["PostCSS Config<br/>postcss.config.js"]
+App --> NextCfg["Next Config<br/>next.config.js"]
+NextCfg --> Images["Image Remote Patterns"]
+App --> SQB["Supabase SDK"]
+App --> Maps["Google Maps SDK"]
+App --> RQ["React Query"]
 ```
 
 **Diagram sources**
-- [home/layout.tsx:5-11](file://src/app/home/layout.tsx#L5-L11)
-- [collections/layout.tsx:5-11](file://src/app/collections/layout.tsx#L5-L11)
-- [itineraries/layout.tsx:5-11](file://src/app/itineraries/layout.tsx#L5-L11)
-- [links/layout.tsx:5-11](file://src/app/links/layout.tsx#L5-L11)
-- [MainLayout.tsx:386-396](file://src/components/ui/layout/MainLayout.tsx#L386-L396)
+- [package.json:1-45](file://package.json#L1-L45)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [tsconfig.json:1-29](file://tsconfig.json#L1-L29)
+- [postcss.config.js:1-6](file://postcss.config.js#L1-L6)
 
 **Section sources**
-- [MainLayout.tsx:1-397](file://src/components/ui/layout/MainLayout.tsx#L1-L397)
-
-### Server-Side vs Client-Side Separation
-- Root layout is a server component by default; it sets metadata and provider wrappers.
-- Feature layouts and MainLayout are marked "use client", enabling interactivity and client-side state.
-- The root page redirects to /home, ensuring users land in the main dashboard area.
-
-**Section sources**
-- [page.tsx:1-6](file://src/app/page.tsx#L1-L6)
-- [home/layout.tsx:1-12](file://src/app/home/layout.tsx#L1-L12)
-- [MainLayout.tsx:1-397](file://src/components/ui/layout/MainLayout.tsx#L1-L397)
-
-## Dependency Analysis
-- Root layout depends on:
-  - Global styles and fonts
-  - Providers (QueryProvider, ToastProvider, ThemeProvider, TooltipProvider)
-  - Notification component (ItineraryJobNotifier)
-  - Site configuration (SITE_URL)
-- Feature layouts depend on MainLayout for consistent UI chrome.
-- MainLayout depends on multiple contexts and UI primitives for navigation, sidebar, modals, and loading states.
-- QueryProvider depends on a shared QueryClient instance for consistent caching and retry policies.
-
-```mermaid
-graph TB
-Root["Root Layout"] --> QP["QueryProvider"]
-Root --> TP["ThemeProvider"]
-Root --> TSP["ToastProvider"]
-Root --> TT["TooltipProvider"]
-Features["Feature Layouts"] --> ML["MainLayout"]
-ML --> Ctx["Contexts (Navbar, Sidebar, Loading)"]
-QP --> QC["QueryClient"]
-```
-
-**Diagram sources**
-- [layout.tsx:57-83](file://src/app/layout.tsx#L57-L83)
-- [MainLayout.tsx:386-396](file://src/components/ui/layout/MainLayout.tsx#L386-L396)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
-
-**Section sources**
-- [layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
-- [MainLayout.tsx:1-397](file://src/components/ui/layout/MainLayout.tsx#L1-L397)
-- [queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [package.json:1-45](file://package.json#L1-L45)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [tsconfig.json:1-29](file://tsconfig.json#L1-L29)
+- [postcss.config.js:1-6](file://postcss.config.js#L1-L6)
 
 ## Performance Considerations
-- Next.js configuration:
-  - reactStrictMode enabled for development-time checks
-  - devIndicators disabled to reduce overhead
-  - optimizePackageImports configured for specific libraries to improve tree-shaking and bundle size
-  - images.remotePatterns restricts allowed image hosts for security and optimization
-- Provider-level optimizations:
-  - QueryClient configured with sensible defaults for staleTime, gcTime, retry, and refetchOnWindowFocus to balance freshness and network usage
-  - ThemeProvider disables transitions on theme change to avoid jank
-  - TooltipProvider centralizes delays to minimize reflows and repaints
-- Rendering strategy:
-  - Root layout remains server-rendered for metadata and initial HTML
-  - Client components used where interactivity is required, minimizing client bundle size
+- Dynamic imports for heavy components (e.g., maps) to reduce initial bundle size and avoid SSR overhead.
+- React Query caching with tuned staleTime and gcTime to minimize network requests and improve perceived performance.
+- Optimized package imports for specific libraries via Next config experimental flag.
+- Image optimization with remotePatterns to allow efficient loading from trusted CDNs and storage.
+- Reduced motion support via motion/react hooks for accessibility and performance on low-power devices.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-- Missing provider context errors:
-  - If useToast is called outside ToastProvider, an error will be thrown indicating the missing context. Ensure ToastProvider wraps the component tree.
-- QueryClient misconfiguration:
-  - Verify queryClient defaultOptions to align with expected caching and retry behavior.
-- Image loading issues:
-  - Ensure remote image hosts are included in images.remotePatterns in next.config.js to allow optimization.
-- Theme flicker:
-  - ThemeProvider disables transitions on theme change; if flicker persists, check for forcedTheme settings and hydration warnings.
+Common issues and mitigations:
+- Toast not appearing: Ensure ToastProvider is mounted in the root layout and that showToast is called within a client component.
+- Query not updating: Verify query key invalidation after mutations and check staleTime/gcTime settings.
+- Map not rendering: Confirm dynamic import with ssr:false and that the component runs only on the client.
+- Theme mismatch: Check forcedTheme setting and ensure theme classes are applied consistently.
 
 **Section sources**
-- [ToastContext.tsx:150-155](file://src/contexts/ToastContext.tsx#L150-L155)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-- [ThemeProvider.tsx:5-16](file://src/components/ThemeProvider.tsx#L5-L16)
+- [src/contexts/ToastContext.tsx:42-148](file://src/contexts/ToastContext.tsx#L42-L148)
+- [src/lib/query/queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [src/components/ThemeProvider.tsx:1-17](file://src/components/ThemeProvider.tsx#L1-L17)
 
 ## Conclusion
-Argo’s architecture leverages Next.js App Router with a clear separation between server-rendered root layout and client-side feature layouts. Global providers encapsulate cross-cutting concerns such as data fetching, theming, notifications, and tooltips. The shared MainLayout ensures consistent navigation and UI chrome across features. Configuration and component patterns emphasize performance and maintainability, making the application scalable and user-friendly.
+Argo’s system design leverages Next.js App Router for structured routing and SSR, React Query for robust data management, and a clear provider hierarchy to encapsulate cross-cutting concerns. The modular layout approach and dynamic imports support scalability and performance. External integrations are cleanly bounded behind SDKs and configuration, enabling maintainable growth and reliable operation in production environments.

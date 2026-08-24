@@ -2,394 +2,385 @@
 
 <cite>
 **Referenced Files in This Document**
+- [page.tsx](file://src/app/page.tsx)
+- [home/page.tsx](file://src/app/home/page.tsx)
+- [itineraries/page.tsx](file://src/app/itineraries/page.tsx)
+- [collections/page.tsx](file://src/app/collections/page.tsx)
 - [package.json](file://package.json)
-- [src/app/layout.tsx](file://src/app/layout.tsx)
-- [src/app/page.tsx](file://src/app/page.tsx)
-- [src/app/home/page.tsx](file://src/app/home/page.tsx)
-- [src/app/links/page.tsx](file://src/app/links/page.tsx)
-- [src/app/collections/page.tsx](file://src/app/collections/page.tsx)
-- [src/app/itineraries/page.tsx](file://src/app/itineraries/page.tsx)
-- [src/hooks/useJobsQueue.ts](file://src/hooks/useJobsQueue.ts)
-- [src/lib/api/client.ts](file://src/lib/api/client.ts)
-- [src/lib/api/itineraries.ts](file://src/lib/api/itineraries.ts)
-- [src/lib/api/collections.ts](file://src/lib/api/collections.ts)
-- [src/components/ui/itinerary/ItineraryPageHeader.tsx](file://src/components/ui/itinerary/ItineraryPageHeader.tsx)
-- [src/components/ui/itinerary/ItineraryMapSection.tsx](file://src/components/ui/itinerary/ItineraryMapSection.tsx)
-- [src/components/ui/map/MapContainer.tsx](file://src/components/ui/map/MapContainer.tsx)
-- [src/components/ui/itinerary/ItineraryControls.tsx](file://src/components/ui/itinerary/ItineraryControls.tsx)
-- [src/lib/planner/types.ts](file://src/lib/planner/types.ts)
+- [useJobsQueue.ts](file://src/hooks/useJobsQueue.ts)
+- [itineraries.ts](file://src/lib/api/itineraries.ts)
+- [ItineraryPageHeader.tsx](file://src/components/ui/itinerary/ItineraryPageHeader.tsx)
+- [ItineraryControls.tsx](file://src/components/ui/itinerary/ItineraryControls.tsx)
+- [NewItineraryModal.tsx](file://src/components/ui/modals/NewItineraryModal.tsx)
+- [GoogleMapCluster.tsx](file://src/components/ui/map/GoogleMapCluster.tsx)
+- [MapContainer.tsx](file://src/components/ui/map/MapContainer.tsx)
+- [ItineraryMapSection.tsx](file://src/components/ui/itinerary/ItineraryMapSection.tsx)
+- [useMapClusters.ts](file://src/hooks/useMapClusters.ts)
 </cite>
 
 ## Table of Contents
-1. Introduction
-2. Project Structure
-3. Core Components
-4. Architecture Overview
-5. Detailed Component Analysis
-6. Dependency Analysis
-7. Performance Considerations
-8. Troubleshooting Guide
-9. Conclusion
+1. [Introduction](#introduction)
+2. [Project Structure](#project-structure)
+3. [Core Components](#core-components)
+4. [Architecture Overview](#architecture-overview)
+5. [Detailed Component Analysis](#detailed-component-analysis)
+6. [Dependency Analysis](#dependency-analysis)
+7. [Performance Considerations](#performance-considerations)
+8. [Troubleshooting Guide](#troubleshooting-guide)
+9. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the core features of the Argo itinerary planner with a focus on user journeys, key components, data models, and integrations. It covers:
-- Dashboard interface for creating links, collections, and itineraries
-- Link processing pipeline (asynchronous analysis)
-- Collection management
-- Itinerary planning (AI-assisted or blank)
-- Map visualization within itineraries
-
-The goal is to help both new users and advanced users understand how to use and customize the system effectively.
+This document explains Argo’s core features end-to-end: the dashboard and home page, content management for discovered locations, AI-powered itinerary generation with schedule optimization, interactive map integration with location clustering, collaboration features for shared planning, and the job queue system that powers background processing. It covers user workflows, technical implementation details, component interactions, data flows, and how features integrate to deliver a seamless journey from content discovery to final itinerary sharing.
 
 ## Project Structure
-Argo is a Next.js application with client-side React components, hooks for real-time job queues and queries, and API clients that call a backend service. The root layout wires global providers (theme, toast, query client), and the app routes organize feature pages for home/dashboard, links, collections, and itineraries.
+Argo is a Next.js application organized by feature-based routes under src/app and reusable UI components under src/components/ui. Key entry points include:
+- Root redirect to Home
+- Home (dashboard) for recent content, creation actions, and live job status
+- Itineraries listing and creation
+- Collections listing and creation
+- Map and itinerary detail views via dynamic imports
 
 ```mermaid
 graph TB
-A["Root Layout<br/>Providers & Metadata"] --> B["Dashboard Page"]
-A --> C["Links Page"]
-A --> D["Collections Page"]
-A --> E["Itineraries Page"]
-B --> F["Job Queue Hook"]
-C --> F
-E --> F
-B --> G["API Client"]
-C --> G
-D --> G
-E --> G
-G --> H["Backend API"]
+A["Root Page<br/>Redirects to /home"] --> B["Home Dashboard<br/>Recent content + create actions"]
+B --> C["Itineraries List<br/>Create + queue cards"]
+B --> D["Collections List<br/>Create"]
+C --> E["Itinerary Detail<br/>Map + tabs + controls"]
+B --> F["Interactive Map Clusters<br/>Filter content by locality"]
 ```
 
 **Diagram sources**
-- [src/app/layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
-- [src/app/home/page.tsx:1-1004](file://src/app/home/page.tsx#L1-L1004)
-- [src/app/links/page.tsx:1-430](file://src/app/links/page.tsx#L1-L430)
-- [src/app/collections/page.tsx:1-248](file://src/app/collections/page.tsx#L1-L248)
-- [src/app/itineraries/page.tsx:1-400](file://src/app/itineraries/page.tsx#L1-L400)
-- [src/hooks/useJobsQueue.ts:1-296](file://src/hooks/useJobsQueue.ts#L1-L296)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
+- [page.tsx:1-6](file://src/app/page.tsx#L1-L6)
+- [home/page.tsx:1-120](file://src/app/home/page.tsx#L1-L120)
+- [itineraries/page.tsx:1-120](file://src/app/itineraries/page.tsx#L1-L120)
+- [collections/page.tsx:1-60](file://src/app/collections/page.tsx#L1-L60)
 
 **Section sources**
-- [package.json:1-50](file://package.json#L1-L50)
-- [src/app/layout.tsx:1-85](file://src/app/layout.tsx#L1-L85)
-- [src/app/page.tsx:1-6](file://src/app/page.tsx#L1-L6)
+- [page.tsx:1-6](file://src/app/page.tsx#L1-L6)
+- [package.json:1-45](file://package.json#L1-L45)
 
 ## Core Components
-- Dashboard: Central hub to create and manage links, collections, and itineraries; shows recent content and running jobs.
-- Links: Submit URLs for analysis; view queued, processing, completed, and failed states; retry or remove.
-- Collections: Create, list, and delete location collections; add locations from links or maps.
-- Itineraries: Create blank or AI-generated plans; view cards; manage queue for async generation; navigate to detail views.
-- Job Queue: Realtime tracking of background tasks (content-analysis, itinerary-planning) with optimistic UI handoff.
-- Map Visualization: Google Maps integration for itinerary day routes and location clusters.
-
-Key implementation highlights:
-- Realtime job updates via Supabase channels with reconciliation for missed events.
-- Optimistic UI transitions from queue cards to final cards upon completion.
-- Quota-aware flows for link and itinerary creation.
+- Home Dashboard: Displays recent links, collections, itineraries; supports creating new items; integrates with job queues for async tasks; provides map-driven filtering by locality.
+- Itineraries Listing: Shows existing itineraries, creates new ones (blank or AI-generated), and surfaces in-flight planning jobs as queue cards.
+- Collections Listing: Lists and creates collections used to organize discovered locations.
+- Job Queue Hook: Subscribes to realtime job updates, reconciles missed updates, and exposes optimistic upsert/remove helpers.
+- API Layer: Itinerary CRUD, route optimization, activity management, public tokens, collaborators, and routing logic for different creation paths.
+- Map Integration: Clustered markers for content discovery and detailed maps for itinerary editing/viewing.
 
 **Section sources**
-- [src/app/home/page.tsx:1-1004](file://src/app/home/page.tsx#L1-L1004)
-- [src/app/links/page.tsx:1-430](file://src/app/links/page.tsx#L1-L430)
-- [src/app/collections/page.tsx:1-248](file://src/app/collections/page.tsx#L1-L248)
-- [src/app/itineraries/page.tsx:1-400](file://src/app/itineraries/page.tsx#L1-L400)
-- [src/hooks/useJobsQueue.ts:1-296](file://src/hooks/useJobsQueue.ts#L1-L296)
+- [home/page.tsx:120-560](file://src/app/home/page.tsx#L120-L560)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+- [collections/page.tsx:24-112](file://src/app/collections/page.tsx#L24-L112)
+- [useJobsQueue.ts:45-295](file://src/hooks/useJobsQueue.ts#L45-L295)
+- [itineraries.ts:54-439](file://src/lib/api/itineraries.ts#L54-L439)
+- [GoogleMapCluster.tsx:13-181](file://src/components/ui/map/GoogleMapCluster.tsx#L13-L181)
+- [MapContainer.tsx:10-99](file://src/components/ui/map/MapContainer.tsx#L10-L99)
 
 ## Architecture Overview
-The frontend orchestrates user actions into API calls and subscribes to realtime job updates. Completed jobs are merged optimistically into lists to avoid flicker.
+The system combines client-side React state, server APIs, and realtime database subscriptions to provide responsive experiences:
+- User actions trigger API calls (create link, collection, itinerary).
+- Long-running tasks are queued as jobs; the frontend subscribes to changes and renders progress.
+- Completed jobs update lists optimistically and then reconcile with canonical data.
+- Maps render clusters for discovery and detailed polylines/routes for itineraries.
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
-participant P as "Page (Dashboard/Links/Itineraries)"
-participant JQ as "useJobsQueue"
-participant AC as "API Client"
-participant BE as "Backend API"
-participant DB as "Supabase Jobs"
-U->>P : "Submit URL / Create Itinerary"
-P->>AC : "createJob / createItineraryRouted"
-AC->>BE : "POST /api/jobs or /api/itineraries"
-BE-->>DB : "Insert job row"
-DB-->>JQ : "Realtime INSERT/UPDATE"
-JQ->>P : "onJobCompleted/onJobFailed callbacks"
-P->>P : "Optimistic card handoff + refresh"
+participant H as "Home Page"
+participant Q as "Job Queue Hook"
+participant API as "Backend API"
+participant DB as "Database (Realtime)"
+participant M as "Map Clusters"
+U->>H : Create link / collection / itinerary
+H->>API : POST create request
+API-->>DB : Insert record / enqueue job
+DB-->>Q : Realtime INSERT/UPDATE
+Q-->>H : Update queue cards / refresh lists
+DB-->>M : Location data for clusters
+M-->>H : Filter content by locality
+Note over H,Q : Optimistic updates prevent layout shifts
 ```
 
 **Diagram sources**
-- [src/app/links/page.tsx:120-261](file://src/app/links/page.tsx#L120-L261)
-- [src/app/itineraries/page.tsx:74-247](file://src/app/itineraries/page.tsx#L74-L247)
-- [src/hooks/useJobsQueue.ts:78-267](file://src/hooks/useJobsQueue.ts#L78-L267)
-- [src/lib/api/client.ts:109-155](file://src/lib/api/client.ts#L109-L155)
-- [src/lib/api/itineraries.ts:406-439](file://src/lib/api/itineraries.ts#L406-L439)
+- [home/page.tsx:172-240](file://src/app/home/page.tsx#L172-L240)
+- [useJobsQueue.ts:138-260](file://src/hooks/useJobsQueue.ts#L138-L260)
+- [itineraries.ts:406-439](file://src/lib/api/itineraries.ts#L406-L439)
+- [useMapClusters.ts:35-61](file://src/hooks/useMapClusters.ts#L35-L61)
 
 ## Detailed Component Analysis
 
-### Dashboard Interface
-- User journey:
-  - Open dashboard to see recent items and usage stats.
-  - Use mobile carousel or desktop cards to add a link, create a collection, or plan an itinerary.
-  - Monitor in-flight jobs via queue cards; finished items appear seamlessly.
-  - Filter by locality using map clusters; quick actions to add locations to destinations.
-- Key components:
-  - Recent feed with infinite scroll and optimistic merges.
-  - Job queue subscriptions for content-analysis and itinerary-planning.
-  - Usage cards and quota gating.
-- Data models:
-  - Recent content items (link, collection, itinerary, location).
-  - Queue jobs with progress and thumbnails.
-- Integration points:
-  - API client for job creation and deletion.
-  - Query invalidation to keep lists consistent.
-  - Map cluster filtering integrated with navbar filter context.
+### Home Dashboard and Content Management
+- Recent content grid shows links, collections, and itineraries with type-specific cards.
+- Creation actions open modals to add links, create collections, or plan itineraries.
+- Link analysis and itinerary planning run asynchronously; queue cards appear at the top and hand off to real cards upon completion.
+- Map clusters allow filtering content by locality; clicking a cluster applies a filter pill and scrolls to the content section.
 
 ```mermaid
 flowchart TD
-Start(["Open Dashboard"]) --> ShowFeed["Render recent feed"]
-ShowFeed --> Action{"Create action?"}
-Action --> |Add Link| SubmitLink["Submit URL to queue"]
-Action --> |New Collection| CreateCollection["Create collection"]
-Action --> |Plan Itinerary| PlanItinerary["Create itinerary (blank or AI)"]
-SubmitLink --> ObserveJobs["Observe realtime jobs"]
-CreateCollection --> RefreshList["Refresh collections"]
-PlanItinerary --> ObserveJobs
-ObserveJobs --> Handoff["Optimistic handoff to cards"]
-RefreshList --> End(["Updated UI"])
-Handoff --> End
+Start(["Open Home"]) --> Load["Load recent content"]
+Load --> Actions{"User action?"}
+Actions --> |Add Link| SubmitLink["Submit link URL"]
+Actions --> |Create Collection| SubmitCollection["Create collection"]
+Actions --> |Plan Itinerary| SubmitItinerary["Create blank or AI itinerary"]
+SubmitLink --> Enqueue["Enqueue content-analysis job"]
+SubmitCollection --> RefreshCollections["Refresh collections list"]
+SubmitItinerary --> Route{"AI recommendations?"}
+Route --> |Yes| Planning["Start planning job"]
+Route --> |No| Blank["Create blank itinerary"]
+Enqueue --> QueueUI["Show queue card"]
+Planning --> QueueUI
+QueueUI --> Complete{"Job completed?"}
+Complete --> |Yes| Replace["Replace queue card with real item"]
+Complete --> |No| Wait["Wait for realtime updates"]
+Replace --> End(["Updated feed"])
+Wait --> End
 ```
 
 **Diagram sources**
-- [src/app/home/page.tsx:123-551](file://src/app/home/page.tsx#L123-L551)
-- [src/hooks/useJobsQueue.ts:45-296](file://src/hooks/useJobsQueue.ts#L45-L296)
+- [home/page.tsx:172-240](file://src/app/home/page.tsx#L172-L240)
+- [home/page.tsx:417-551](file://src/app/home/page.tsx#L417-L551)
+- [useJobsQueue.ts:138-260](file://src/hooks/useJobsQueue.ts#L138-L260)
 
 **Section sources**
-- [src/app/home/page.tsx:1-1004](file://src/app/home/page.tsx#L1-L1004)
+- [home/page.tsx:120-680](file://src/app/home/page.tsx#L120-L680)
 
-### Link Processing Pipeline
-- User journey:
-  - Add a link via modal; if already analyzed, view existing result.
-  - If quota exceeded, upgrade prompt appears.
-  - Watch queue status; retry failed/stuck jobs; dismiss when done.
-  - Completed links morph into link cards without flicker.
-- Key components:
-  - New link modal and submit handler.
-  - Job queue hook with optimistic completion.
-  - Paginated content list with infinite scroll.
-- Data models:
-  - QueueJob with payload/result/progress.
-  - CompletedContent derived from job result.
-- Integration points:
-  - Backend job endpoints for create/retry/detach.
-  - Supabase realtime channel for live updates.
+### Itineraries Listing and Creation
+- The itineraries page lists all active itineraries and always shows a “Create” card first.
+- In-flight planning jobs render as queue cards before being replaced by real itinerary cards.
+- Quota checks gate creation; errors surface via toasts and usage cards.
+- Hovering an itinerary prefetches its detail to speed navigation.
 
 ```mermaid
 sequenceDiagram
 participant U as "User"
-participant L as "Links Page"
-participant Q as "useJobsQueue"
-participant C as "API Client"
-participant S as "Supabase Jobs"
-U->>L : "Paste URL"
-L->>C : "createJob('content-analysis', {url})"
-C->>S : "INSERT job"
-S-->>Q : "Realtime UPDATE"
-Q-->>L : "onJobCompleted(job)"
-L->>L : "buildOptimisticContent + refresh"
-Note over L,Q : "Queue card morphs into link card"
+participant I as "Itineraries Page"
+participant API as "Itinerary API"
+participant Q as "Job Queue Hook"
+U->>I : Click "Create Itinerary"
+I->>API : createItineraryRouted(...)
+alt AI-only or with locations
+API-->>I : { kind : "planning", job }
+I->>Q : Subscribe to "itinerary-planning"
+Q-->>I : Queue card appears
+API-->>Q : Realtime UPDATE on completion
+Q-->>I : Replace queue card with itinerary card
+else Blank itinerary
+API-->>I : { kind : "blank", itinerary }
+I->>I : Navigate to detail
+end
 ```
 
 **Diagram sources**
-- [src/app/links/page.tsx:120-261](file://src/app/links/page.tsx#L120-L261)
-- [src/hooks/useJobsQueue.ts:78-267](file://src/hooks/useJobsQueue.ts#L78-L267)
-- [src/lib/api/client.ts:109-155](file://src/lib/api/client.ts#L109-L155)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+- [itineraries.ts:406-439](file://src/lib/api/itineraries.ts#L406-L439)
+- [useJobsQueue.ts:138-260](file://src/hooks/useJobsQueue.ts#L138-L260)
 
 **Section sources**
-- [src/app/links/page.tsx:1-430](file://src/app/links/page.tsx#L1-L430)
-- [src/hooks/useJobsQueue.ts:1-296](file://src/hooks/useJobsQueue.ts#L1-L296)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
+- [itineraries/page.tsx:74-399](file://src/app/itineraries/page.tsx#L74-L399)
+- [itineraries.ts:54-120](file://src/lib/api/itineraries.ts#L54-L120)
 
-### Collection Management
-- User journey:
-  - Create a collection with name, region, tags.
-  - View grid of collections; open details to manage locations.
-  - Delete collections with confirmation.
-- Key components:
-  - Collections page with bento grid and usage card.
-  - New collection modal and delete confirmation.
-- Data models:
-  - Collection and CollectionWithRole including preview images and location counts.
-- Integration points:
-  - API client for CRUD operations and tokens.
-  - Query invalidation after mutations.
-
-```mermaid
-classDiagram
-class Collection {
-+id
-+name
-+country
-+region
-+latitude
-+longitude
-+tags
-+thumbnail_url
-+owner_id
-+is_public
-+is_bookmarked
-+is_archived
-+public_token
-+invite_token
-+invite_token_expires_at
-+fork_count
-+forked_from_id
-+created_at
-+updated_at
-}
-class CollectionWithRole {
-+user_role
-+location_count
-+preview_images
-}
-Collection <|-- CollectionWithRole
-```
-
-**Diagram sources**
-- [src/lib/api/collections.ts:3-30](file://src/lib/api/collections.ts#L3-L30)
-
-**Section sources**
-- [src/app/collections/page.tsx:1-248](file://src/app/collections/page.tsx#L1-L248)
-- [src/lib/api/collections.ts:1-214](file://src/lib/api/collections.ts#L1-L214)
-
-### Itinerary Planning
-- User journey:
-  - From itineraries page or dashboard, choose to create a blank itinerary or generate one with AI recommendations.
-  - For AI-only or location-based plans, a background job runs; queue cards show progress and ETA.
-  - On completion, the itinerary appears immediately; navigate to detail view.
-- Key components:
-  - Itineraries page with queue cards and optimistic handoff.
-  - Routed creation logic selecting endpoint based on inputs.
-  - Itinerary detail header and controls for view/edit modes and tabs.
-- Data models:
-  - ItineraryWithRole, GenerateItineraryParams, SchedulerOptions, PreferenceProfile.
-- Integration points:
-  - API client for generating itineraries, managing activities, route optimization, and public tokens.
-  - Realtime job queue for planning progress.
+### Collections Listing and Organization
+- Collections list displays non-archived items sorted by recency.
+- Creating a collection triggers a refresh and optional toast feedback.
+- Deletions are confirmed via modal and invalidate queries to keep UI consistent.
 
 ```mermaid
 flowchart TD
-A["Create Itinerary"] --> B{"AI toggle?"}
-B --> |Off + no locations| C["Create blank itinerary"]
-B --> |On or has locations| D["Start planning job"]
-C --> E["Navigate to detail"]
-D --> F["Show queue card"]
-F --> G{"Job completed?"}
-G --> |Yes| H["Optimistic itinerary card"]
-H --> E
-G --> |No| F
+Open(["Open Collections"]) --> List["Render filtered collections"]
+List --> Create{"Create?"}
+Create --> |Yes| Submit["Create collection"]
+Submit --> Refresh["Invalidate collections query"]
+Refresh --> List
+List --> Delete{"Delete?"}
+Delete --> |Yes| Confirm["Confirm delete"]
+Confirm --> Remove["Delete collection"]
+Remove --> Refresh
 ```
 
 **Diagram sources**
-- [src/app/itineraries/page.tsx:74-247](file://src/app/itineraries/page.tsx#L74-L247)
-- [src/lib/api/itineraries.ts:406-439](file://src/lib/api/itineraries.ts#L406-L439)
+- [collections/page.tsx:24-112](file://src/app/collections/page.tsx#L24-L112)
 
 **Section sources**
-- [src/app/itineraries/page.tsx:1-400](file://src/app/itineraries/page.tsx#L1-L400)
-- [src/lib/api/itineraries.ts:1-532](file://src/lib/api/itineraries.ts#L1-L532)
-- [src/lib/planner/types.ts:1-93](file://src/lib/planner/types.ts#L1-L93)
+- [collections/page.tsx:24-248](file://src/app/collections/page.tsx#L24-L248)
 
-### Map Visualization
-- User journey:
-  - In itinerary detail, view a map showing locations and travel legs.
-  - Hover variants and clustering support rich interactions.
-- Key components:
-  - ItineraryMapSection wraps MapContainer with dynamic loading.
-  - MapContainer lazy-loads GoogleMapDetail and tracks load events.
-- Data models:
-  - MapLocation and MapPolylineSegment define markers and routes.
-- Integration points:
-  - Itinerary detail provides locations and polylines computed by the planner.
+### AI-Powered Itinerary Generation and Schedule Optimization
+- Creation routes decide between blank itineraries and async planning based on AI toggle and selected locations.
+- Planning jobs run server-side; the frontend listens for progress and completion via the job queue hook.
+- Route optimization endpoints compute travel legs and reorder activities to minimize overlap and improve flow.
+
+```mermaid
+classDiagram
+class ItineraryAPI {
++createItineraryRouted(input)
++generateItinerary(params)
++optimizeDayRoute(itineraryId, dayId, lockedIds)
++previewDayLegs(itineraryId, dayId, legs)
+}
+class JobQueueHook {
++jobs
++removeJob(id)
++upsertJob(job)
+}
+class ItinerariesPage {
++handleCreateItinerary(data)
++buildOptimisticItinerary(job)
+}
+ItinerariesPage --> ItineraryAPI : "calls"
+ItinerariesPage --> JobQueueHook : "subscribes"
+ItineraryAPI --> JobQueueHook : "job events"
+```
+
+**Diagram sources**
+- [itineraries.ts:54-439](file://src/lib/api/itineraries.ts#L54-L439)
+- [useJobsQueue.ts:45-295](file://src/hooks/useJobsQueue.ts#L45-L295)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+
+**Section sources**
+- [itineraries.ts:54-439](file://src/lib/api/itineraries.ts#L54-L439)
+- [useJobsQueue.ts:45-295](file://src/hooks/useJobsQueue.ts#L45-L295)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+
+### Interactive Map Integration with Location Clustering
+- Clustered markers aggregate nearby locations across dashboards, collections, content, and itineraries.
+- Clicking a cluster filters content by locality and scrolls to the relevant section.
+- Itinerary detail maps render locations and polylines representing travel routes, with lazy loading for performance.
 
 ```mermaid
 sequenceDiagram
-participant I as "Itinerary Detail"
-participant M as "ItineraryMapSection"
-participant MC as "MapContainer"
-participant GM as "GoogleMapDetail"
-I->>M : "locations, polylines, hoverVariant"
-M->>MC : "render with props"
-MC->>GM : "dynamic import + render"
-GM-->>I : "interactions (click/hover)"
+participant U as "User"
+participant M as "Map Clusters"
+participant H as "Home Page"
+U->>M : Click cluster
+M-->>H : onClusterClick(cluster)
+H->>H : Apply location filter pill
+H->>H : Scroll to content section
+Note over H,M : Clusters computed from DB via useMapClusters
 ```
 
 **Diagram sources**
-- [src/components/ui/itinerary/ItineraryMapSection.tsx:1-54](file://src/components/ui/itinerary/ItineraryMapSection.tsx#L1-L54)
-- [src/components/ui/map/MapContainer.tsx:1-99](file://src/components/ui/map/MapContainer.tsx#L1-L99)
+- [home/page.tsx:294-303](file://src/app/home/page.tsx#L294-L303)
+- [useMapClusters.ts:35-61](file://src/hooks/useMapClusters.ts#L35-L61)
+- [GoogleMapCluster.tsx:13-181](file://src/components/ui/map/GoogleMapCluster.tsx#L13-L181)
 
 **Section sources**
-- [src/components/ui/itinerary/ItineraryMapSection.tsx:1-54](file://src/components/ui/itinerary/ItineraryMapSection.tsx#L1-L54)
-- [src/components/ui/map/MapContainer.tsx:1-99](file://src/components/ui/map/MapContainer.tsx#L1-L99)
+- [GoogleMapCluster.tsx:13-181](file://src/components/ui/map/GoogleMapCluster.tsx#L13-L181)
+- [MapContainer.tsx:10-99](file://src/components/ui/map/MapContainer.tsx#L10-L99)
+- [ItineraryMapSection.tsx:1-54](file://src/components/ui/itinerary/ItineraryMapSection.tsx#L1-L54)
+- [useMapClusters.ts:35-61](file://src/hooks/useMapClusters.ts#L35-L61)
+
+### Collaboration Features for Shared Planning
+- Itinerary headers expose collaborator avatars, invite button, and view/edit mode toggles.
+- Public and invite tokens enable sharing and joining itineraries without full authentication.
+- Collaborators can be listed and removed via API endpoints.
+
+```mermaid
+sequenceDiagram
+participant U as "User"
+participant IH as "Itinerary Header"
+participant IC as "Itinerary Controls"
+participant API as "Collaboration API"
+U->>IH : Open menu
+IH-->>IC : Show Invite button
+U->>IC : Click Invite
+IC->>API : Generate invite token
+API-->>IC : Token + expiry
+IC-->>U : Share link
+Note over U,API : Public token also supported for read-only viewing
+```
+
+**Diagram sources**
+- [ItineraryPageHeader.tsx:50-137](file://src/components/ui/itinerary/ItineraryPageHeader.tsx#L50-L137)
+- [ItineraryControls.tsx:47-166](file://src/components/ui/itinerary/ItineraryControls.tsx#L47-L166)
+- [itineraries.ts:448-487](file://src/lib/api/itineraries.ts#L448-L487)
+
+**Section sources**
+- [ItineraryPageHeader.tsx:50-137](file://src/components/ui/itinerary/ItineraryPageHeader.tsx#L50-L137)
+- [ItineraryControls.tsx:47-166](file://src/components/ui/itinerary/ItineraryControls.tsx#L47-L166)
+- [itineraries.ts:448-487](file://src/lib/api/itineraries.ts#L448-L487)
+
+### Job Queue System for Background Processing
+- The hook subscribes to realtime job updates, reconciles missed transitions when visibility changes, and sorts failed jobs to the front.
+- Pages subscribe to specific job types (e.g., content-analysis, itinerary-planning) and handle completion/failure/rejection callbacks.
+- Optimistic upsert/remove ensures immediate UI responsiveness while waiting for realtime updates.
+
+```mermaid
+flowchart TD
+Init(["Mount useJobsQueue"]) --> Fetch["Initial fetch of jobs"]
+Fetch --> Subscribe["Subscribe to postgres_changes"]
+Subscribe --> Update{"Realtime event?"}
+Update --> |INSERT| Add["Add job if visible"]
+Update --> |UPDATE| Merge["Merge updated fields"]
+Update --> |DELETE| Remove["Remove job"]
+Add --> Sort["Sort failed first, newest next"]
+Merge --> Sort
+Sort --> Emit{"Status changed?"}
+Emit --> |Completed| Callback["onJobCompleted"]
+Emit --> |Failed| CallbackF["onJobFailed"]
+Emit --> |Rejected| CallbackR["onJobRejected"]
+```
+
+**Diagram sources**
+- [useJobsQueue.ts:78-260](file://src/hooks/useJobsQueue.ts#L78-L260)
+- [useJobsQueue.ts:269-295](file://src/hooks/useJobsQueue.ts#L269-L295)
+
+**Section sources**
+- [useJobsQueue.ts:45-295](file://src/hooks/useJobsQueue.ts#L45-L295)
 
 ## Dependency Analysis
-- Pages depend on:
-  - useJobsQueue for realtime job state.
-  - API clients for authenticated requests and typed errors.
-  - Query invalidation to synchronize lists.
-- Components depend on:
-  - Primitives (buttons, menus, avatars) and shared utilities.
-  - Dynamic imports for heavy map libraries to reduce initial bundle.
-- External services:
-  - Backend API for jobs and domain operations.
-  - Supabase for realtime channels and storage.
+Key dependencies and relationships:
+- Next.js app routes depend on UI components and hooks for state and data fetching.
+- Itinerary creation depends on API routing logic to choose blank vs. planning paths.
+- Job queue hook depends on Supabase realtime channels and reconciliation logic.
+- Map clusters depend on locality pin builders and source-specific queries.
 
 ```mermaid
 graph LR
-Home["Dashboard Page"] --> Jobs["useJobsQueue"]
-Links["Links Page"] --> Jobs
-Itin["Itineraries Page"] --> Jobs
-Jobs --> SB["Supabase Realtime"]
-Home --> API["API Client"]
-Links --> API
-Itin --> API
-API --> BE["Backend API"]
+Home["Home Page"] --> Jobs["useJobsQueue"]
+Home --> Clusters["useMapClusters"]
+Itineraries["Itineraries Page"] --> Jobs
+Itineraries --> API["Itinerary API"]
+Collections["Collections Page"] --> API
+API --> Jobs
+Clusters --> Map["GoogleMapCluster"]
+Map --> Container["MapContainer"]
 ```
 
 **Diagram sources**
-- [src/app/home/page.tsx:1-1004](file://src/app/home/page.tsx#L1-L1004)
-- [src/app/links/page.tsx:1-430](file://src/app/links/page.tsx#L1-L430)
-- [src/app/itineraries/page.tsx:1-400](file://src/app/itineraries/page.tsx#L1-L400)
-- [src/hooks/useJobsQueue.ts:1-296](file://src/hooks/useJobsQueue.ts#L1-L296)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
+- [home/page.tsx:172-240](file://src/app/home/page.tsx#L172-L240)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+- [collections/page.tsx:24-112](file://src/app/collections/page.tsx#L24-L112)
+- [useJobsQueue.ts:138-260](file://src/hooks/useJobsQueue.ts#L138-L260)
+- [useMapClusters.ts:35-61](file://src/hooks/useMapClusters.ts#L35-L61)
+- [GoogleMapCluster.tsx:13-181](file://src/components/ui/map/GoogleMapCluster.tsx#L13-L181)
+- [MapContainer.tsx:10-99](file://src/components/ui/map/MapContainer.tsx#L10-L99)
 
 **Section sources**
-- [src/hooks/useJobsQueue.ts:1-296](file://src/hooks/useJobsQueue.ts#L1-L296)
-- [src/lib/api/client.ts:1-156](file://src/lib/api/client.ts#L1-L156)
+- [home/page.tsx:172-240](file://src/app/home/page.tsx#L172-L240)
+- [itineraries/page.tsx:74-272](file://src/app/itineraries/page.tsx#L74-L272)
+- [collections/page.tsx:24-112](file://src/app/collections/page.tsx#L24-L112)
+- [useJobsQueue.ts:138-260](file://src/hooks/useJobsQueue.ts#L138-L260)
+- [useMapClusters.ts:35-61](file://src/hooks/useMapClusters.ts#L35-L61)
+- [GoogleMapCluster.tsx:13-181](file://src/components/ui/map/GoogleMapCluster.tsx#L13-L181)
+- [MapContainer.tsx:10-99](file://src/components/ui/map/MapContainer.tsx#L10-L99)
 
 ## Performance Considerations
-- Lazy-loading maps reduces initial bundle size and defers heavy work until needed.
-- Optimistic UI handoff prevents layout shifts and improves perceived performance during job completion.
-- Infinite scroll and pagination keep feeds responsive at scale.
-- Reconciliation in job queue handles missed realtime events and reconnect scenarios.
-- Prefetching itinerary detail on hover reduces navigation latency.
+- Lazy-loading maps reduces initial bundle size and improves perceived performance.
+- Optimistic updates prevent layout shifts during async operations.
+- Query caching and prefetching reduce network requests on hover/navigation.
+- Reconciliation handles missed realtime updates to avoid stale states.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
 Common issues and resolutions:
-- Job stuck in processing:
-  - Visibility change triggers reconciliation; if still stuck, retry via UI.
-  - Check connection error flag and network connectivity.
-- Failed jobs:
-  - Retry button available; ensure backend is reachable.
-  - Detach job to hide from queue if necessary.
-- Quota exceeded:
-  - Upgrade flow triggered via quota gate; refresh usage metrics after resolution.
-- Already analyzed link:
-  - Redirect to existing link with thumbnail and action to view.
+- Stuck queue cards: Visibility change triggers reconciliation; ensure channel subscription succeeds and no connection errors persist.
+- Duplicate toasts: Global notifier owns certain notifications; avoid duplicating handlers in multiple places.
+- Quota limits: Usage cards and quota gates inform users when limits are reached; guide to billing or deletion.
 
 **Section sources**
-- [src/hooks/useJobsQueue.ts:105-164](file://src/hooks/useJobsQueue.ts#L105-L164)
-- [src/app/links/page.tsx:29-79](file://src/app/links/page.tsx#L29-L79)
-- [src/lib/api/client.ts:109-155](file://src/lib/api/client.ts#L109-L155)
+- [useJobsQueue.ts:250-260](file://src/hooks/useJobsQueue.ts#L250-L260)
+- [home/page.tsx:192-240](file://src/app/home/page.tsx#L192-L240)
+- [itineraries/page.tsx:191-247](file://src/app/itineraries/page.tsx#L191-L247)
 
 ## Conclusion
-Argo’s core features provide a cohesive workflow from saving links to planning trips and visualizing them on maps. The system leverages realtime job queues, optimistic UI updates, and robust API abstractions to deliver a smooth experience. Users can start simple with blank itineraries or leverage AI assistance for richer plans, while maintaining control through collections and detailed editing modes.
-
-[No sources needed since this section summarizes without analyzing specific files]
+Argo integrates a responsive dashboard, robust content management, AI-driven itinerary planning, interactive mapping, collaboration tools, and a resilient job queue system. Together, these features enable users to discover locations, organize them into collections, generate optimized itineraries, collaborate with others, and share plans seamlessly. The architecture emphasizes optimistic UI, realtime synchronization, and clear error handling to deliver a smooth user experience from start to finish.

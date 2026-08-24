@@ -3,25 +3,20 @@
 <cite>
 **Referenced Files in This Document**
 - [next.config.js](file://next.config.js)
-- [useInfiniteScroll.ts](file://src/hooks/useInfiniteScroll.ts)
-- [useIntersectionObserver.ts](file://src/hooks/useIntersectionObserver.ts)
-- [usePaginatedContent.ts](file://src/hooks/usePaginatedContent.ts)
-- [CardGridSkeleton.tsx](file://src/components/ui/skeletons/CardGridSkeleton.tsx)
-- [FilterToolbarSkeleton.tsx](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx)
-- [ItineraryLoadingScreen.tsx](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx)
+- [package.json](file://package.json)
 - [QueryProvider.tsx](file://src/components/QueryProvider.tsx)
 - [queryClient.ts](file://src/lib/query/queryClient.ts)
-- [ImageGallery.tsx](file://src/components/ui/modals/ImageGallery.tsx)
+- [queryKeys.ts](file://src/lib/query/queryKeys.ts)
+- [useIntersectionObserver.ts](file://src/hooks/useIntersectionObserver.ts)
+- [useInfiniteScroll.ts](file://src/hooks/useInfiniteScroll.ts)
 - [CardMedia.tsx](file://src/components/ui/cards/CardMedia.tsx)
-- [DayTimePicker.tsx](file://src/components/ui/itinerary/DayTimePicker.tsx)
-- [collections/[id]/page.tsx](file://src/app/collections/[id]/page.tsx)
-- [home/page.tsx](file://src/app/home/page.tsx)
-- [itineraries/[id]/page.tsx](file://src/app/itineraries/[id]/page.tsx)
-- [links/[id]/page.tsx](file://src/app/links/[id]/page.tsx)
-- [LocationDetailView.tsx](file://src/components/ui/detail-views/LocationDetailView.tsx)
-- [ItineraryMapSection.tsx](file://src/components/ui/itinerary/ItineraryMapSection.tsx)
-- [MapContainer.tsx](file://src/components/ui/map/MapContainer.tsx)
-- [StaticMap.tsx](file://src/components/ui/map/StaticMap.tsx)
+- [ImageGallery.tsx](file://src/components/ui/modals/ImageGallery.tsx)
+- [GoogleMapDetail.tsx](file://src/components/ui/map/GoogleMapDetail.tsx)
+- [maps.ts](file://src/lib/api/maps.ts)
+- [useMediaQuery.ts](file://src/hooks/useMediaQuery.ts)
+- [motion.css](file://src/styles/tokens/motion.css)
+- [CardGridSkeleton.tsx](file://src/components/ui/skeletons/CardGridSkeleton.tsx)
+- [NavigationLoadingContext.tsx](file://src/contexts/NavigationLoadingContext.tsx)
 </cite>
 
 ## Table of Contents
@@ -36,367 +31,292 @@
 9. Conclusion
 
 ## Introduction
-This document explains the performance optimization strategies implemented in the application, focusing on lazy loading, code splitting, image optimization, efficient data fetching, infinite scrolling with intersection observers, skeleton loading states, and memory management. It also outlines monitoring and profiling approaches to maintain optimal performance as the app scales.
+This document explains Argo’s performance optimization strategies with a focus on code splitting, lazy loading, bundle size reduction, image optimization, caching (React Query and browser/CDN), intersection observer usage for efficient scrolling and viewport-based loading, performance monitoring and profiling, mobile considerations, network optimization, and memory management. It maps each strategy to concrete files in the codebase and provides diagrams to visualize data flow and component interactions.
 
 ## Project Structure
-The project uses Next.js for routing and rendering, React Query for caching and background updates, and a set of reusable hooks and components that implement performance-focused patterns:
-- Lazy-loaded heavy components (maps) via dynamic imports at page and component boundaries.
-- Intersection Observer-based hooks for viewport detection and infinite scroll.
-- Paginated data fetching with deduplication and real-time updates.
-- Skeleton UI components for perceived performance during loading.
-- Image handling optimized through Next.js configuration and lightweight inline images where appropriate.
+Argo is a Next.js application that leverages framework-level optimizations (Turbopack, image handling, package import optimization) alongside React patterns (hooks, contexts) and TanStack Query for data caching. The structure separates UI components, hooks, query configuration, and API utilities into focused modules, enabling targeted performance improvements.
 
 ```mermaid
 graph TB
-A["Next.js App Pages"] --> B["Dynamic Imports<br/>Code Splitting"]
-A --> C["React Query Client<br/>Caching & Deduplication"]
-A --> D["Hooks<br/>useInfiniteScroll / useIntersectionObserver"]
-A --> E["UI Components<br/>Skeletal Placeholders"]
-A --> F["Images<br/>Next.js Remote Patterns"]
-B --> G["Heavy Map Components"]
-C --> H["Supabase Queries<br/>Realtime Subscriptions"]
-D --> I["Viewport Detection<br/>Load More Triggers"]
-E --> J["Perceived Performance<br/>Skeletons & Progress"]
-F --> K["Optimized Remote Images"]
+A["Next.js App<br/>next.config.js"] --> B["React Components<br/>components/*"]
+A --> C["Hooks<br/>hooks/*"]
+A --> D["Query Client & Keys<br/>lib/query/*"]
+A --> E["API Utilities<br/>lib/api/*"]
+B --> F["UI Primitives & Cards<br/>ui/primitives, ui/cards"]
+B --> G["Maps & Media<br/>ui/map, ui/modals"]
+C --> H["Viewport & Scroll<br/>useIntersectionObserver, useInfiniteScroll, useMediaQuery"]
+D --> I["TanStack Query Client<br/>queryClient.ts"]
+E --> J["Analytics & Tracking<br/>maps.ts"]
 ```
 
 **Diagram sources**
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-- [useInfiniteScroll.ts:29-75](file://src/hooks/useInfiniteScroll.ts#L29-L75)
-- [useIntersectionObserver.ts:5-26](file://src/hooks/useIntersectionObserver.ts#L5-L26)
-- [usePaginatedContent.ts:119-207](file://src/hooks/usePaginatedContent.ts#L119-L207)
-- [CardGridSkeleton.tsx:7-21](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L7-L21)
-- [FilterToolbarSkeleton.tsx:11-29](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx#L11-L29)
-- [ItineraryLoadingScreen.tsx:27-96](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx#L27-L96)
-- [QueryProvider.tsx:7-12](file://src/components/QueryProvider.tsx#L7-L12)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [useMediaQuery.ts:1-68](file://src/hooks/useMediaQuery.ts#L1-L68)
+- [maps.ts:1-75](file://src/lib/api/maps.ts#L1-L75)
 
 **Section sources**
 - [next.config.js:1-18](file://next.config.js#L1-L18)
-- [useInfiniteScroll.ts:1-93](file://src/hooks/useInfiniteScroll.ts#L1-L93)
-- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
-- [usePaginatedContent.ts:1-288](file://src/hooks/usePaginatedContent.ts#L1-L288)
-- [CardGridSkeleton.tsx:1-23](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L1-L23)
-- [FilterToolbarSkeleton.tsx:1-31](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx#L1-L31)
-- [ItineraryLoadingScreen.tsx:1-97](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx#L1-L97)
-- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
-- [queryClient.ts:1-13](file://src/lib/query/queryClient.ts#L1-L13)
+- [package.json:1-45](file://package.json#L1-L45)
 
 ## Core Components
-- Infinite Scroll Hook: Uses IntersectionObserver to detect when a sentinel element enters the viewport and triggers load-more actions within custom scroll containers.
-- Intersection Observer Hook: Provides a simple ref + boolean pair to lazily trigger actions once an element becomes visible.
-- Paginated Content Hook: Manages initial fetch, incremental loading, deduplication, and realtime updates from Supabase channels.
-- Skeleton Components: Lightweight placeholders that reduce layout shifts and improve perceived performance during data loads.
-- Loading Screen: Shows progress and ETA for long-running jobs, improving UX during heavy operations.
-- Query Provider and Client: Centralized React Query setup with sensible defaults for caching, garbage collection, retries, and focus behavior.
-- Image Handling: Next.js remote image patterns allow optimized delivery; inline images used in lightweight contexts.
+- Query client configuration centralizes cache lifetimes and refetch behavior to reduce redundant network calls and control memory usage.
+- Intersection observer and infinite scroll hooks enable viewport-aware rendering and pagination without overloading the main thread.
+- Image components provide safe fallbacks and error handling to prevent layout shifts and wasted bandwidth.
+- Map search controller throttles expensive map operations based on viewport changes.
+- Media queries and motion tokens ensure responsive and accessible experiences with minimal runtime overhead.
 
 **Section sources**
-- [useInfiniteScroll.ts:29-75](file://src/hooks/useInfiniteScroll.ts#L29-L75)
-- [useIntersectionObserver.ts:5-26](file://src/hooks/useIntersectionObserver.ts#L5-L26)
-- [usePaginatedContent.ts:119-207](file://src/hooks/usePaginatedContent.ts#L119-L207)
-- [CardGridSkeleton.tsx:7-21](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L7-L21)
-- [FilterToolbarSkeleton.tsx:11-29](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx#L11-L29)
-- [ItineraryLoadingScreen.tsx:27-96](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx#L27-L96)
-- [QueryProvider.tsx:7-12](file://src/components/QueryProvider.tsx#L7-L12)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+- [useMediaQuery.ts:1-68](file://src/hooks/useMediaQuery.ts#L1-L68)
+- [motion.css:57-98](file://src/styles/tokens/motion.css#L57-L98)
 
 ## Architecture Overview
-The performance architecture combines several layers:
-- Code splitting via dynamic imports reduces initial bundle size by deferring heavy map components until needed.
-- Data layer uses React Query for caching and deduplication, plus Supabase realtime subscriptions for live updates without extra polling.
-- Viewport-driven loading leverages IntersectionObserver to avoid unnecessary work until content is about to be seen.
-- Skeletons and progress indicators provide immediate feedback while data or jobs are in flight.
-- Image optimization is configured at build time to allow remote images and leverage Next.js optimizations.
+The application uses Next.js as the runtime, TanStack Query for data caching, and custom hooks for viewport-driven rendering. Images are handled via Next.js configuration and component-level fallbacks. Analytics tracking is decoupled from UI logic to avoid blocking user interactions.
 
 ```mermaid
 sequenceDiagram
 participant User as "User"
-participant Page as "Page Component"
-participant Dynamic as "Dynamic Import"
-participant Hook as "useInfiniteScroll"
-participant Data as "usePaginatedContent"
-participant Cache as "React Query Client"
-participant DB as "Supabase Realtime"
-User->>Page : Navigate / Open list
-Page->>Dynamic : Load heavy map only when needed
-Page->>Hook : Attach sentinel ref
-Hook->>Hook : Observe sentinel via IntersectionObserver
-Hook-->>Data : Trigger loadMore when intersecting
-Data->>Cache : Fetch next page (cached if available)
-Cache-->>Data : Return cached or fresh data
-Data->>DB : Subscribe to changes (realtime)
-DB-->>Data : Push updates (insert/update/delete)
-Data-->>Page : Render updated list with skeletons during load
+participant UI as "Components"
+participant Hooks as "useIntersectionObserver / useInfiniteScroll"
+participant Query as "TanStack Query Client"
+participant API as "Backend APIs"
+participant Maps as "Maps API"
+User->>UI : Interact with list or media
+UI->>Hooks : Observe viewport / sentinel
+Hooks-->>UI : Trigger load more when visible
+UI->>Query : Fetch data (cached if available)
+Query->>API : GET resources (if stale)
+API-->>Query : Data payload
+Query-->>UI : Cached/stale data + revalidation
+UI->>Maps : Lazy search within viewport (when needed)
+Maps-->>UI : Results or analytics tracking
 ```
 
 **Diagram sources**
-- [useInfiniteScroll.ts:42-67](file://src/hooks/useInfiniteScroll.ts#L42-L67)
-- [usePaginatedContent.ts:156-207](file://src/hooks/usePaginatedContent.ts#L156-L207)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
-- [QueryProvider.tsx:7-12](file://src/components/QueryProvider.tsx#L7-L12)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+- [maps.ts:1-75](file://src/lib/api/maps.ts#L1-L75)
 
 ## Detailed Component Analysis
 
-### Infinite Scrolling with IntersectionObserver
-- The hook sets up an IntersectionObserver tied to the nearest scrollable ancestor so rootMargin works inside custom containers.
-- It maintains a stable callback reference and re-subscribes when the sentinel node or enabled flag changes.
-- When the sentinel intersects, it invokes the provided onLoadMore function to fetch more items.
+### Code Splitting and Lazy Loading
+- Next.js enables Turbopack for faster builds and dev experience, and optimizes specific packages to reduce bundle size.
+- Page-level route segments allow automatic code splitting per route.
+- Dynamic imports can be used for heavy features like maps; the current map controller demonstrates conditional execution tied to viewport and request identity to avoid unnecessary work.
 
 ```mermaid
 flowchart TD
-Start(["Mount Hook"]) --> FindParent["Find nearest scroll parent"]
-FindParent --> CreateObserver["Create IntersectionObserver"]
-CreateObserver --> Observe["Observe sentinel element"]
-Observe --> Intersect{"Is sentinel intersecting?"}
-Intersect --> |Yes| CallLoadMore["Call onLoadMore()"]
-Intersect --> |No| Wait["Wait for intersection"]
-CallLoadMore --> End(["Return sentinelRef"])
-Wait --> End
+Start(["App Load"]) --> Route["Route Segment Loaded"]
+Route --> Split{"Heavy Feature Needed?"}
+Split --> |No| Render["Render Lightweight UI"]
+Split --> |Yes| Lazy["Lazy Import Feature"]
+Lazy --> Init["Initialize Feature"]
+Init --> Render
 ```
 
-**Diagram sources**
-- [useInfiniteScroll.ts:42-67](file://src/hooks/useInfiniteScroll.ts#L42-L67)
-- [useInfiniteScroll.ts:78-92](file://src/hooks/useInfiniteScroll.ts#L78-L92)
+**Section sources**
+- [package.json:1-45](file://package.json#L1-L45)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+
+### Bundle Size Optimization
+- Package import optimization targets known libraries to minimize unused code.
+- Using lightweight primitives and avoiding heavy dependencies reduces initial bundle size.
+- Skeleton components improve perceived performance without adding heavy assets.
 
 **Section sources**
-- [useInfiniteScroll.ts:29-75](file://src/hooks/useInfiniteScroll.ts#L29-L75)
-- [useInfiniteScroll.ts:78-92](file://src/hooks/useInfiniteScroll.ts#L78-L92)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [CardGridSkeleton.tsx:1-23](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L1-L23)
 
-### Viewport Detection Hook
-- Returns a ref and a boolean indicating whether the observed element has entered the viewport.
-- Automatically disconnects after first intersection to avoid unnecessary work.
+### Image Optimization Strategies
+- Next.js image remote patterns define allowed domains for optimized delivery.
+- CardMedia provides graceful fallbacks (gradient or placeholder) when images fail, preventing layout shift and wasted requests.
+- ImageGallery supports lightbox navigation and manages open state to defer heavy rendering until needed.
 
 ```mermaid
 classDiagram
-class UseIntersectionObserver {
-+ref : RefObject<Element | null>
-+isInView : boolean
-+setupObserver() void
-+cleanup() void
+class CardMedia {
++imageUrl
++imageAlt
++imageAspect
++gradient
++label
++children
 }
+class ImageGallery {
++images
++alt
++className
++onLightboxChange
+-lightboxOpen
+-lightboxIndex
+}
+CardMedia <.. ImageGallery : "renders thumbnails"
 ```
 
 **Diagram sources**
-- [useIntersectionObserver.ts:5-26](file://src/hooks/useIntersectionObserver.ts#L5-L26)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [ImageGallery.tsx:141-176](file://src/components/ui/modals/ImageGallery.tsx#L141-L176)
 
 **Section sources**
-- [useIntersectionObserver.ts:5-26](file://src/hooks/useIntersectionObserver.ts#L5-L26)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [ImageGallery.tsx:141-176](file://src/components/ui/modals/ImageGallery.tsx#L141-L176)
 
-### Efficient Data Fetching and Realtime Updates
-- Initial page fetches are performed with pagination and sorting options.
-- Load more uses offset-based queries and deduplicates incoming items to handle overlap between paginated fetches and realtime updates.
-- Realtime subscription listens for inserts, updates, and deletes, updating local state efficiently.
+### Caching Mechanisms (React Query, Browser, CDN)
+- TanStack Query client sets default stale time, garbage collection time, retry count, and window focus refetch behavior to balance freshness and performance.
+- Query keys organize cache entries by domain and parameters, enabling precise invalidation and reuse.
+- Next.js image configuration allows CDN-backed delivery for approved remote patterns.
 
 ```mermaid
 sequenceDiagram
-participant UI as "UI"
-participant Hook as "usePaginatedContent"
-participant SB as "Supabase Client"
-participant Channel as "Realtime Channel"
-UI->>Hook : refresh()
-Hook->>SB : Build query (filter, sort, range)
-SB-->>Hook : Page 1 data
-Hook->>Hook : setContent(items), setHasMore(flag)
-UI->>Hook : loadMore()
-Hook->>SB : Build query (offset, limit)
-SB-->>Hook : Next page data
-Hook->>Hook : Append new items (deduplicated)
-SB-->>Channel : Postgres changes (insert/update/delete)
-Channel-->>Hook : handleChange(payload)
-Hook->>Hook : Update local state accordingly
+participant UI as "Component"
+participant QP as "QueryProvider"
+participant QC as "QueryClient"
+participant API as "Server"
+UI->>QP : Wrap app with provider
+UI->>QC : Use query with key
+QC->>QC : Check cache (staleTime/gcTime)
+alt Cache miss or stale
+QC->>API : Fetch data
+API-->>QC : Response
+QC-->>UI : Data + cache entry
+else Cache hit
+QC-->>UI : Return cached data
+end
 ```
 
 **Diagram sources**
-- [usePaginatedContent.ts:45-87](file://src/hooks/usePaginatedContent.ts#L45-L87)
-- [usePaginatedContent.ts:140-179](file://src/hooks/usePaginatedContent.ts#L140-L179)
-- [usePaginatedContent.ts:181-207](file://src/hooks/usePaginatedContent.ts#L181-L207)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
+- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [queryKeys.ts:1-41](file://src/lib/query/queryKeys.ts#L1-L41)
 
 **Section sources**
-- [usePaginatedContent.ts:45-87](file://src/hooks/usePaginatedContent.ts#L45-L87)
-- [usePaginatedContent.ts:119-207](file://src/hooks/usePaginatedContent.ts#L119-L207)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [queryKeys.ts:1-41](file://src/lib/query/queryKeys.ts#L1-L41)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
 
-### Skeleton Loading States
-- Card grid and filter toolbar skeletons render lightweight placeholders with animations to indicate activity and prevent layout shifts.
-- These components are composable and configurable for different contexts.
+### Intersection Observer and Efficient Scrolling
+- useIntersectionObserver creates an observer with rootMargin and threshold to detect when elements enter the viewport, then disconnects to free resources.
+- useInfiniteScroll attaches a sentinel element and triggers onLoadMore when it enters the scroll container’s viewport, supporting custom root containers and margins.
 
 ```mermaid
 flowchart TD
-A["List Loading"] --> B["Render CardGridSkeleton"]
-A --> C["Render FilterToolbarSkeleton"]
-B --> D["Placeholder cards animate"]
-C --> E["Placeholder pills/actions animate"]
-D --> F["Data arrives"]
-E --> F
-F --> G["Replace skeletons with real content"]
+Start(["Mount Hook"]) --> CreateObs["Create IntersectionObserver"]
+CreateObs --> Observe["Observe Element"]
+Observe --> InView{"Element Intersecting?"}
+InView --> |Yes| SetState["Set isInView = true"]
+SetState --> Disconnect["Disconnect Observer"]
+InView --> |No| Wait["Wait for Intersection"]
+Disconnect --> End(["Cleanup on Unmount"])
+Wait --> Observe
 ```
 
 **Diagram sources**
-- [CardGridSkeleton.tsx:7-21](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L7-L21)
-- [FilterToolbarSkeleton.tsx:11-29](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx#L11-L29)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
 
 **Section sources**
-- [CardGridSkeleton.tsx:1-23](file://src/components/ui/skeletons/CardGridSkeleton.tsx#L1-L23)
-- [FilterToolbarSkeleton.tsx:1-31](file://src/components/ui/skeletons/FilterToolbarSkeleton.tsx#L1-L31)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
 
-### Long-Running Job Progress and ETA
-- The loading screen shows a spinner, title/subtitle, and either an indeterminate progress bar or tracked progress based on job status.
-- Hooks compute animated progress and ETA labels to inform users during heavy tasks.
-
-```mermaid
-sequenceDiagram
-participant UI as "ItineraryLoadingScreen"
-participant Prog as "useProgressAnimation"
-participant Eta as "useProgressEta"
-UI->>Prog : Track job progress
-UI->>Eta : Compute ETA label
-Prog-->>UI : Animated percentage
-Eta-->>UI : Label ("Almost there", "In queue")
-UI-->>UI : Render ProgressBar with stage and trailing text
-```
-
-**Diagram sources**
-- [ItineraryLoadingScreen.tsx:27-96](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx#L27-L96)
+### Mobile Performance and Responsive Behavior
+- useMediaQuery provides SSR-safe media query subscriptions and exposes breakpoint buckets aligned with CSS variants, enabling JS branching consistent with styles.
+- Motion tokens disable animations under reduced-motion preferences to improve accessibility and reduce CPU usage on low-end devices.
 
 **Section sources**
-- [ItineraryLoadingScreen.tsx:27-96](file://src/components/ui/itinerary/ItineraryLoadingScreen.tsx#L27-L96)
+- [useMediaQuery.ts:1-68](file://src/hooks/useMediaQuery.ts#L1-L68)
+- [motion.css:57-98](file://src/styles/tokens/motion.css#L57-L98)
 
-### Image Optimization
-- Next.js configuration declares allowed remote image hosts, enabling optimized delivery and caching for external images.
-- Inline images are used in lightweight contexts to avoid additional network requests.
-
-```mermaid
-flowchart TD
-A["App Config"] --> B["Remote Patterns Allowed"]
-B --> C["Next.js Optimizes Images"]
-C --> D["Components Use <img> or Next Image"]
-D --> E["Faster Loads & Better UX"]
-```
-
-**Diagram sources**
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-- [ImageGallery.tsx:133-139](file://src/components/ui/modals/ImageGallery.tsx#L133-L139)
-- [CardMedia.tsx:42-54](file://src/components/ui/cards/CardMedia.tsx#L42-L54)
+### Network Optimization and Analytics
+- Map-related analytics functions track usage without breaking UI flow, using try/catch to isolate failures.
+- Map search controller reads callbacks through refs to avoid canceling in-flight searches due to unstable identities, reducing redundant network calls.
 
 **Section sources**
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-- [ImageGallery.tsx:133-139](file://src/components/ui/modals/ImageGallery.tsx#L133-L139)
-- [CardMedia.tsx:42-54](file://src/components/ui/cards/CardMedia.tsx#L42-L54)
+- [maps.ts:1-75](file://src/lib/api/maps.ts#L1-L75)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
 
-### Memory Management and Cleanup
-- IntersectionObserver instances are disconnected on cleanup to prevent leaks.
-- Realtime subscriptions are removed on unmount, with reconnect logic for transient errors.
-- Event listeners and pointer captures are released in interactive components to free resources.
-
-```mermaid
-flowchart TD
-Start(["Component Mount"]) --> Setup["Setup observer / subscription / listeners"]
-Setup --> Active["Active runtime"]
-Active --> Unmount{"Unmount?"}
-Unmount --> |Yes| Cleanup["Disconnect observer / remove channel / release listeners"]
-Unmount --> |No| Active
-Cleanup --> End(["Free Resources"])
-```
-
-**Diagram sources**
-- [useIntersectionObserver.ts:11-24](file://src/hooks/useIntersectionObserver.ts#L11-L24)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
-- [DayTimePicker.tsx:398-442](file://src/components/ui/itinerary/DayTimePicker.tsx#L398-L442)
+### Memory Management Strategies
+- Observers are disconnected after use to prevent leaks.
+- Refs store callbacks to avoid re-running effects due to unstable function references.
+- Context providers manage loading states efficiently with memoized callbacks.
 
 **Section sources**
-- [useIntersectionObserver.ts:11-24](file://src/hooks/useIntersectionObserver.ts#L11-L24)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
-- [DayTimePicker.tsx:398-442](file://src/components/ui/itinerary/DayTimePicker.tsx#L398-L442)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+- [NavigationLoadingContext.tsx:1-48](file://src/contexts/NavigationLoadingContext.tsx#L1-L48)
 
-### Code Splitting and Lazy Loading
-- Heavy map components are dynamically imported at page and component boundaries to defer their loading until they are actually needed.
-- This reduces initial bundle size and improves Time to Interactive.
+## Dependency Analysis
+The following diagram shows how core modules depend on each other to deliver a performant experience.
 
 ```mermaid
 graph LR
-P["Page / Component"] --> D["dynamic(import)"]
-D --> M["Map Container / Static Map"]
-P --> N["Other UI (lightweight)"]
+Next["Next.js Config"] --> QueryProv["QueryProvider"]
+QueryProv --> QueryClient["QueryClient"]
+QueryClient --> QueryKeys["Query Keys"]
+UI["Components"] --> Hooks["Intersection & Infinite Scroll"]
+UI --> Media["Image Components"]
+UI --> MapsCtrl["Map Search Controller"]
+MapsCtrl --> MapsAPI["Maps Analytics"]
+Hooks --> Media
 ```
 
 **Diagram sources**
-- [collections/[id]/page.tsx:52-52](file://src/app/collections/[id]/page.tsx#L52-L52)
-- [home/page.tsx:48-48](file://src/app/home/page.tsx#L48-L48)
-- [itineraries/[id]/page.tsx:205-205](file://src/app/itineraries/[id]/page.tsx#L205-L205)
-- [links/[id]/page.tsx:42-42](file://src/app/links/[id]/page.tsx#L42-L42)
-- [LocationDetailView.tsx:46-46](file://src/components/ui/detail-views/LocationDetailView.tsx#L46-L46)
-- [ItineraryMapSection.tsx:8-8](file://src/components/ui/itinerary/ItineraryMapSection.tsx#L8-L8)
-- [MapContainer.tsx:40-40](file://src/components/ui/map/MapContainer.tsx#L40-L40)
-- [StaticMap.tsx:34-34](file://src/components/ui/map/StaticMap.tsx#L34-L34)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [queryKeys.ts:1-41](file://src/lib/query/queryKeys.ts#L1-L41)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+- [maps.ts:1-75](file://src/lib/api/maps.ts#L1-L75)
 
 **Section sources**
-- [collections/[id]/page.tsx:52-52](file://src/app/collections/[id]/page.tsx#L52-L52)
-- [home/page.tsx:48-48](file://src/app/home/page.tsx#L48-L48)
-- [itineraries/[id]/page.tsx:205-205](file://src/app/itineraries/[id]/page.tsx#L205-L205)
-- [links/[id]/page.tsx:42-42](file://src/app/links/[id]/page.tsx#L42-L42)
-- [LocationDetailView.tsx:46-46](file://src/components/ui/detail-views/LocationDetailView.tsx#L46-L46)
-- [ItineraryMapSection.tsx:8-8](file://src/components/ui/itinerary/ItineraryMapSection.tsx#L8-L8)
-- [MapContainer.tsx:40-40](file://src/components/ui/map/MapContainer.tsx#L40-L40)
-- [StaticMap.tsx:34-34](file://src/components/ui/map/StaticMap.tsx#L34-L34)
-
-## Dependency Analysis
-- The data layer depends on Supabase client and realtime channels; React Query provides caching and deduplication across components.
-- UI components depend on hooks for viewport detection and pagination, ensuring minimal work until necessary.
-- Configuration centralizes image optimization and package import optimizations.
-
-```mermaid
-graph TB
-QP["QueryProvider"] --> QC["queryClient"]
-QC --> RQ["@tanstack/react-query"]
-UIC["usePaginatedContent"] --> SUP["Supabase Client"]
-UIC --> CH["Realtime Channels"]
-ISC["useInfiniteScroll"] --> IO["IntersectionObserver"]
-UIO["useIntersectionObserver"] --> IO
-IMG["next.config.js"] --> OPT["Image Optimization"]
-```
-
-**Diagram sources**
-- [QueryProvider.tsx:7-12](file://src/components/QueryProvider.tsx#L7-L12)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
-- [usePaginatedContent.ts:119-207](file://src/hooks/usePaginatedContent.ts#L119-L207)
-- [useInfiniteScroll.ts:42-67](file://src/hooks/useInfiniteScroll.ts#L42-L67)
-- [useIntersectionObserver.ts:11-24](file://src/hooks/useIntersectionObserver.ts#L11-L24)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
-
-**Section sources**
-- [QueryProvider.tsx:7-12](file://src/components/QueryProvider.tsx#L7-L12)
-- [queryClient.ts:3-12](file://src/lib/query/queryClient.ts#L3-L12)
-- [usePaginatedContent.ts:119-207](file://src/hooks/usePaginatedContent.ts#L119-L207)
-- [useInfiniteScroll.ts:42-67](file://src/hooks/useInfiniteScroll.ts#L42-L67)
-- [useIntersectionObserver.ts:11-24](file://src/hooks/useIntersectionObserver.ts#L11-L24)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [QueryProvider.tsx:1-13](file://src/components/QueryProvider.tsx#L1-L13)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [queryKeys.ts:1-41](file://src/lib/query/queryKeys.ts#L1-L41)
+- [useIntersectionObserver.ts:1-28](file://src/hooks/useIntersectionObserver.ts#L1-L28)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
+- [maps.ts:1-75](file://src/lib/api/maps.ts#L1-L75)
 
 ## Performance Considerations
-- Prefer lazy loading for heavy features like maps to reduce initial payload.
-- Use pagination and intersection observers to avoid loading off-screen content.
-- Leverage React Query caching to minimize redundant network requests.
-- Show skeletons and progress indicators to improve perceived performance.
-- Configure image optimization to allow remote images and benefit from CDN caching.
-- Ensure proper cleanup of observers, subscriptions, and event listeners to prevent memory leaks.
+- Prefer skeleton placeholders to maintain layout stability during loading.
+- Use viewport-based loading to defer non-critical work until necessary.
+- Configure cache lifetimes to balance freshness and bandwidth savings.
+- Isolate analytics and side effects to avoid blocking UI threads.
+- Respect reduced-motion preferences to improve performance and accessibility on constrained devices.
 
 [No sources needed since this section provides general guidance]
 
 ## Troubleshooting Guide
-- If infinite scroll does not trigger, verify the sentinel ref is attached and the nearest scrollable ancestor is correctly detected.
-- If realtime updates are missing, check channel subscription status and ensure cleanup runs on unmount.
-- For slow initial loads, confirm dynamic imports are applied to heavy components and that image remote patterns are correct.
-- If skeletons persist too long, inspect loading states and ensure data fetch completion paths update UI properly.
+- If images fail to load, verify remotePatterns and ensure fallbacks render correctly to avoid layout shifts.
+- If lists do not paginate, check that the sentinel element is attached and the observer is configured with appropriate rootMargin.
+- If queries refetch too often, adjust staleTime and gcTime in the query client defaults.
+- If map searches trigger excessively, ensure the controller uses stable refs and only runs when request identity changes.
 
 **Section sources**
-- [useInfiniteScroll.ts:42-67](file://src/hooks/useInfiniteScroll.ts#L42-L67)
-- [usePaginatedContent.ts:209-284](file://src/hooks/usePaginatedContent.ts#L209-L284)
-- [next.config.js:8-14](file://next.config.js#L8-L14)
+- [next.config.js:1-18](file://next.config.js#L1-L18)
+- [CardMedia.tsx:1-63](file://src/components/ui/cards/CardMedia.tsx#L1-L63)
+- [useInfiniteScroll.ts:1-35](file://src/hooks/useInfiniteScroll.ts#L1-L35)
+- [queryClient.ts:1-12](file://src/lib/query/queryClient.ts#L1-L12)
+- [GoogleMapDetail.tsx:112-127](file://src/components/ui/map/GoogleMapDetail.tsx#L112-L127)
 
 ## Conclusion
-The application employs a comprehensive set of performance strategies: code splitting for heavy components, viewport-driven loading via IntersectionObserver, efficient data fetching with caching and realtime updates, skeleton UI for perceived responsiveness, and image optimization through Next.js configuration. Together, these practices help maintain smooth interactions and fast load times as the application grows.
+Argo combines Next.js build-time optimizations, TanStack Query caching, and carefully designed hooks to deliver fast, responsive experiences. By leveraging viewport-aware loading, robust image fallbacks, and isolated analytics, the application minimizes unnecessary work and maximizes perceived performance across devices. Continued attention to cache tuning, bundle composition, and accessibility will further enhance performance and reliability.
 
 [No sources needed since this section summarizes without analyzing specific files]
