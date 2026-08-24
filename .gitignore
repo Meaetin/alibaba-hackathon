@@ -4,3 +4,7 @@ out
 .env.local
 .DS_Store
 *.tsbuildinfo
+.neon
+
+# Fetched Google Places content — cacheable for 30 days, not committable
+scripts/output/

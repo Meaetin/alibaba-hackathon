@@ -17,17 +17,28 @@
  *   7. Every activity has non-empty match_reasons                ✔ below
  *   8. Every dropped candidate has a recorded reason             ✔ below
  *
- * 5–8 hold on the deterministic core as it stands today and are enforced here.
- * 1–4 are about a *packed day*, which doesn't exist until `pack.ts` — add
- * `assertValidItinerary` alongside these when it does, rather than stubbing it
- * now: an invariant that passes because it checks nothing is worse than none.
+ * 3 landed with Step 8 and lives in `assertHoursHonoured`, apart from the rest
+ * because it needs the **weekday** and a packed day does not carry one. Nothing
+ * in the planner does: `start_date` sits on `GenerateItineraryParams` and stops
+ * at the API seam, so until Step 15 threads it through, the weekday is a
+ * parameter every caller supplies — injected the way `rng` and `now` are.
+ *
+ * The other half of what 3 needs is real hours on the candidates. Retrieval
+ * already requests `openingPeriods` in its field mask, and the Kyoto fixture
+ * now carries them; a candidate set without them makes this assertion vacuous
+ * rather than false, which is why `assumed` exists to say so out loud.
  */
 
 import { expect } from 'vitest'
 
 import type { CandidatePlace, PreferenceProfile } from '../types'
 import type { FunnelResult, MealSelection } from '../funnel'
+import type { PackDayInput, PackedDay } from '../pack'
+import { DAY_END_MIN, DAY_START_MIN, isMealRole, slotWindow } from '../pack'
+import type { Weekday } from '../hours'
+import { hasKnownHours, isOpenDuring } from '../hours'
 import { hardFilterReason } from '../score'
+import { isRestaurant } from '../taxonomy'
 
 /**
  * Everything the funnel guarantees about a shortlist. Deliberately stated as
@@ -128,4 +139,104 @@ export function assertWellFormedCandidates(candidates: readonly CandidatePlace[]
       expect(place.priceLevel).toBeLessThanOrEqual(4)
     }
   }
+}
+
+/**
+ * 1, 2 and 4 — everything a *packed day* guarantees, stated over the returned
+ * timeline rather than over the packer's internals. Takes the input it was
+ * built from because half the guarantees are about the relationship between the
+ * two: a day is only correct relative to what it was asked to schedule.
+ */
+export function assertValidItinerary(day: PackedDay, input: PackDayInput): void {
+  const given = new Map<string, CandidatePlace>()
+  for (const assignment of input.assignments) given.set(assignment.place.placeId, assignment.place)
+  for (const pick of input.flex ?? []) given.set(pick.place.placeId, pick.place)
+
+  // 1. Contiguous: no overlap, no gap, and no segment that takes zero minutes.
+  for (const segment of day.segments) {
+    expect(
+      segment.endMin,
+      `a ${segment.kind} segment at ${segment.startMin} takes no time at all`,
+    ).toBeGreaterThan(segment.startMin)
+  }
+  for (let i = 0; i + 1 < day.segments.length; i++) {
+    expect(
+      day.segments[i].endMin,
+      `the day tears open between segment ${i} (${day.segments[i].kind}) and ${i + 1}`,
+    ).toBe(day.segments[i + 1].startMin)
+  }
+
+  const activities = day.segments.filter((segment) => segment.kind === 'activity')
+
+  // 2. Every meal slot holds somewhere you can actually eat, inside its window.
+  //    The window is the reason the slot exists — a "lunch" at 16:00 is not one.
+  for (const activity of activities) {
+    if (!isMealRole(activity.role)) continue
+    const place = given.get(activity.placeId)!
+    expect(
+      isRestaurant(place),
+      `${place.name} is holding the ${activity.role} slot and is not a restaurant`,
+    ).toBe(true)
+    const [opens, latest] = slotWindow(activity.role)
+    expect(activity.startMin, `${activity.role} starts before its window opens`).toBeGreaterThanOrEqual(opens)
+    expect(activity.startMin, `${activity.role} starts after its window closes`).toBeLessThanOrEqual(latest)
+  }
+
+  // 4. The day stays inside its own wall clock.
+  if (day.segments.length > 0) {
+    expect(day.segments[0].startMin, 'the day starts before 09:00').toBeGreaterThanOrEqual(DAY_START_MIN)
+    expect(day.segments.at(-1)!.endMin, 'the day runs past 21:00').toBeLessThanOrEqual(DAY_END_MIN)
+  }
+
+  // 5 and 8 again, one day at a time: nothing invented, nothing vanished.
+  const scheduled = new Set(activities.map((activity) => activity.placeId))
+  const dropped = new Set(day.dropped.map((record) => record.placeId))
+  expect(scheduled.size, 'a place is scheduled twice in one day').toBe(activities.length)
+  for (const id of scheduled) {
+    expect(given.has(id), `${id} is in the day but was never assigned to it`).toBe(true)
+  }
+  for (const [id, place] of given) {
+    expect(
+      scheduled.has(id) !== dropped.has(id),
+      `${place.name} must be scheduled XOR dropped, not ${scheduled.has(id) ? 'both' : 'neither'}`,
+    ).toBe(true)
+  }
+  for (const record of day.dropped) {
+    expect(record.reason.trim().length, `${record.name} was cut with no reason given`).toBeGreaterThan(0)
+  }
+}
+
+/**
+ * 3. Every place is open for the whole of its assigned window — the guarantee
+ * `validate.ts` exists to produce, stated over the finished day so that any
+ * future repair strategy is judged by the same rule.
+ *
+ * Returns the stops it could only *assume* were open, so a caller can tell an
+ * empty check from a passed one. A fixture with no hours makes this assertion
+ * true and meaningless; the returned list is how you find out that happened.
+ */
+export function assertHoursHonoured(
+  day: PackedDay,
+  input: PackDayInput,
+  weekday: Weekday,
+): CandidatePlace[] {
+  const given = new Map<string, CandidatePlace>()
+  for (const assignment of input.assignments) given.set(assignment.place.placeId, assignment.place)
+  for (const pick of input.flex ?? []) given.set(pick.place.placeId, pick.place)
+
+  const assumed: CandidatePlace[] = []
+  for (const segment of day.segments) {
+    if (segment.kind !== 'activity') continue
+    const place = given.get(segment.placeId)
+    if (!place) continue
+    if (!hasKnownHours(place)) {
+      assumed.push(place)
+      continue
+    }
+    expect(
+      isOpenDuring(place, weekday, segment.startMin, segment.endMin),
+      `${place.name} is scheduled ${segment.startMin}–${segment.endMin} on weekday ${weekday}, when it is shut`,
+    ).toBe(true)
+  }
+  return assumed
 }

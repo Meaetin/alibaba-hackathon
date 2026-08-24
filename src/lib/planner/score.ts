@@ -97,10 +97,10 @@ export function priceFit(
 // ── hard filters ─────────────────────────────────────────────────────────────
 
 /**
- * Google types that violate a dietary need outright. Applied to MEAL-SLOT
- * candidates only — a diet doesn't ban you from a museum with a grill in the
- * lobby. Best-effort by design: rung 2 of the dietary ladder (enrichment
- * tags) catches what a type can't.
+ * Google types that violate a dietary need outright. The fallback, used only
+ * where Google gave no direct answer — see `violatesDietaryNeed`. Applied to
+ * MEAL-SLOT candidates only: a diet doesn't ban you from a museum with a grill
+ * in the lobby.
  */
 const DIETARY_CONFLICT_TYPES: Record<string, readonly string[]> = {
   vegetarian: ["steak_house", "barbecue_restaurant", "seafood_restaurant", "hamburger_restaurant"],
@@ -116,7 +116,37 @@ export interface HardFilterContext {
   mealSlot?: boolean;
 }
 
+/**
+ * Needs Google answers directly, from the shortlist mask. A direct `false` is
+ * Google saying no, and it beats any guess we could make from the place type.
+ */
+const DIETARY_GOOGLE_FIELD: Record<string, (place: CandidatePlace) => boolean | undefined> = {
+  vegetarian: (place) => place.servesVegetarianFood,
+  vegan: (place) => place.servesVegetarianFood,
+};
+
+/**
+ * Two rungs, in order of how much we trust them.
+ *
+ * 1. Google's own boolean, when the shortlist hydration ran and Google answered.
+ *    `false` is a violation; `true` clears the place outright.
+ * 2. Otherwise the type list — a guess, and only reachable when Google is silent.
+ *
+ * The middle case is what matters: `undefined` means Google never said, which is
+ * the common answer outside chains. Reading it as `false` would delete most of
+ * a city, so it falls through to the guess rather than convicting.
+ *
+ * `vegan` reads the vegetarian flag deliberately. Google has no vegan field, and
+ * a place that serves no vegetarian food serves no vegan food either — so `false`
+ * is sound for both. `true` is weaker for vegan than vegetarian, which is why it
+ * clears the hard filter but doesn't promote a place up the ladder in `funnel.ts`.
+ */
 function violatesDietaryNeed(place: CandidatePlace, need: string): boolean {
+  const googleAnswer = Object.hasOwn(DIETARY_GOOGLE_FIELD, need)
+    ? DIETARY_GOOGLE_FIELD[need](place)
+    : undefined;
+  if (googleAnswer !== undefined) return !googleAnswer;
+
   const conflicts = Object.hasOwn(DIETARY_CONFLICT_TYPES, need)
     ? DIETARY_CONFLICT_TYPES[need]
     : undefined;

@@ -25,7 +25,16 @@
     "rating": 4.5,
     "userRatingCount": 12400,
     "priceLevel": 1,
-    "stayDuration": 60
+    "stayDuration": 60,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_okochi",
@@ -39,7 +48,16 @@
     "longitude": 135.6684,
     "rating": 4.6,
     "userRatingCount": 3400,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_monkeypark",
@@ -79,7 +97,16 @@
     "longitude": 135.6668,
     "rating": 4.5,
     "userRatingCount": 1900,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_jojakkoji",
@@ -92,7 +119,16 @@
     "longitude": 135.6676,
     "rating": 4.5,
     "userRatingCount": 1180,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_arabica_arashiyama",
@@ -106,7 +142,16 @@
     "longitude": 135.6768,
     "rating": 4.3,
     "userRatingCount": 4200,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sagano_yudofu",
@@ -120,7 +165,23 @@
     "longitude": 135.6726,
     "rating": 4.2,
     "userRatingCount": 380,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_shigetsu",
@@ -134,7 +195,23 @@
     "longitude": 135.674,
     "rating": 4.3,
     "userRatingCount": 620,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_yoshimura_soba",
@@ -148,7 +225,23 @@
     "longitude": 135.6773,
     "rating": 4.1,
     "userRatingCount": 3100,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kameyama",
@@ -186,7 +279,16 @@
     "rating": 4.0,
     "userRatingCount": 210,
     "priceLevel": 2,
-    "businessStatus": "CLOSED_PERMANENTLY"
+    "businessStatus": "CLOSED_PERMANENTLY",
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kiyomizu",
@@ -201,7 +303,16 @@
     "rating": 4.6,
     "userRatingCount": 68000,
     "priceLevel": 1,
-    "stayDuration": 90
+    "stayDuration": 90,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_yasaka",
@@ -213,7 +324,16 @@
     "latitude": 35.0036,
     "longitude": 135.7786,
     "rating": 4.5,
-    "userRatingCount": 33000
+    "userRatingCount": 33000,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kodaiji",
@@ -227,7 +347,16 @@
     "longitude": 135.7807,
     "rating": 4.4,
     "userRatingCount": 8600,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_chionin",
@@ -240,7 +369,16 @@
     "latitude": 35.0055,
     "longitude": 135.7825,
     "rating": 4.5,
-    "userRatingCount": 9700
+    "userRatingCount": 9700,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kenninji",
@@ -254,7 +392,16 @@
     "longitude": 135.7738,
     "rating": 4.4,
     "userRatingCount": 6200,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_maruyama",
@@ -303,7 +450,15 @@
     "longitude": 135.7729,
     "rating": 4.4,
     "userRatingCount": 7300,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sanjusangendo",
@@ -317,7 +472,16 @@
     "longitude": 135.7717,
     "rating": 4.6,
     "userRatingCount": 13000,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_arabica_higashiyama",
@@ -331,7 +495,16 @@
     "longitude": 135.7797,
     "rating": 4.3,
     "userRatingCount": 5600,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kasagiya",
@@ -344,7 +517,16 @@
     "longitude": 135.7811,
     "rating": 4.2,
     "userRatingCount": 430,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kikunoi",
@@ -359,7 +541,23 @@
     "longitude": 135.781,
     "rating": 4.6,
     "userRatingCount": 890,
-    "priceLevel": 4
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_gion_nanba",
@@ -373,7 +571,23 @@
     "longitude": 135.776,
     "rating": 4.7,
     "userRatingCount": 210,
-    "priceLevel": 4
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_gion_steak",
@@ -387,7 +601,23 @@
     "longitude": 135.7768,
     "rating": 4.5,
     "userRatingCount": 640,
-    "priceLevel": 4
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_omen",
@@ -401,7 +631,23 @@
     "longitude": 135.7801,
     "rating": 4.2,
     "userRatingCount": 1400,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_issen",
@@ -414,7 +660,23 @@
     "longitude": 135.7745,
     "rating": 3.9,
     "userRatingCount": 3600,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_nanzenji",
@@ -427,7 +689,16 @@
     "latitude": 35.0114,
     "longitude": 135.7942,
     "rating": 4.5,
-    "userRatingCount": 11000
+    "userRatingCount": 11000,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_philosophers",
@@ -454,7 +725,16 @@
     "longitude": 135.7982,
     "rating": 4.5,
     "userRatingCount": 26000,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_bluebottle",
@@ -468,7 +748,16 @@
     "longitude": 135.7862,
     "rating": 4.2,
     "userRatingCount": 2900,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_heian",
@@ -481,7 +770,16 @@
     "latitude": 35.016,
     "longitude": 135.7825,
     "rating": 4.4,
-    "userRatingCount": 17000
+    "userRatingCount": 17000,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_fushimi_inari",
@@ -522,7 +820,16 @@
     "longitude": 135.7735,
     "rating": 4.3,
     "userRatingCount": 780,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sando_chaya",
@@ -536,7 +843,23 @@
     "longitude": 135.7719,
     "rating": 4.0,
     "userRatingCount": 520,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_gekkeikan",
@@ -549,7 +872,15 @@
     "longitude": 135.762,
     "rating": 4.2,
     "userRatingCount": 3100,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sake_district",
@@ -574,7 +905,23 @@
     "longitude": 135.7607,
     "rating": 4.2,
     "userRatingCount": 1900,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kizakura",
@@ -588,7 +935,23 @@
     "longitude": 135.7627,
     "rating": 4.0,
     "userRatingCount": 1600,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_momoyama",
@@ -600,7 +963,16 @@
     "latitude": 34.9394,
     "longitude": 135.783,
     "rating": 4.1,
-    "userRatingCount": 2400
+    "userRatingCount": 2400,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kokopeli_closed",
@@ -615,7 +987,16 @@
     "rating": 4.1,
     "userRatingCount": 90,
     "priceLevel": 2,
-    "businessStatus": "CLOSED_PERMANENTLY"
+    "businessStatus": "CLOSED_PERMANENTLY",
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_nishiki",
@@ -628,7 +1009,16 @@
     "latitude": 35.005,
     "longitude": 135.7649,
     "rating": 4.2,
-    "userRatingCount": 34000
+    "userRatingCount": 34000,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_nijo",
@@ -641,7 +1031,16 @@
     "longitude": 135.7481,
     "rating": 4.5,
     "userRatingCount": 30000,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_imperial",
@@ -653,7 +1052,16 @@
     "latitude": 35.0254,
     "longitude": 135.7621,
     "rating": 4.4,
-    "userRatingCount": 12000
+    "userRatingCount": 12000,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_manga_museum",
@@ -666,7 +1074,15 @@
     "longitude": 135.7594,
     "rating": 4.1,
     "userRatingCount": 5200,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_museum_of_kyoto",
@@ -679,7 +1095,15 @@
     "longitude": 135.7625,
     "rating": 4.0,
     "userRatingCount": 1800,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kaleidoscope",
@@ -690,7 +1114,15 @@
     "primaryType": "museum",
     "latitude": 35.0117,
     "longitude": 135.7604,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_pontocho",
@@ -714,7 +1146,16 @@
     "latitude": 35.006,
     "longitude": 135.767,
     "rating": 4.1,
-    "userRatingCount": 6300
+    "userRatingCount": 6300,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_takashimaya",
@@ -728,7 +1169,16 @@
     "longitude": 135.7684,
     "rating": 4.2,
     "userRatingCount": 5100,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_daimaru",
@@ -741,7 +1191,16 @@
     "longitude": 135.7658,
     "rating": 4.1,
     "userRatingCount": 4700,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_weekenders",
@@ -755,7 +1214,16 @@
     "longitude": 135.7635,
     "rating": 4.5,
     "userRatingCount": 1400,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kurasu",
@@ -769,7 +1237,16 @@
     "longitude": 135.7566,
     "rating": 4.4,
     "userRatingCount": 900,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_walden",
@@ -783,7 +1260,16 @@
     "longitude": 135.7602,
     "rating": 4.3,
     "userRatingCount": 2100,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_bibliotic",
@@ -797,7 +1283,16 @@
     "longitude": 135.7672,
     "rating": 4.2,
     "userRatingCount": 2400,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_smart_coffee",
@@ -811,7 +1306,16 @@
     "longitude": 135.7676,
     "rating": 4.1,
     "userRatingCount": 3300,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_inoda",
@@ -825,7 +1329,16 @@
     "longitude": 135.7639,
     "rating": 4.2,
     "userRatingCount": 5800,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_mumokuteki",
@@ -839,7 +1352,23 @@
     "longitude": 135.7663,
     "rating": 4.1,
     "userRatingCount": 2600,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_ainsoph",
@@ -853,7 +1382,23 @@
     "longitude": 135.7684,
     "rating": 4.3,
     "userRatingCount": 940,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_uzu",
@@ -868,7 +1413,23 @@
     "longitude": 135.7708,
     "rating": 4.2,
     "userRatingCount": 1100,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_menbaka",
@@ -882,7 +1443,23 @@
     "longitude": 135.7513,
     "rating": 4.3,
     "userRatingCount": 4300,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sennokaze",
@@ -896,7 +1473,23 @@
     "longitude": 135.769,
     "rating": 4.2,
     "userRatingCount": 2200,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_ippudo",
@@ -910,7 +1503,23 @@
     "longitude": 135.766,
     "rating": 4.0,
     "userRatingCount": 1700,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_chaochao",
@@ -924,7 +1533,23 @@
     "longitude": 135.7706,
     "rating": 4.2,
     "userRatingCount": 3900,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_owariya",
@@ -938,7 +1563,23 @@
     "longitude": 135.7601,
     "rating": 4.2,
     "userRatingCount": 3700,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_katsukura",
@@ -952,7 +1593,23 @@
     "longitude": 135.7683,
     "rating": 4.3,
     "userRatingCount": 4100,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sushi_matsumoto",
@@ -966,7 +1623,23 @@
     "longitude": 135.7712,
     "rating": 4.6,
     "userRatingCount": 340,
-    "priceLevel": 4
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_sushi_iwa",
@@ -980,7 +1653,23 @@
     "longitude": 135.7719,
     "rating": 4.5,
     "userRatingCount": 280,
-    "priceLevel": 4
+    "priceLevel": 4,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_musashi",
@@ -994,7 +1683,23 @@
     "longitude": 135.7688,
     "rating": 3.9,
     "userRatingCount": 5600,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 11, "minute": 0 }, "close": { "day": 0, "hour": 14, "minute": 30 } },
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 22, "minute": 0 } },
+        { "open": { "day": 1, "hour": 11, "minute": 0 }, "close": { "day": 1, "hour": 14, "minute": 30 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 22, "minute": 0 } },
+        { "open": { "day": 2, "hour": 11, "minute": 0 }, "close": { "day": 2, "hour": 14, "minute": 30 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 22, "minute": 0 } },
+        { "open": { "day": 3, "hour": 11, "minute": 0 }, "close": { "day": 3, "hour": 14, "minute": 30 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 22, "minute": 0 } },
+        { "open": { "day": 4, "hour": 11, "minute": 0 }, "close": { "day": 4, "hour": 14, "minute": 30 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 22, "minute": 0 } },
+        { "open": { "day": 5, "hour": 11, "minute": 0 }, "close": { "day": 5, "hour": 14, "minute": 30 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 22, "minute": 0 } },
+        { "open": { "day": 6, "hour": 11, "minute": 0 }, "close": { "day": 6, "hour": 14, "minute": 30 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 22, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_bees_knees",
@@ -1008,7 +1713,16 @@
     "longitude": 135.7622,
     "rating": 4.6,
     "userRatingCount": 780,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 24, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 24, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 24, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 24, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 24, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 24, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 24, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_escamoteur",
@@ -1022,7 +1736,16 @@
     "longitude": 135.7699,
     "rating": 4.5,
     "userRatingCount": 1300,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 24, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 24, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 24, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 24, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 24, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 24, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 24, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_yoramu",
@@ -1036,7 +1759,16 @@
     "longitude": 135.7628,
     "rating": 4.4,
     "userRatingCount": 420,
-    "priceLevel": 3
+    "priceLevel": 3,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 17, "minute": 0 }, "close": { "day": 0, "hour": 24, "minute": 0 } },
+        { "open": { "day": 1, "hour": 17, "minute": 0 }, "close": { "day": 1, "hour": 24, "minute": 0 } },
+        { "open": { "day": 2, "hour": 17, "minute": 0 }, "close": { "day": 2, "hour": 24, "minute": 0 } },
+        { "open": { "day": 3, "hour": 17, "minute": 0 }, "close": { "day": 3, "hour": 24, "minute": 0 } },
+        { "open": { "day": 4, "hour": 17, "minute": 0 }, "close": { "day": 4, "hour": 24, "minute": 0 } },
+        { "open": { "day": 5, "hour": 17, "minute": 0 }, "close": { "day": 5, "hour": 24, "minute": 0 } },
+        { "open": { "day": 6, "hour": 17, "minute": 0 }, "close": { "day": 6, "hour": 24, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kinkakuji",
@@ -1050,7 +1782,16 @@
     "longitude": 135.7292,
     "rating": 4.6,
     "userRatingCount": 61000,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_ryoanji",
@@ -1064,7 +1805,16 @@
     "longitude": 135.7183,
     "rating": 4.4,
     "userRatingCount": 15000,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_daitokuji",
@@ -1078,7 +1828,16 @@
     "longitude": 135.7457,
     "rating": 4.3,
     "userRatingCount": 4200,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_botanical",
@@ -1092,7 +1851,16 @@
     "longitude": 135.764,
     "rating": 4.4,
     "userRatingCount": 6800,
-    "priceLevel": 1
+    "priceLevel": 1,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_kamigamo",
@@ -1105,7 +1873,16 @@
     "latitude": 35.06,
     "longitude": 135.7527,
     "rating": 4.4,
-    "userRatingCount": 3600
+    "userRatingCount": 3600,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 0 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 1, "hour": 9, "minute": 0 }, "close": { "day": 1, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 0 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 0 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 0 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 0 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 0 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_funaoka",
@@ -1131,7 +1908,16 @@
     "longitude": 135.7439,
     "rating": 4.3,
     "userRatingCount": 1200,
-    "priceLevel": 2
+    "priceLevel": 2,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 8, "minute": 0 }, "close": { "day": 0, "hour": 18, "minute": 0 } },
+        { "open": { "day": 1, "hour": 8, "minute": 0 }, "close": { "day": 1, "hour": 18, "minute": 0 } },
+        { "open": { "day": 2, "hour": 8, "minute": 0 }, "close": { "day": 2, "hour": 18, "minute": 0 } },
+        { "open": { "day": 3, "hour": 8, "minute": 0 }, "close": { "day": 3, "hour": 18, "minute": 0 } },
+        { "open": { "day": 4, "hour": 8, "minute": 0 }, "close": { "day": 4, "hour": 18, "minute": 0 } },
+        { "open": { "day": 5, "hour": 8, "minute": 0 }, "close": { "day": 5, "hour": 18, "minute": 0 } },
+        { "open": { "day": 6, "hour": 8, "minute": 0 }, "close": { "day": 6, "hour": 18, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_handicraft",
@@ -1142,7 +1928,16 @@
     ],
     "primaryType": "shopping_mall",
     "rating": 4.1,
-    "userRatingCount": 1900
+    "userRatingCount": 1900,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 10, "minute": 0 }, "close": { "day": 0, "hour": 20, "minute": 0 } },
+        { "open": { "day": 1, "hour": 10, "minute": 0 }, "close": { "day": 1, "hour": 20, "minute": 0 } },
+        { "open": { "day": 2, "hour": 10, "minute": 0 }, "close": { "day": 2, "hour": 20, "minute": 0 } },
+        { "open": { "day": 3, "hour": 10, "minute": 0 }, "close": { "day": 3, "hour": 20, "minute": 0 } },
+        { "open": { "day": 4, "hour": 10, "minute": 0 }, "close": { "day": 4, "hour": 20, "minute": 0 } },
+        { "open": { "day": 5, "hour": 10, "minute": 0 }, "close": { "day": 5, "hour": 20, "minute": 0 } },
+        { "open": { "day": 6, "hour": 10, "minute": 0 }, "close": { "day": 6, "hour": 20, "minute": 0 } }
+      ]
   },
   {
     "placeId": "ChIJ_nishijin_textile",
@@ -1153,6 +1948,14 @@
     ],
     "primaryType": "museum",
     "rating": 3.9,
-    "userRatingCount": 2300
+    "userRatingCount": 2300,
+    "openingPeriods": [
+        { "open": { "day": 0, "hour": 9, "minute": 30 }, "close": { "day": 0, "hour": 17, "minute": 0 } },
+        { "open": { "day": 2, "hour": 9, "minute": 30 }, "close": { "day": 2, "hour": 17, "minute": 0 } },
+        { "open": { "day": 3, "hour": 9, "minute": 30 }, "close": { "day": 3, "hour": 17, "minute": 0 } },
+        { "open": { "day": 4, "hour": 9, "minute": 30 }, "close": { "day": 4, "hour": 17, "minute": 0 } },
+        { "open": { "day": 5, "hour": 9, "minute": 30 }, "close": { "day": 5, "hour": 17, "minute": 0 } },
+        { "open": { "day": 6, "hour": 9, "minute": 30 }, "close": { "day": 6, "hour": 17, "minute": 0 } }
+      ]
   }
 ]

@@ -43,6 +43,9 @@ function fillCluster(prefix: string, n: number, types: string[] = ['tourist_attr
   )
 }
 
+const isRestaurant = (p: CandidatePlace) =>
+  p.types.some((t) => t === 'restaurant' || t.endsWith('_restaurant'))
+
 /** Which fixture cluster a shortlisted place came from ("c3" for "c3-p42"). */
 function clusterOf(placeId: string): string {
   return placeId.split('-')[0]
@@ -250,11 +253,11 @@ describe('cluster grouping (Pass B input)', () => {
     }
   })
 
-  it('a cluster emptied by the quotas is omitted, not returned empty', () => {
+  it('reserves meals for a cluster the global quotas would otherwise starve', () => {
     const clusters: PlaceCluster[] = [
       makeCluster(fillCluster('good', 30)),
-      // All one cuisine, all worse-rated: the cuisine quota admits 3, and even
-      // those lose to the good cluster.
+      // All one cuisine, all worse-rated: on score alone every one of these
+      // loses to the good cluster, and the cuisine quota would admit 3 at most.
       {
         centroid: { latitude: 35.5, longitude: 135.9 },
         places: fillCluster('food', 30, ['restaurant', 'ramen_restaurant']).map((p) => ({
@@ -267,7 +270,41 @@ describe('cluster grouping (Pass B input)', () => {
     const result = runFunnel(clusters, makeProfile(), { globalCap: 20 })
 
     expect(result.clusters.every((c) => c.places.length > 0)).toBe(true)
+    // The reservation is the whole point: a day in the quiet neighborhood still
+    // gets fed, even though nothing there outranks the good cluster.
+    const food = result.clusters.find((c) => clusterOf(c.places[0].placeId) === 'food')
+    expect(food, 'the food cluster was starved out entirely').toBeDefined()
+    expect(food!.places.filter(isRestaurant)).toHaveLength(FUNNEL_DEFAULTS.mealsPerCluster)
+    expect(food!.shortfall).toBeUndefined()
+  })
+
+  it('a cluster with nothing to reserve and nothing competitive is omitted, not returned empty', () => {
+    const clusters: PlaceCluster[] = [
+      makeCluster(fillCluster('good', 30)),
+      // No restaurants, so nothing is reserved; every member loses on score.
+      {
+        centroid: { latitude: 35.5, longitude: 135.9 },
+        places: fillCluster('dull', 30).map((p) => ({ ...p, rating: 3.0, userRatingCount: 5 })),
+      },
+    ]
+    const result = runFunnel(clusters, makeProfile(), { globalCap: 20 })
+
+    expect(result.clusters.every((c) => c.places.length > 0)).toBe(true)
     expect(result.clusters.map((c) => clusterOf(c.places[0].placeId))).toEqual(['good'])
+  })
+
+  it('says so when a cluster cannot seat a day\u2019s meals', () => {
+    // One restaurant available where a day needs two.
+    const clusters: PlaceCluster[] = [
+      makeCluster([
+        ...fillCluster('lonely', 10),
+        makePlace('lonely-eat', { types: ['restaurant'], rating: 4.5, userRatingCount: 900 }),
+      ]),
+    ]
+    const result = runFunnel(clusters, makeProfile())
+
+    expect(result.clusters[0].shortfall).toMatch(/cannot seat/i)
+    expect(result.clusters[0].shortfall).toMatch(/1 place/)
   })
 })
 
@@ -445,6 +482,36 @@ describe('dietary degradation ladder', () => {
     expect(result.rung).toBe(2)
     expect(result.places.map((p) => p.placeId)).toEqual(['friendly-izakaya'])
     expect(result.caveat).toBeUndefined()
+  })
+
+  // Google states this outright; the enrichment model was inferring it from
+  // review text. Ask Google first.
+  it("rung 2 accepts Google's servesVegetarianFood with no enrichment tag present", () => {
+    const googleVeggie = { ...friendlyIzakaya, servesVegetarianFood: true }
+    const result = selectMealCandidates([googleVeggie, ramenShop], profile)
+    expect(result.rung).toBe(2)
+    expect(result.places.map((p) => p.placeId)).toEqual(['friendly-izakaya'])
+  })
+
+  it("Google's false overrides a vegetarian-friendly enrichment tag", () => {
+    const googleSaysNo = { ...friendlyIzakaya, servesVegetarianFood: false }
+    const result = selectMealCandidates([googleSaysNo, ramenShop], profile, {
+      'friendly-izakaya': ['vegetarian-friendly'],
+    })
+    expect(result.rung).toBe(3)
+  })
+
+  // Google has no vegan field, so vegan must keep using tags even when the
+  // vegetarian flag is set — vegetarian is not vegan.
+  it('a vegan need ignores servesVegetarianFood and still reads the tag', () => {
+    const veganProfile = makeProfile({ dietary: ['vegan'] })
+    const googleVeggie = { ...friendlyIzakaya, servesVegetarianFood: true }
+    expect(selectMealCandidates([googleVeggie, ramenShop], veganProfile).rung).toBe(3)
+    expect(
+      selectMealCandidates([googleVeggie, ramenShop], veganProfile, {
+        'friendly-izakaya': ['vegan-friendly'],
+      }).rung,
+    ).toBe(2)
   })
 
   it('rungs 1 and 2 empty → rung 3 (any restaurant) AND the result carries the caveat flag', () => {

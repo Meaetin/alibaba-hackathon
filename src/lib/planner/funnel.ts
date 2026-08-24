@@ -19,13 +19,12 @@ import type { CandidatePlace, PreferenceProfile } from "./types";
 import type { PlaceCluster } from "./cluster";
 import {
   affinity,
-  applyHardFilters,
   hardFilterReason,
   matchedInterests,
   scorePlace,
   type ScoredPlace,
 } from "./score";
-import { dietaryBridgeFor } from "./taxonomy";
+import { dietaryBridgeFor, isRestaurant } from "./taxonomy";
 
 // ── staged narrowing ─────────────────────────────────────────────────────────
 
@@ -40,6 +39,14 @@ export interface FunnelOptions {
   /** Max places sharing one cuisine type (`*_restaurant`). */
   maxPerCuisine?: number;
   /**
+   * Meal-capable places reserved for **each** cluster before the global cap is
+   * spent. Without it the global cap is a single greedy walk down one ranked
+   * pool, so the best-scored restaurants all land in whichever neighborhoods
+   * are dense and a thin cluster gets none — which is not a shortlist that can
+   * become a day. Two: lunch and dinner.
+   */
+  mealsPerCluster?: number;
+  /**
    * Candidates clustering could not place (no lat/lng). Passed in so
    * `stats.retrieved` counts everything retrieval produced and every drop has
    * a recorded reason — otherwise they vanish between the two modules.
@@ -52,6 +59,7 @@ export const FUNNEL_DEFAULTS = {
   globalCap: 60,
   maxRestaurantShare: 0.4,
   maxPerCuisine: 3,
+  mealsPerCluster: 2,
   unlocated: [],
 } as const satisfies Required<FunnelOptions>;
 
@@ -84,6 +92,12 @@ export interface ScoredCluster {
   score: number;
   /** Shortlisted members of this cluster, best-first. */
   places: CandidatePlace[];
+  /**
+   * Set when this cluster cannot furnish a whole day — today, when it holds no
+   * restaurant to seat a meal in. A day built from it will be missing something,
+   * and the caller is told so here rather than discovering it in the timeline.
+   */
+  shortfall?: string;
   /** The same members scored, index-aligned with `places`. */
   scored: ScoredPlace[];
 }
@@ -99,10 +113,6 @@ export interface FunnelResult {
   dropped: DroppedCandidate[];
   /** Persisted as `funnel_stats` on the itinerary row. */
   stats: FunnelStats;
-}
-
-function isRestaurant(place: CandidatePlace): boolean {
-  return place.types.some((t) => t === "restaurant" || t.endsWith("_restaurant"));
 }
 
 /** Specific cuisine types ("ramen_restaurant"), not the generic "restaurant". */
@@ -181,7 +191,7 @@ export function runFunnel(
   profile: PreferenceProfile,
   options: FunnelOptions = {},
 ): FunnelResult {
-  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, unlocated } = {
+  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated } = {
     ...FUNNEL_DEFAULTS,
     ...options,
   };
@@ -246,7 +256,28 @@ export function runFunnel(
   const afterGlobalCap: CandidatePlace[] = [];
   let restaurantCount = 0;
   const cuisineCounts = new Map<string, number>();
+
+  // Every cluster's best few restaurants are claimed up front and admitted
+  // ahead of the greedy walk, so a day in a quiet neighborhood still gets fed.
+  // They're taken from the ranked pool, not added to it — the cap is unchanged.
+  const reserved = new Set<string>();
+  for (const places of cappedByCluster) {
+    for (const place of places
+      .filter(isRestaurant)
+      .sort((a, b) => scores.get(b.placeId)!.score - scores.get(a.placeId)!.score)
+      .slice(0, mealsPerCluster)) {
+      reserved.add(place.placeId);
+    }
+  }
   for (const place of ranked) {
+    if (!reserved.has(place.placeId)) continue;
+    restaurantCount += 1;
+    for (const c of cuisineTypes(place)) cuisineCounts.set(c, (cuisineCounts.get(c) ?? 0) + 1);
+    afterGlobalCap.push(place);
+  }
+
+  for (const place of ranked) {
+    if (reserved.has(place.placeId)) continue;
     if (afterGlobalCap.length >= globalCap) {
       dropped.push({
         placeId: place.placeId,
@@ -282,16 +313,26 @@ export function runFunnel(
 
   // Regroup the shortlist by cluster, best cluster first. Empty clusters are
   // omitted — a day cannot be built from one.
+  // The reserved pre-pass admitted meals out of turn; the shortlist Pass B sees
+  // is score-ordered regardless of how a place earned its slot.
+  afterGlobalCap.sort((a, b) => scores.get(b.placeId)!.score - scores.get(a.placeId)!.score);
+
   const shortlisted = new Set(afterGlobalCap.map((p) => p.placeId));
   const scoredClusters: ScoredCluster[] = clusters
     .map((cluster, index) => {
       const members = (cappedByCluster[index] ?? []).filter((p) => shortlisted.has(p.placeId));
+      const meals = members.filter(isRestaurant).length;
       return {
         centroid: cluster.centroid,
         label: cluster.label,
         score: scoreCluster(members, profile),
         places: members,
         scored: members.map((p) => scores.get(p.placeId)!),
+        ...(meals < mealsPerCluster
+          ? {
+              shortfall: `only ${meals} place${meals === 1 ? "" : "s"} to eat; a day here cannot seat ${mealsPerCluster} meals`,
+            }
+          : {}),
       };
     })
     .filter((c) => c.places.length > 0)
@@ -357,9 +398,15 @@ export interface MealSelection {
 /**
  * Descends the dietary ladder over a meal bucket (already hard-filtered):
  *   1. place types match the dietary bridge (`vegetarian_restaurant`, …)
- *   2. enrichment tags include `"{need}-friendly"`
+ *   2. Google's own `servesVegetarianFood`, or enrichment tags saying
+ *      `"{need}-friendly"` where Google is silent
  *   3. any restaurant in the bucket, surfaced with an explicit caveat
  * Never fails the day. A trip built on rung 3 says so — log the rung.
+ *
+ * Rung 2 asks Google before it asks the enrichment model, because the model is
+ * inferring from review text what Google already states. Only `vegetarian` has
+ * a Google field; `vegan` and everything else still rely on tags, since a place
+ * serving vegetarian food is not thereby vegan.
  */
 export function selectMealCandidates(
   bucket: readonly CandidatePlace[],
@@ -376,14 +423,7 @@ export function selectMealCandidates(
   );
   if (rung1.length > 0) return { places: rung1, rung: 1 };
 
-  const rung2 = bucket.filter((place) =>
-    needs.every((need) =>
-      (Object.hasOwn(enrichmentTags, place.placeId)
-        ? enrichmentTags[place.placeId]
-        : undefined
-      )?.includes(`${need}-friendly`),
-    ),
-  );
+  const rung2 = bucket.filter((place) => needs.every((need) => meetsAtRung2(place, need, enrichmentTags)));
   if (rung2.length > 0) return { places: rung2, rung: 2 };
 
   return {
@@ -391,6 +431,21 @@ export function selectMealCandidates(
     rung: 3,
     caveat: `limited ${needs.join("/")} options — call ahead`,
   };
+}
+
+/** Google's direct answer where it has one, the enrichment tag otherwise. */
+function meetsAtRung2(
+  place: CandidatePlace,
+  need: string,
+  enrichmentTags: Record<string, readonly string[]>,
+): boolean {
+  if (need === "vegetarian" && place.servesVegetarianFood !== undefined) {
+    return place.servesVegetarianFood;
+  }
+  const tags = Object.hasOwn(enrichmentTags, place.placeId)
+    ? enrichmentTags[place.placeId]
+    : undefined;
+  return tags?.includes(`${need}-friendly`) ?? false;
 }
 
 // ── budget degradation ladder ────────────────────────────────────────────────

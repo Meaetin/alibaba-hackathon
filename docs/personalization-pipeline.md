@@ -25,8 +25,8 @@ coffee in Kyoto". This guarantees we query Google in a way that reflects what th
 user actually asked for.
 
 **Step 3 — Retrieve candidates from Google, cache-first.** Before spending a single
-billed call we check our own cache: a search whose `(city, query, type)` hash we've
-seen recently replays stored `place_id`s instead of hitting Google. Only the misses
+billed call we check our own cache: a search whose `(city, query, type, pageSize)`
+hash we've seen recently replays stored `place_id`s instead of hitting Google. Only the misses
 go out. Uncached, a city the size of Tokyo costs roughly fifty Enterprise-tier
 requests, so this check is the difference between a demo that costs cents and one
 that costs real money. Each candidate carries everything needed later: types,
@@ -301,7 +301,6 @@ const SEARCH_FIELD_MASK = [
   'places.id','places.displayName','places.location','places.types','places.primaryType',
   'places.rating','places.userRatingCount','places.priceLevel','places.priceRange',
   'places.regularOpeningHours','places.businessStatus',
-  'places.reviews',   // the enrichment pass's only free-text input
   'places.photos',    // resource NAMES only — resolving to an image is a separate SKU
 ].join(',')
 ```
@@ -312,9 +311,18 @@ Three deliberate choices in that mask:
 on, and where it exists it's generic. The enrichment pass writes a better description
 from reviews — see [Stage 7](#beyond-google-data-cached-llm-enrichment).
 
-**`places.reviews` becomes load-bearing.** Dropping the editorial summary leaves
-reviews as the *only* free-text signal enrichment gets. If this field is missing from
-the mask, enrichment silently degrades to guessing from the place name and types.
+**Atmosphere fields are hydrated only for the shortlist, and then all at once.**
+Any of `reviews`, `editorialSummary`, `reviewSummary` or the `serves*` booleans
+raises a Text Search request from Enterprise to Enterprise + Atmosphere. Bulk
+retrieval therefore asks for none of them and leaves `shortlist_hydrated_at`
+null.
+
+After the funnel, one Place Details call per shortlisted ID carries the whole
+`SHORTLIST_FIELD_MASK`. The tier is priced **per request**, so once reviews are
+on the mask the rest cost nothing — asking for reviews alone, as the first cut
+of this did, paid Atmosphere prices for a third of the goods. Enrichment gets
+its free-text signal, the dietary ladder gets Google's own
+`servesVegetarianFood`, and no candidate query pays a higher tier.
 
 **`places.photos` returns resource names, not images.** Keep the names; do not
 resolve them here — see [Photos](#photos-resolve-late-never-during-retrieval).
@@ -397,17 +405,23 @@ opening hours. Times as minutes-from-midnight integers (trivially validatable):
 
 ```ts
 const DAY_SKELETON = [
-  { role: "morning_activity",   window: [540, 660] },   // 9:00–11:00
-  { role: "lunch",              window: [690, 810] },   // 11:30–13:30
-  { role: "afternoon_activity", window: [810, 990] },
-  { role: "cafe_break",         window: [930, 1020] },  // soft/optional
-  { role: "dinner",             window: [1080, 1200] }, // 18:00–20:00
-  { role: "evening_activity",   window: [1200, 1260] }, // optional, pace-gated
+  { role: "lunch",      window: [690, 810] },   // 11:30–13:30, hard
+  { role: "cafe_break", window: [930, 1020] },  // 15:30–17:00, soft
+  { role: "dinner",     window: [1080, 1200] }, // 18:00–20:00, hard
 ];
 ```
 
-**Pass B — Assignment (LLM).** Maps candidate IDs → slot roles per day. IDs only, no
-times.
+Only the anchored parts of a day appear here. A stop's role is `activity` |
+`lunch` | `dinner` | `cafe_break` — **what it is, never when it happens**. An
+earlier version had `morning_activity` / `afternoon_activity` / `evening_activity`,
+which made three claims in one field: the kind of stop, its position, and a time.
+Only the time could be wrong, and it duplicated `start_min`. Position is now the
+array index and the time is the timestamp, so nothing in a day can contradict
+anything else in it.
+
+**Pass B — Assignment (LLM).** Emits an **ordered** day of candidate IDs, each
+tagged with its role. IDs and order only, no times — the scheduler does not
+reorder what it is given.
 
 **Pass C — Narration (LLM, parallel + cached prefix).** After the scheduler stamps
 every time, one small LLM call per activity generates the content layer:
@@ -502,12 +516,20 @@ images of roughly a thousand places to display fifteen.
 // during retrieval — free, part of the search response
 photo_names: ["places/ChIJ.../photos/AeJb..."]
 
-// at Step 12 only, for stops that survived
-photo_urls: ["https://places.googleapis.com/v1/places/.../media?..."]
+// at photo-resolution time only, for stops that survived
+photo_urls: ["https://lh3.googleusercontent.com/places/..."]
 ```
 
+What gets stored is the **`photoUri` from a `skipHttpRedirect=true` response**, not
+the `/media` request URL. The `/media` URL only renders in an `<img src>` if the API
+key is embedded in it, and `GOOGLE_PLACES_API_KEY` is a server key with no referrer
+restriction — that would publish it in the page source and re-bill the Photos SKU on
+every render. The `photoUri` carries no key and is served by Google's CDN.
+
 `photos_resolved_at` distinguishes "we have names but never fetched media" from "this
-place genuinely has no photos" — without it, a re-plan can't tell whether to try.
+place genuinely has no photos" — without it, a re-plan can't tell whether to try. It
+is stamped when the answer is known, including "this place has no photos at all". A
+media fetch that *fails* leaves it null, so a replan retries.
 
 Two notes on the existing browser path, which is **not** wasteful and doesn't need
 changing. `place-search.ts` calls `p.getURI()` on up to three photos per result,
@@ -560,11 +582,23 @@ Pace is a **plan-level input** that changes three things:
 
 ```ts
 const PACE_PLANS = {
-  relaxed:  { activitiesPerDay: 2, eveningSlot: false, bufferMin: 25, durationBias: "max" },
-  balanced: { activitiesPerDay: 3, eveningSlot: true,  bufferMin: 15, durationBias: "preferred" },
-  packed:   { activitiesPerDay: 4, eveningSlot: true,  bufferMin: 10, durationBias: "min" },
+  relaxed:  { dayEndMin: 1200, bufferMin: 25, shrinkFloor: "preferred", durationBias: "max" },
+  balanced: { dayEndMin: 1260, bufferMin: 15, shrinkFloor: "min",       durationBias: "preferred" },
+  packed:   { dayEndMin: 1260, bufferMin: 10, shrinkFloor: "min",       durationBias: "min" },
 };
 ```
+
+Note there is no cap on stops per day, in minutes or in count. `activitiesPerDay`
+used to be one, and it cut days the clock had room for — three 68-minute temples,
+finished by 13:28, with a fourth dropped for "pace cap". Converting it to minutes
+doesn't help either: after two meals and travel a balanced day physically cannot
+exceed ~415–465 activity minutes, so any cap above that is unreachable and any cap
+below it re-creates the thin day. The wall clock **is** the minute budget.
+
+`shrinkFloor` is what stops `durationBias` undoing itself. A relaxed day built at
+`max` and then squeezed back to `min` to fit the same stops a packed day would take
+is not a relaxed day; at `preferred` it loses the sixth stop instead. Fewer stops is
+the *consequence* of a relaxed pace, never the input to it.
 
 Meals are **semi-fixed anchors** (lunch lands inside 11:30–13:30 regardless);
 activities are elastic in the gaps between anchors. Special case: if enrichment says
@@ -725,28 +759,60 @@ personalized phrasing.
 
 # Model & SDK Choices
 
-`@anthropic-ai/sdk` is not yet a dependency — add it. Default model is
-`claude-opus-5` throughout; the two passes differ in how they're called, not which
-model they use.
+`openai` is not yet a dependency — add it. Everything below is the **Responses**
+API (`client.responses.*`), not Chat Completions; the two differ in request shape,
+and mixing them is the most common way to end up with code that half-works.
 
-**Enrichment (Stage 7) — Batches API.** ~60 independent, latency-tolerant calls that
-we intend to cache for 90 days. `client.messages.batches.create` is 50% cheaper and
-purpose-built for this. Two things to get right: results come back in **any order**,
-so key by `custom_id` (= `place_id`) and never by position; and run it at
-`output_config: { effort: "low" }` — tag extraction from a review snippet is not a
-reasoning task.
+**Two models, not one.** An earlier draft used a single model everywhere. That reads
+as simplicity and prices like carelessness: the three call sites have nothing in
+common but the vendor.
 
-**Pass B — one call, structured output.** Use `client.messages.parse()` with
-`zodOutputFormat(AssignmentSchema)`. Schema conformance is enforced at the API layer,
-so there's no JSON repair loop to write. The candidate-ID membership check remains
-ours.
+| Call site | Model | Why |
+|---|---|---|
+| Pass B — assignment | `gpt-5.6-terra` | One call per itinerary. It does constrained combinatorial work *and* arithmetic against a stated minute budget — the one place a cheap model's failure is expensive, because a bad assignment costs a Step 8 repair loop. |
+| Pass C — narration | `gpt-5.6-luna` | ~15 short prose calls per itinerary, no reasoning. Its stated purpose is cost-sensitive high-volume work. |
+| Stage 7 — enrichment | `gpt-5.6-luna` | ~60 batch calls of tag extraction from review snippets. Explicitly not a reasoning task. |
+
+Frontier (`gpt-5.6-sol`) is deliberately unused. Nothing in this pipeline asks a
+model to do anything hard — code owns the clock, code owns the geometry, and code
+owns the filtering. The LLM assigns IDs to buckets and writes two sentences.
+
+Both models take `reasoning: { effort }` with the full ladder (`none`, `low`,
+`medium` — the default — `high`, `xhigh`, `max`). **Set it explicitly at every call
+site.** The default is `medium`, so an unset `effort` silently buys reasoning tokens
+for tag extraction.
+
+**Enrichment (Stage 7) — Batch API.** ~60 independent, latency-tolerant calls we
+intend to cache for 90 days, so the 24-hour turnaround costs nothing. Two things to
+get right: results come back in **any order**, so key by `custom_id` (= `place_id`)
+and never by position; and run it at `reasoning: { effort: "none" }`.
+
+**Pass B — one call, structured output.** Use `client.responses.parse()` with
+`zodTextFormat(AssignmentSchema, "assignment")` from `openai/helpers/zod`, passed as
+`text: { format: ... }`. Schema conformance is enforced at the API layer, so there is
+no JSON repair loop to write. The candidate-ID membership check remains ours — the
+schema constrains *shape*, never *truth*, and a well-formed response can still name a
+place that was never retrieved.
 
 **Pass C — ~15 parallel calls, cached prefix.** Every call shares the same system
-prompt and profile slice and differs only in the per-stop payload. Put a
-`cache_control: { type: 'ephemeral' }` breakpoint on the last shared block, with the
-per-stop content strictly *after* it. Get this backwards and each of the 15 calls
-writes its own cache entry and reads nothing. Current models cache prefixes from 512
-tokens, so this pays off even with a modest system prompt.
+prompt and profile slice and differs only in the per-stop payload.
+
+Unlike Anthropic's, OpenAI's prompt caching is **automatic** — there is no
+`cache_control` breakpoint to place, and nothing to opt into. What it does require:
+
+1. **The shared prefix must come first, byte-identical.** Caching routes on a prefix
+   hash, so a per-stop field interpolated above the shared instructions means fifteen
+   distinct prefixes and zero cache reads. This is the same failure the breakpoint
+   version had, minus the visible knob that would have warned you.
+2. **≥1024 tokens of shared prefix**, or nothing caches at all. Caching just above
+   the threshold is documented as inconsistent, so treat 1024 as the floor, not the
+   target.
+3. **Set `prompt_cache_key`** to route the fifteen calls to the same cache — a
+   per-itinerary constant, not a per-stop one.
+
+Verify with `usage.prompt_tokens_details.cached_tokens`. If it is 0 across all
+fifteen calls, the prefix is not actually shared — diff two rendered requests before
+touching anything else.
 
 ---
 
@@ -759,6 +825,7 @@ three of the four narrowing stages no-ops.
 | Stage | Cold city | Warm city (cache hit) |
 |---|---|---|
 | Places search | ~50 Enterprise requests | 0 |
+| Shortlist reviews | ~60 Place Details Enterprise + Atmosphere requests | 0 |
 | Enrichment | ~60 batch LLM calls | 0 |
 | Pass B | 1 call, ~7k tokens | 1 call |
 | Pass C | ~15 parallel calls | ~15 parallel calls |
@@ -823,7 +890,11 @@ create table locations (
   formatted_address text,
   city              text,
   opening_periods   jsonb,             -- Google regularOpeningHours.periods
-  review_snippets   jsonb,             -- up to 5. The enrichment pass's only free text.
+  review_snippets   jsonb,             -- null = not hydrated; [] = hydrated, none found.
+  editorial_summary text,              -- Google's blurb. Shortlist mask. Enrichment input.
+  review_summary    text,              -- Google's AI review digest. Shortlist mask.
+  serves_vegetarian_food boolean,      -- THREE-state. null = Google never said, not "no".
+  shortlist_hydrated_at timestamptz,   -- null = the Atmosphere Details call never ran
   photo_names       jsonb,             -- Google photo RESOURCE NAMES. Free. Always populated.
   photo_urls        jsonb,             -- resolved media URLs. Billed. Filled at Step 12 only.
   photos_resolved_at timestamptz,      -- null = names stored, media never fetched

@@ -4,10 +4,22 @@ Companion to [`personalization-pipeline.md`](./personalization-pipeline.md). Tha
 says *what* to build; this one says *in what order*, and *what test proves each part
 works* before the part exists.
 
-**Status (2026-08-20):** Steps 0–6 complete, plus the invariant suite and the
-Gate A fixture run (minus the `pack`/`validate` legs, which don't exist yet) —
-111 tests green, `type-check` clean. Next is Step 7 (`pack.ts`), then Step 8;
-extend `__tests__/gate-a.test.ts` as each lands rather than adding new files.
+**Status (2026-08-23):** Steps 0–11 complete — the whole deterministic core,
+the invariant suite, and Gate A over **two** cities (Kyoto and Singapore) with
+the `pack` and `validate` legs wired in. 311 tests green (9 integration tests
+skipped without `DATABASE_URL` / S3 config), `type-check` clean. **Gate A is
+passed.** Next is Step 12 (`enrich.ts`), the first step that talks to a model.
+
+**Carried into Step 4's column, found by the Singapore fixture:** `clusterPlaces`
+is k-means on raw lat/lng and it fails on a dense-core city — two of four
+Singapore days come out holding a handful of far nature parks with nothing to
+eat, while the whole civic core competes for one cluster's 20 seats. See
+`docs/decisions.md`. It is reported (`cluster.shortfall`) rather than silent,
+but it is not fixed.
+
+Gate A drives the packer through a deterministic stand-in for Pass B
+(`assignDay`), since the real assignment pass is an LLM and Gate A is offline.
+Replace that function when Pass B ships; every assertion around it still holds.
 
 ---
 
@@ -34,8 +46,8 @@ These are where test-first genuinely pays: the tests are the spec, they run in
 milliseconds, and they catch the bugs that matter (a packer that drops the wrong
 thing, a filter that lets a steakhouse through).
 
-**`Seam`** — modules whose job is talking to Google or Anthropic. Writing a test
-that asserts "Claude returns good tags" is theatre; the model is not under our
+**`Seam`** — modules whose job is talking to Google or OpenAI. Writing a test
+that asserts "the model returns good tags" is theatre; the model is not under our
 control and the assertion would be flaky. What *is* ours, and what these tests
 cover:
 
@@ -44,7 +56,7 @@ cover:
 - the response handling (ID membership, `custom_id` keying, partial failure)
 
 Every one of those is deterministic against a fake client. Inject the client;
-never let a module reach for `fetch` or `new Anthropic()` itself.
+never let a module reach for `fetch` or `new OpenAI()` itself.
 
 **`Lock`** — code already in the tree (`price-level.ts`, `place-search.ts` price
 mapping). No red phase available. Tests are characterization: they pin current
@@ -60,7 +72,7 @@ Both of these are cheap at the start and expensive to retrofit:
 2. **Time is injected, never ambient.** Cache expiry, `fetched_at`, TTL checks all
    take a `now: Date`. Same reason.
 
-Every module that touches Google or Anthropic takes its client as a parameter with a
+Every module that touches Google or OpenAI takes its client as a parameter with a
 production default. That is the entire testability strategy; there is no mocking
 framework in this plan.
 
@@ -388,20 +400,52 @@ so tests use a fake matrix and never touch the Routes API.
 
 # Step 8 — validate + repair
 
-**Mode:** TDD · **Depends on:** 7
+**Mode:** TDD · **Depends on:** 7 · **Done.**
 
 Step 10 of the design. Repairs come from the ranked list, never from the LLM.
 
-**Tests** (`src/lib/planner/validate.test.ts`):
+`validateDay(input, deps)` packs, inspects, swaps, and packs again — a repair
+changes the day's shape, so it cannot be applied to a finished timeline in
+place. Three rules, and a three-rung ladder:
+
+1. swap in the next-best candidate **from the same bucket** (a restaurant may
+   hold a meal slot, never a plain activity)
+2. nothing fits and it isn't a meal → **drop it**, with the reason, into the
+   same `dropped` list the packer uses
+3. nothing fits and it **is** a meal → validation failure; lunch is not
+   something to quietly delete
+
+**Two departures from this section as originally written**, both recorded in
+`docs/decisions.md`:
+
+- *"travel time that overruns the window"* is not directly observable — `pack.ts`
+  cannot return an overrunning day, it shrinks and then drops until the day fits.
+  So the rule is `lost_meal`: the packer surrenders meals last, so a day that
+  lost one is a day travel ate whole. A dropped **activity** is pace working as
+  designed and is not a failure.
+- rung 2 (drop) was added after the Gate A leg showed the alternative: with
+  swap-or-fail only, 3 of 10 day-runs returned `ok: false` because the only
+  thing open at 20:15 is always a restaurant. The plan's "no candidate → failure"
+  case survives for meals, which is where it matters.
+
+**Tests** (`src/lib/planner/validate.test.ts`, 27):
 - a place closed during its assigned slot → swapped for the next-best candidate
   from the same bucket; the returned day is then valid
-- a meal slot holding a non-restaurant → repaired
-- travel time that overruns the window → repaired (shrink, then swap)
-- **repair never calls the LLM** — pass a fake assign client and assert zero calls.
-  Direct assertion of the doc's "not by asking the AI to try again" rule.
-- no candidates left to swap in → returns a validation failure with a reason
-  rather than an invalid day or a throw
-- a valid day passes through **byte-identical** (no gratuitous rewriting)
+- a meal slot holding a non-restaurant → repaired, and never with a dietary
+  violation
+- travel that costs the day a meal → repaired by swapping in a reachable one
+- **repair never calls the LLM** — a fake assign client with zero calls, on the
+  repair path, the drop path and the failure path. Direct assertion of the doc's
+  "not by asking the AI to try again" rule.
+- no candidates left → a dropped activity, or a validation failure with a reason
+  for a meal; never an invalid day, never a throw
+- a valid day passes through **byte-identical**, carrying the caller's own input
+  object by reference
+
+The suite is mutation-checked: killing any of the three rules, the same-bucket
+filter, the drop rung, the meal exemption or the drop record fails at least one
+test. Re-run that check after touching this module — five of the assertions in
+here were vacuous on first writing and only the mutation pass found them.
 
 **Verify:** `npx vitest run src/lib/planner/validate`
 
@@ -409,7 +453,7 @@ Step 10 of the design. Repairs come from the ranked list, never from the LLM.
 
 ## Gate A — deterministic core complete
 
-Everything above is pure and offline. Before touching Google, Anthropic, or Neon:
+Everything above is pure and offline. Before touching Google, OpenAI, or Neon:
 
 ```bash
 npm test && npm run type-check
@@ -420,9 +464,13 @@ candidate fixture with no API keys and no database. **Done, ahead of the gate** 
 `src/lib/planner/__fixtures__/kyoto-candidates.json` (86 Kyoto places, including
 two permanently closed, two with no coordinates, a ¥¥¥¥ kaiseki, a steakhouse,
 several near-identical ramen shops and a museum with no rating) runs through
-cluster → funnel → meal ladder → duration in `__tests__/gate-a.test.ts`, judged
-by the invariant suite and snapshotted. Add the `pack` and `validate` legs to
-that same file at Steps 7 and 8.
+cluster → funnel → meal ladder → duration → pack → validate in
+`__tests__/gate-a.test.ts`, judged by the invariant suite and snapshotted.
+
+The fixture now carries opening hours, assigned by type the way Google reports
+them, with ungated public space (parks, the bamboo grove, Fushimi Inari's shrine
+path, Togetsukyo Bridge) deliberately left without any — `assumed` is how the
+validator says which stops it could only take on trust.
 
 It paid for itself immediately: it caught a symmetric `priceFit` that ranked a
 ¥¥ ramen shop above a ¥ Kiyomizu-dera for a ¥¥ traveller. Every unit test passed
@@ -433,6 +481,28 @@ that bug straight through, because each one was individually correct.
 # Step 9 — Drizzle schema + `src/lib/db`
 
 **Mode:** Seam · **Depends on:** 0
+
+**Done (2026-08-23)** — `src/lib/db/{schema,client,stores,time}.ts`, one
+generated migration in `drizzle/`, and `drizzle.config.ts`. `schema.ts` holds all
+eight tables with **snake_case TS property names**, matching both the column
+names and the ported `ActivityLocation` type, so a row reaches a card component
+without a rename layer that would be its own three-way sync.
+
+`stores.ts` fills the two ports Step 10 declared — `createSearchCache` and
+`createLocationStore` — with no call-site changes. `getMany` returns rows in the
+order asked for, and `upsertMany` returns the merged stored rows so later stages
+see preserved enrichment/photo state rather than the pre-upsert network object.
+`stay_duration` and hydrated reviews survive a refetch. Resolved photos survive
+only while `photo_names` is unchanged; a new resource-name set invalidates the
+URLs and resolution stamp. Photo and review writes use narrow patch methods so
+they cannot overwrite fresher retrieval data.
+
+Expiry is not enforced in the store. `retrievePlaces` compares `expiresAt`
+against an injected `now`, and a store that also filtered would put a second,
+ambient clock in the path.
+
+Scripts: `npm run db:generate` (offline), `db:migrate`, `db:push`, `db:studio` —
+the last three load `.env.local` for `DATABASE_URL`.
 
 ```bash
 npm i drizzle-orm @neondatabase/serverless && npm i -D drizzle-kit
@@ -457,7 +527,14 @@ npm i drizzle-orm @neondatabase/serverless && npm i -D drizzle-kit
 Do not block on the integration tests. They are a nightly/pre-demo check, not a
 per-commit gate.
 
-**Verify:** `npx vitest run src/lib/db && npx drizzle-kit push`
+**Verify:** `npm run test:db` — loads `DATABASE_URL` from `.env.local` and runs
+both the unit and the integration files. Schema changes go out with
+`npm run db:generate && npm run db:migrate`; the committed migration in
+`drizzle/` is the source of truth, so prefer it over `drizzle-kit push`.
+
+**Applied (2026-08-23)** to Neon project `hackathon` (`curly-union-42502230`),
+branch `production`. All 13 tests green against the live database — the jsonb
+round trip, the coalesce guard, and the +30-day default included.
 
 ---
 
@@ -467,23 +544,46 @@ per-commit gate.
 
 `fetch` is injected. Every test in this file runs with zero network.
 
+**Done (2026-08-22)** — `src/lib/planner/retrieval.ts` + `retrieval.test.ts`, 38
+tests. It did **not** wait for Step 9: the cache and the `locations` table are
+injected as two ports, `SearchCache` and `LocationStore`, with in-memory
+implementations (`createInMemorySearchCache` / `createInMemoryLocationStore`)
+used by the tests and the offline path. Step 9's job shrinks to writing
+Drizzle-backed implementations of those two interfaces — no call site changes.
+
+`buildSearchPlan(profile, city)` applies the taxonomy bridge and dedupes by
+cache key, so the plan is the unit of billing. The cache key includes page size,
+and a fresh entry is a hit only if every referenced location row exists. Search
+cache entries publish after their location rows persist, never before.
+`RetrievalStats` counts every way
+a candidate can be lost (`failures`, `missingFromStore`, `duplicatesDropped`) —
+same rule as the funnel: a cut that only shrinks a list is a silent bug.
+
 **Tests** (`src/lib/planner/retrieval.test.ts`):
 
 *caching — this is where the money is*
 - **a fresh cache hit issues zero fetch calls.** `expect(fakeFetch).toHaveBeenCalledTimes(0)`.
   The single most valuable assertion in the file.
-- the cache key is `sha256(city | query | includedType)` and is stable across calls
+- the cache key is `sha256(city | query | includedType | pageSize)` and is stable across calls
   and insensitive to nothing else (change city → different key; change nothing →
   same key)
 - an entry past `expires_at` is a miss and refetches (uses the injected `now`)
+- a fresh entry whose location rows are incomplete is also a miss and self-heals
+- location persistence completes before the search-cache entry is published
 - partial hits: 3 of 5 queries cached → exactly 2 fetches, and the result set is
   the union of both paths
 
 *the field mask*
-- the mask contains `places.reviews` — enrichment silently degrades to guessing
-  from the place name if this is ever dropped, and nothing else would catch it
+- the bulk Text Search mask excludes every field in `SHORTLIST_FIELD_MASK`,
+  keeping those calls at Enterprise rather than Enterprise + Atmosphere
+- `hydrateShortlist(pool, shortlistIds, deps)` requests the whole Atmosphere set
+  — reviews, `editorialSummary`, `reviewSummary`, `servesVegetarianFood` —
+  through one Place Details call per shortlisted place, because the SKU is
+  priced per request and reviews alone already pays it
+- `shortlistHydratedAt` is the "we asked" marker: stamped when the answer is
+  known (including "Google said nothing"), left null when the fetch **failed**
 - the mask contains `places.photos` and `places.priceLevel`
-- the mask does **not** contain `places.editorialSummary`
+- the bulk mask does **not** contain `places.editorialSummary`
 
 *normalization*
 - `priceLevel: 'PRICE_LEVEL_MODERATE'` → `2` via `toPriceLevelOrdinal` (shared, not
@@ -492,7 +592,8 @@ per-commit gate.
   is null after retrieval
 - **no request is made to any `/media` endpoint during retrieval** — assert against
   the fake fetch's recorded URLs. The billing rule, as a test.
-- up to 5 review snippets stored, and a place with no reviews stores `[]` not null
+- shortlist hydration stores up to 5 review snippets; a place with no reviews
+  stores `[]`, while an unhydrated candidate remains null
 - `businessStatus`, `regularOpeningHours.periods`, `priceRange` all survive
 
 *dedupe*
@@ -507,6 +608,41 @@ per-commit gate.
 # Step 11 — `photos.ts`
 
 **Mode:** Seam · **Depends on:** 10
+
+**Done (2026-08-23)** — `src/lib/planner/photos.ts` + `photos.test.ts`, 18 tests.
+`resolvePhotos(pool, survivorIds, deps)` takes the pool and the survivor list as
+two arguments precisely so the expensive mistake — handing it everything
+retrieval found — isn't expressible in the signature. Writes back through
+retrieval's `LocationStore` port, so Step 9 still has exactly two interfaces to
+implement.
+
+`FetchLike` and the bounded-concurrency fan-out moved to `src/lib/planner/http.ts`
+(3 tests) rather than being copied into a second Seam module. `retrieval.ts`
+re-exports `FetchLike`, so its public surface is unchanged.
+
+Build the survivor list with `survivorIdsFromDays(days)` — the packed timeline's
+`activity` segments — not by hand.
+
+**`PhotoBlobStore` implemented (2026-08-23)** — `src/lib/planner/photo-blobs.ts`
++ `photo-blobs.test.ts`, 11 tests, plus 2 composition tests in `photos.test.ts`.
+S3-compatible rather than vendor-specific, so R2, Neon Object Storage, Supabase
+Storage and AWS S3 are all the same code and the backend is an env decision
+(`s3ConfigFromEnv`, `PHOTO_BLOB_*`). Neon Object Storage is the eventual home —
+it branches with the database — but it is public beta and `us-east-2` only while
+this project's database is in `ap-southeast-1`.
+
+Two layers: `ObjectStore` is the bucket, `createPhotoBlobStore` is the
+lookup → download → upload flow, so the part with logic tests against a Map with
+zero network. Still optional — unset the env and the pipeline stores Google's
+expiring `photoUri` exactly as before.
+
+**Verify:** `npm run test:blobs` — runs the offline flow tests plus, when
+`PHOTO_BLOB_*` is set, `photo-blobs.integration.test.ts` against the real bucket.
+
+**Applied (2026-08-23)** to a Cloudflare R2 bucket, 15/15 green. The integration
+file covers the one seam the offline tests can't reach: HeadObject's 404 shape,
+path-style addressing, and whether the bucket is genuinely served publicly — if
+it isn't, every card 403s and nothing in the pipeline notices.
 
 **Tests** (`src/lib/planner/photos.test.ts`):
 - resolving 15 stops issues exactly 15 media fetches, not 1,000 — pass a candidate
@@ -532,7 +668,7 @@ enrichment — a model-authored range is untrusted input, not a constant.
 **Mode:** Seam · **Depends on:** 9, 10
 
 ```bash
-npm i @anthropic-ai/sdk
+npm i openai
 ```
 
 Client injected. No test in this file asserts anything about tag *quality*.
@@ -636,7 +772,7 @@ runs the whole pipeline against fakes.
   `console.error`'d. Assert the response body contains no raw provider message.
 - `funnel_stats` is persisted on the itinerary row and its numbers match the
   funnel's own output
-- the full run with fake Google + fake Anthropic produces a valid itinerary — reuse
+- the full run with fake Google + fake OpenAI produces a valid itinerary — reuse
   the Gate A invariant assertions
 
 **Tests** (`src/app/api/jobs/[id]/route.test.ts`):
@@ -718,9 +854,9 @@ What can be cut and what it costs:
 | Cut | Cost |
 |---|---|
 | **Step 4** (cluster) — one cluster per city | Days aren't geographically coherent; Pass B loses its per-day area. Visible in the demo. Cut last. |
-| **Step 8** (validate) | A closed place can appear in a slot. Mitigate with `open_windows` in Pass B (Step 13), which removes most of it. |
+| ~~**Step 8** (validate)~~ | Done. Worth knowing what it caught: the recorded Gate A itinerary scheduled Kennin-ji at 20:15, three hours after the gate shuts, and every unit test passed it. `open_windows` in Pass B (Step 13) should remove most of the repair traffic, not the need for the check. |
 | **Step 9** (Neon) — in-memory cache | No cross-run cache, so no pre-warm. Directly contradicts the demo plan; if you cut this, you demo the cold path. |
-| **Step 11** (photos) | Cards render without images. Ugly, not broken. |
+| **Step 11** (photos) | Cards render without images. Ugly, not broken. Cutting only the *blob store* is milder still: photos work, but the stored URLs expire and every itinerary re-bills the Photos SKU for a place it has already seen. |
 | **Step 12** (enrichment) | No tags, no signature dishes → Pass C food recommendations become ungrounded, i.e. hallucinated dishes. **Do not cut this and keep meal narration.** Cut both together. |
 | **Step 16** (rewire) | Job progress doesn't update live. Poll manually or hardcode a loading screen. |
 | **Step 17** (golden) | No regression net. Fine on day one, painful on day three. |
@@ -736,6 +872,6 @@ What can be cut and what it costs:
 - **The dependency chain is real.** `pack` needs `duration`; `funnel` needs `score`
   and `cluster`; `narrate` needs `enrich` for grounded dishes. Steps 2–8 can be
   built by one person in order; 9–14 parallelize across people once Gate A is green.
-- **Nothing here tests the Google or Anthropic APIs themselves.** The first real
+- **Nothing here tests the Google or OpenAI APIs themselves.** The first real
   call will surface a field-shape surprise no fixture predicted. Budget an hour for
   it and capture the real response into the Step 17 fixture the moment it works.
