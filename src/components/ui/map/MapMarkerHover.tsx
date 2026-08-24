@@ -35,12 +35,10 @@ interface MapMarkerHoverProps
   className?: string;
   /** Children (for additional customization) */
   children?: ReactNode;
-  /** Whether the marker is hovered (affects text color for "by Country" variant) */
-  isHovered?: boolean;
 }
 
 const MapMarkerHover = forwardRef<HTMLDivElement, MapMarkerHoverProps>(
-  ({ count, label, variant, size, className, children, isHovered }, ref) => {
+  ({ count, label, variant, size, className, children }, ref) => {
     // Text color varies by variant: "by Country" uses foreground, others use secondary-foreground
     const labelTextColor = variant === "by Country" ? "text-content" : "text-glyph";
 

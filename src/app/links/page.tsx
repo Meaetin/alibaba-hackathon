@@ -220,12 +220,6 @@ export default function LinksPage() {
   };
 
   const handleLinkSubmit = async (linkUrl: string) => {
-    let url_domain = "unknown";
-    try {
-      url_domain = new URL(linkUrl).hostname.replace(/^www\./, "");
-    } catch {
-      /* invalid URL — leave fallback */
-    }
     try {
       await createJob("content-analysis", { url: linkUrl });
     } catch (err) {
@@ -246,7 +240,7 @@ export default function LinksPage() {
         if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
         setNewLinkModalOpen(false);
         setLinkValue("");
-        showQuotaToast("link", err.monthlyLimit, "links");
+        showQuotaToast("link", err.monthlyLimit);
         return;
       }
       throw err;

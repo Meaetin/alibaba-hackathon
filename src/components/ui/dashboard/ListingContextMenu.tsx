@@ -17,7 +17,6 @@ interface ListingContextMenuProps {
   onOpenChange: (open: boolean) => void;
   coords: { x: number; y: number } | null;
   cardType: ListingCardType;
-  selectedCount: number;
   onAddToCollection?: () => void;
   onAddToItinerary?: () => void;
   onGenerateItinerary?: () => void;
@@ -74,7 +73,6 @@ export function ListingContextMenu({
   onOpenChange,
   coords,
   cardType,
-  selectedCount,
   onAddToCollection,
   onAddToItinerary,
   onGenerateItinerary,

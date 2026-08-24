@@ -81,7 +81,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
     onOpenChange(nextOpen);
   };
 
-  const addImages = useCallback((incoming: File[], method: "paste" | "picker") => {
+  const addImages = useCallback((incoming: File[]) => {
     setError(null);
 
     const validImages = incoming.filter((file) => {
@@ -123,7 +123,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
   }, []);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    addImages(Array.from(event.target.files ?? []), "picker");
+    addImages(Array.from(event.target.files ?? []));
     event.target.value = "";
   };
 
@@ -142,7 +142,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
 
     if (pastedImages.length > 0) {
       event.preventDefault();
-      addImages(pastedImages, "paste");
+      addImages(pastedImages);
     }
   };
 
@@ -178,8 +178,7 @@ export function FeedbackModal({ open, onOpenChange }: FeedbackModalProps) {
       });
       reset();
       onOpenChange(false);
-    } catch (submitError) {
-      const reason = submitError instanceof Error ? submitError.message : "unknown";
+    } catch {
       setError("We couldn’t send that feedback. Please try again.");
     } finally {
       setIsSubmitting(false);

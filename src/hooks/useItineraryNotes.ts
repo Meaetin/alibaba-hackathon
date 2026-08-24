@@ -84,14 +84,13 @@ export function useItineraryNotes(itineraryId: string) {
   const saveNote = useCallback(
     (item: NoteItem) => {
       const { title, body } = splitContent(item.content);
-      const isNew = !rows.some((r) => r.id === item.id);
       return upsertItineraryNote(itineraryId, item.id, { activity_id: null, title, body })
         .then((row) => {
           cacheSavedRow(row); invalidate(); return row;
         })
         .catch((err) => { console.error("Failed to save note", err); throw err; });
     },
-    [itineraryId, rows, cacheSavedRow, invalidate],
+    [itineraryId, cacheSavedRow, invalidate],
   );
 
   // Create-or-update the note for one activity. Reuse the existing note id when

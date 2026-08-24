@@ -443,22 +443,6 @@ function CompactActivityCard({
     return null;
   })();
 
-  // Time display element with shimmer support
-  const timeRangeElement = timeLoading ? (
-    <span
-      className="compact-card-time-loading h-3.5 w-24 rounded bg-surface-muted animate-pulse"
-      aria-label="Calculating time"
-    />
-  ) : lodgingLabel ? (
-    <span className="compact-card-lodging-label type-body-3 text-content-secondary truncate">
-      {lodgingLabel}
-    </span>
-  ) : timeRange ? (
-    <span className="compact-card-time-range type-body-3 text-content-secondary truncate">
-      {timeRange}
-    </span>
-  ) : null;
-
   // Opening hours closure check
   const hoursStatus = useMemo(
     () =>

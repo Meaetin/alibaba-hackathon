@@ -1,4 +1,5 @@
 import { authFetch, unwrap, ensureOk } from './client'
+import type { PriceRange } from "@/lib/maps/price-range";
 
 export interface Collection {
   id: string
@@ -47,7 +48,7 @@ export interface Location {
   country?: string
   locality?: string
   stay_duration?: number
-  price_range?: { startPrice?: number; endPrice?: number; currency?: string }
+  price_range?: PriceRange
   google_maps_uri?: string | null
   place_id?: string
   location_context?: string
@@ -73,9 +74,7 @@ export async function getCollection(id: string): Promise<CollectionWithLocations
   return unwrap<CollectionWithLocations>(res, 'Failed to fetch collection')
 }
 
-export type CollectionCreateSource = 'manual' | 'save_picker' | 'action_toolbar'
-
-export async function createCollection(name: string, country?: string, region?: string, latitude?: number, longitude?: number, tags?: string[], source: CollectionCreateSource = 'manual'): Promise<Collection> {
+export async function createCollection(name: string, country?: string, region?: string, latitude?: number, longitude?: number, tags?: string[]): Promise<Collection> {
   const response = await authFetch('/api/collections', {
     method: 'POST',
     body: JSON.stringify({

@@ -45,16 +45,20 @@ interface ItineraryEditDayColumnProps {
   isAddActive?: boolean;
   /** Close the open add-location panel (used by the "×" toggle). */
   onCloseAdd?: () => void;
+  /** Accepted, not implemented — the component ignores this today. */
   onCollectionOpen?: () => void;
+  /** Accepted, not implemented — the component ignores this today. */
   isCollectionActive?: boolean;
   className?: string;
   globalTransportHidden?: boolean;
+  /** Accepted, not implemented — the component ignores this today. */
   hiddenTransports?: Set<string>;
   transportModes?: Record<string, string>;
   /** Activity IDs whose outgoing leg returned no route in the chosen mode this
    *  session. Keeps the transport row on screen to say so instead of silently
    *  vanishing it the moment a mode returns nothing. */
   unavailableLegIds?: Set<string>;
+  /** Accepted, not implemented — the component ignores this today. */
   onToggleTransportHidden?: (transportId: string) => void;
   /** `activityId` is the row the leg DEPARTS — the row that owns travel_mode. */
   onTransportModeChange?: (activityId: string, mode: string) => void;
@@ -465,14 +469,10 @@ export function ItineraryEditDayColumn({
   onAddActivity,
   isAddActive = false,
   onCloseAdd,
-  onCollectionOpen,
-  isCollectionActive,
   className,
   globalTransportHidden = false,
-  hiddenTransports,
   transportModes,
   unavailableLegIds,
-  onToggleTransportHidden,
   onTransportModeChange,
   accommodation,
   totalDays = 1,

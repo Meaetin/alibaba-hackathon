@@ -239,10 +239,7 @@ export default function CollectionDetailPage() {
     async (targetCollectionId: string) => {
       const locationIds = Array.from(selection.selectedIds);
       try {
-        await batchOps.handleAddToDestination(targetCollectionId, locationIds, undefined, {
-          target: "collection",
-          isBatch: true,
-        });
+        await batchOps.handleAddToDestination(targetCollectionId, locationIds);
         const target = saveCollections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added ${locationIds.length} to ${target?.name ?? "collection"}` });
       } catch (err) {
@@ -260,11 +257,7 @@ export default function CollectionDetailPage() {
     async (itinerary: ActionToolbarItinerary) => {
       const locationIds = Array.from(selection.selectedIds);
       try {
-        await batchOps.handleAddToDestination(itinerary.collectionId, locationIds, undefined, {
-          target: "itinerary",
-          isBatch: true,
-          itineraryId: itinerary.id,
-        });
+        await batchOps.handleAddToDestination(itinerary.collectionId, locationIds);
         showToast({ title: `Added ${locationIds.length} to ${itinerary.name}` });
       } catch (err) {
         showToast({
@@ -304,7 +297,7 @@ export default function CollectionDetailPage() {
   // Open the generate-itinerary flow for the current selection.
   const openGenerate = useCallback(() => {
     if (itineraryQuotaExceeded) {
-      showQuotaToast("itinerary", itineraryUsage?.max ?? 0, "collection_detail");
+      showQuotaToast("itinerary", itineraryUsage?.max ?? 0);
       return;
     }
     setGenerateLocationIds(Array.from(selection.selectedIds));
@@ -329,12 +322,7 @@ export default function CollectionDetailPage() {
     async (targetCollectionId: string) => {
       if (!selectedLocation) return;
       try {
-        await batchOps.handleAddToDestination(
-          targetCollectionId,
-          [selectedLocation.id],
-          undefined,
-          { target: "collection", isBatch: false },
-        );
+        await batchOps.handleAddToDestination(targetCollectionId, [selectedLocation.id]);
         const target = saveCollections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added to ${target?.name ?? "collection"}` });
       } catch (err) {
@@ -367,7 +355,6 @@ export default function CollectionDetailPage() {
           data.latitude,
           data.longitude,
           data.tags,
-          "save_picker",
         );
         const list = await getCollections();
         setSaveCollections(
@@ -404,12 +391,7 @@ export default function CollectionDetailPage() {
       const itinerary = saveItineraries.find((i) => i.id === itineraryId);
       if (!itinerary) return;
       try {
-        await batchOps.handleAddToDestination(
-          itinerary.collection_id,
-          [selectedLocation.id],
-          undefined,
-          { target: "itinerary", isBatch: false, itineraryId: itinerary.id },
-        );
+        await batchOps.handleAddToDestination(itinerary.collection_id, [selectedLocation.id]);
         showToast({ title: `Added to ${itinerary.name}` });
       } catch (err) {
         showToast({
@@ -577,7 +559,7 @@ export default function CollectionDetailPage() {
   // ActionToolbar's generate is the selection-scoped one).
   const handleGenerateAll = useCallback(() => {
     if (itineraryQuotaExceeded) {
-      showQuotaToast("itinerary", itineraryUsage?.max ?? 0, "collection_detail");
+      showQuotaToast("itinerary", itineraryUsage?.max ?? 0);
       return;
     }
     setGenerateLocationIds(filteredAndSortedLocations.map((l) => l.id));
@@ -1077,7 +1059,7 @@ export default function CollectionDetailPage() {
             setIsGenerating(false);
             if (err instanceof ItineraryQuotaError) {
               if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.itineraryUsage(userId) });
-              showQuotaToast("itinerary", err.max_itineraries, "collection_detail");
+              showQuotaToast("itinerary", err.max_itineraries);
             } else {
               showToast({
                 title: "Failed to generate itinerary",
