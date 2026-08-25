@@ -442,3 +442,9 @@ Minutes from midnight to a clock face. There were already three copies
 (`validate.ts`, `__tests__/harness.ts`, `utils/calendar.ts`) and the debug view
 would have been a fourth. Note that `toHHMM` in `utils/calendar.ts` takes
 fractional **hours** — a different unit, not a duplicate.
+
+### `.qoder/` is generated output and is gitignored — never commit it
+The repowiki under `.qoder/` is regenerated per branch, so two branches that
+both regenerate it conflict on ~180 files with no meaningful winner. It was
+removed from the index on 2026-08-25 and added to `.gitignore`. The files stay
+on disk; regenerate freely, just don't `git add -f` them back.
