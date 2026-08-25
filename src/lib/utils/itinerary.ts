@@ -79,18 +79,15 @@ export function toCalendarActivity(a: ItineraryActivityDetail, timezone?: string
     endHour: timeToHour(a.end_time, timezone),
     locationId: a.location?.id ?? undefined,
     address: a.location?.formatted_address ?? undefined,
-    category: (a.category === "meal" ? "meal" : a.category === "flight" ? "flight" : "poi") as "poi" | "meal" | "flight",
-    sourceFlightId: a.source_flight_id ?? undefined,
-    sourceLodgingId: a.source_lodging_id ?? undefined,
+    // Only two categories survive: flights and lodging were removed along with
+    // the backend that supplied them.
+    category: a.category,
     photoUrl: a.photo_url ?? photoUrls?.[0] ?? undefined,
     photoUrls: photoUrls ?? undefined,
     placeId: a.place_id ?? undefined,
     latitude: a.location?.latitude ?? undefined,
     longitude: a.location?.longitude ?? undefined,
-    googleMapsUri: a.location?.google_maps_uri ?? undefined,
-    locationContext: a.location?.location_context ?? undefined,
     openingHours: formatOpeningHours(a.location?.regular_opening_hours ?? undefined) || undefined,
-    travelPolyline: a.travel_polyline ?? undefined,
     travelDistanceMeters: a.travel_distance_meters ?? undefined,
     travelDurationSeconds: a.travel_duration_seconds ?? undefined,
   };

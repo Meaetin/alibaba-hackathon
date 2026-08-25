@@ -147,7 +147,7 @@ export function ItineraryQuickView({
               key={day.id}
               day={day}
               dayIndex={index}
-              timezone={itinerary.timezone ?? "UTC"}
+              timezone="UTC"
               activityNotePreviews={activityNotePreviews}
               onActivityClick={
                 onActivityClick

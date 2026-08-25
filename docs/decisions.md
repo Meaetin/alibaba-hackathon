@@ -480,3 +480,11 @@
 - **`pickVictim` drops from before the meal that missed its window (`pack.ts`).** Why: nothing after a meal can move it earlier, so those cuts buy nothing and the loop cuts again — one late lunch cost a whole afternoon. `stampDay` reports `blockedBefore`; the narrowing falls back to the whole day so the loop still terminates.
 - **Cap theme membership at `radiusFor(hint, walkMaxMeters) * 1.5` (`group.ts`), and bound borrowing by the same reach (`feasibility.ts`).** Why: `nearestTheme` had no distance limit and the type-match discount let a cafe 5.7 km out join a walkable theme. Rejected: capping by squared degrees — an absolute threshold cannot ride a monotonic transform. Refused places are counted as `unclaimed` rather than silently dropped.
 - **Not done: a minute-level feasibility check.** Considered and rejected — it would be a second packer, and with the reach cap in place the infeasibility it was meant to catch is prevented at grouping time instead.
+
+## 2026-08-25 — the itinerary page reads Neon
+
+- **`readItineraryDetail` + `GET /api/itineraries/[id]` replace the Supabase query.** Why: the page is a client component and Neon is server-side only. Types now live in `src/lib/db/itinerary-detail.ts`; `queries/home.ts` re-exports them so the ~20 importing components need no edit.
+- **Reads only.** The page's 30 mutations still target the old REST backend. Rejected wiring writes as well: it is a much larger job, and a half-wired editor fails silently on drag.
+- **`overview` from the theme premises; card description prefers Pass C's `whyForYou`.** Why: both were paid for on a model and only the debug page showed them.
+- **Absent features removed, not blanked** (user's call): sharing/invite, collaborators, companion collection, flights, lodging, attachments, realtime notes channel, `travel_polyline`, `timezone`, and the panel's website/phone/Maps link.
+- **Kept opening hours** by building `weekdayDescriptions` from the stored `opening_periods` rather than deleting the panel section — the data was already there.

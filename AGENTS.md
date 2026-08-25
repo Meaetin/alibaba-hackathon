@@ -42,6 +42,41 @@ Never use `AnimatePresence mode="wait"` with different keys to switch between
 modes of the same component — it unmounts/remounts and destroys the component's
 internal motion state. Pass a `mode` prop and transition internally instead.
 
+### `/itineraries/[id]` reads Neon; everything else on it is still unwired
+`readItineraryDetail` (`src/lib/db/itinerary-detail.ts`) is the page's read path,
+served by `GET /api/itineraries/[id]` because the page is a client component and
+Neon is server-side only. It is not a port — five selects with no decisions in
+them — and the logic worth testing is the mapping, which is pure functions with
+their own tests: `minutesToISO`, `endDateFor`, `categoryFor`, `overviewFrom`,
+`weekdayDescriptionsFrom`.
+
+The types live there and `src/lib/supabase/queries/home.ts` **re-exports** them,
+because twenty-odd components import them from that path. One definition, no
+rename layer. The Supabase `getItineraryDetail` is deleted.
+
+Three mappings that are decisions, not translations. `overview` is built from
+`planner_debug.themes.titles` — those sentences cost an expensive model call and
+nothing rendered them. `thumbnail_url` is the first stop with a resolved photo,
+because there is no such column. A card's description prefers Pass C's
+`content.whyForYou` over `locations.editorial_summary`: the first is written for
+this traveller, the second is Google's description for everyone.
+
+**Read-only, and deliberately.** The page's thirty mutations still point at the
+old REST backend on `:8080`. Wiring reads does not make it editable, and an edit
+control that silently fails is worse than one that is gone.
+
+Removed with the backends that fed them: sharing and invite tokens,
+collaborators and the owner avatar, the companion collection, flights, lodging
+and their bookend cards, attachments, `travel_polyline`, `correlation_id`,
+`updated_at`, and the location panel's website, phone numbers and Maps link.
+`timezone` is gone too — the planner has none, so `ITINERARY_TIMEZONE` is UTC in
+one place instead of `?? "UTC"` at twenty call sites.
+
+`ActivityTravelMode` is declared in `itinerary-detail.ts` and re-exported as
+`TransportMode` from the day-column constants, so the stored mode and the
+displayed mode cannot drift. The planner only ever produces `walk` and
+`transit`; `drive` exists for the page's own optimistic rows.
+
 ### Two data backends, both currently unwired
 - `src/lib/supabase/**` — browser client, direct table queries, realtime channels
   (`useItineraryRealtime`, `useJobsQueue`).

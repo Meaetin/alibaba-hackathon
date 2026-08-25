@@ -14,7 +14,7 @@
 
 import OpenAI from "openai";
 
-import { getDb } from "@/lib/db/client";
+import { getDb, type Database } from "@/lib/db/client";
 import { createEnrichmentBatchStore } from "@/lib/db/enrichment-batches";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
 import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
@@ -91,6 +91,13 @@ function defaultPlanRouteDeps(): PlanRouteDeps {
  *  never touches it. */
 export const planRouteDeps: { create: () => PlanRouteDeps } = {
   create: defaultPlanRouteDeps,
+};
+
+/** `GET /api/itineraries/[id]`. It reads the database directly rather than
+ *  through a port: `readItineraryDetail` is four selects with no decisions in
+ *  them, so there is nothing a double could usefully stand in for. */
+export const itineraryRouteDeps: { create: () => { db: Database } } = {
+  create: () => ({ db: getDb() }),
 };
 
 /** `GET /api/jobs/[id]` needs one thing, so it asks for one thing. */

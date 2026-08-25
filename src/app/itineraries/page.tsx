@@ -16,7 +16,6 @@ import {
   deleteItinerary,
   type ItineraryWithRole,
 } from "@/lib/api/itineraries";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/contexts/ToastContext";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
@@ -29,7 +28,7 @@ import { useItinerariesQuery } from "@/hooks/queries/useItinerariesQuery";
 import { useItineraryUsageQuery } from "@/hooks/queries/useItineraryUsageQuery";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
-import { getItineraryDetail } from "@/lib/supabase/queries/home";
+import { fetchItineraryDetail } from "@/lib/api/itineraries";
 import { useNavigationLoading } from "@/contexts/NavigationLoadingContext";
 
 const itineraryGradient = "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)";
@@ -176,10 +175,7 @@ export default function ItinerariesPage() {
   const handleItineraryHover = useCallback((id: string) => {
     queryClient.prefetchQuery({
       queryKey: queryKeys.itineraryDetail(id),
-      queryFn: () => {
-        const supabase = createClient();
-        return getItineraryDetail(supabase, id);
-      },
+      queryFn: () => fetchItineraryDetail(id),
       staleTime: 5 * 60 * 1000,
     });
   }, []);

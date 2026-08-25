@@ -4,6 +4,7 @@ import { type Surface } from '@/lib/domain-types'
 import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
 import type { ActivityLocation } from '@/lib/supabase/queries/home'
+import type { ItineraryDetail } from '@/lib/db/itinerary-detail'
 import type { Pace, PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
 import { readPersonaId } from '@/lib/persona/storage'
 import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
@@ -181,6 +182,32 @@ export async function planItinerary(params: PlanItineraryParams): Promise<QueueJ
   }
 
   return res.json() as Promise<QueueJob>
+}
+
+/**
+ * The itinerary page's read.
+ *
+ * A plain `fetch`, not `authFetch`: this route is the local Next server over
+ * Neon, and `authFetch` targets the old external API and attaches a Supabase
+ * JWT that no longer exists. Same reason `planItinerary` above uses `fetch`.
+ *
+ * A 404 returns `null` — the page renders "not found" — while anything else
+ * throws, so an outage is not mistaken for a deleted trip.
+ */
+export async function fetchItineraryDetail(id: string): Promise<ItineraryDetail | null> {
+  const res = await fetch(`/api/itineraries/${id}`)
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    console.error('Failed to load itinerary:', res.status, body)
+    throw new Error(
+      getFriendlyApiError(
+        new Error(typeof body?.error === 'string' ? body.error : ''),
+        'We couldn’t load that itinerary. Please try again.',
+      ),
+    )
+  }
+  return res.json() as Promise<ItineraryDetail>
 }
 
 export async function updateItinerary(

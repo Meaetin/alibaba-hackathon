@@ -13,7 +13,6 @@ import {
   Trash2,
   UtensilsCrossed,
   PlaneTakeoff,
-  House,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -79,18 +78,8 @@ export function getActivityCardLayout(
   activity: ItineraryActivityDetail,
   opts?: { editable?: boolean },
 ): ActivityCardLayout {
-  const cat = activity.category?.toLowerCase() ?? "";
-  if (
-    activity.category === "accommodation" ||
-    cat === "lodging" ||
-    cat.startsWith("lodging") ||
-    activity.source_lodging_id
-  ) {
-    return "compact";
-  }
-  if (cat === "flight" || cat === "flights" || activity.id.startsWith("flight-")) {
-    return opts?.editable ? "edit" : "full";
-  }
+  // Lodging and flights are gone with the backend that supplied them, so every
+  // stop takes the same layout and the choice is edit-mode only.
   return opts?.editable ? "edit" : "full";
 }
 
@@ -101,13 +90,6 @@ function resolveBadge(
 ): { category: NonNullable<CategoryBadgeProps["category"]>; icon: LucideIcon } {
   const cat = activity.category?.toLowerCase() ?? "";
 
-  if (
-    activity.source_lodging_id ||
-    activity.category === "accommodation" ||
-    cat.startsWith("lodging")
-  ) {
-    return { category: "accommodation", icon: House };
-  }
 
   if (activity.id.startsWith("flight-") || cat === "flight" || cat === "flights") {
     return { category: "flight", icon: PlaneTakeoff };
@@ -233,8 +215,6 @@ function CompactActivityCard({
   const layout = layoutProp ?? getActivityCardLayout(activity);
   const badge = resolveBadge(activity);
   const cat = activity.category?.toLowerCase() ?? "";
-  const isFlight =
-    cat === "flight" || cat === "flights" || activity.id.startsWith("flight-");
 
   const timeRange = formatTimeRange(activity.start_time, activity.end_time, timezone);
   const durationLabel = formatActivityDuration(activity);
@@ -423,14 +403,15 @@ function CompactActivityCard({
 
   // Description: prefer location_context, fallback to the humanized primary type
   const primaryType = activity.location?.primary_type;
+  // Pass C's sentence first: it is written for this traveller and this day,
+  // where the editorial summary is Google's description of the place for
+  // everyone. The type name is the last resort.
   const description =
-    activity.location?.location_context ??
+    activity.content?.whyForYou ??
+    activity.location?.editorial_summary ??
     (primaryType ? humanizePlaceType(primaryType) : null);
 
-  // Lodging label for compact layout subtitle
-  const isLodgingBookend =
-    !!activity.source_lodging_id &&
-    activity.source_lodging_id === "lodging-bookend";
+  const isLodgingBookend = false;
 
   const lodgingLabel = (() => {
     if (!activity.start_time) return null;
@@ -741,17 +722,6 @@ function CompactActivityCard({
                   </span>
                 )}
 
-                {/* Flight Times */}
-                {isFlight && activity.flight_arrive_time && (
-                  <span className="compact-card-flight-arrives type-body-3 text-content font-semibold">
-                    Lands {activity.flight_arrive_time.slice(0, 5)}
-                  </span>
-                )}
-                {isFlight && activity.flight_depart_time && (
-                  <span className="compact-card-flight-departs type-body-3 text-content font-semibold">
-                    Departs {activity.flight_depart_time.slice(0, 5)}
-                  </span>
-                )}
               </div>
 
               {/* Thumbnail */}

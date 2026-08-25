@@ -163,9 +163,9 @@ export function LocationDetailPanel({
   }
   const extraImageCount = photoUrls.length - 3;
 
-  const photoAttributions = activity.location?.photos?.[0]?.authorAttributions
-    ?.map((a) => a.displayName)
-    .filter((n): n is string => Boolean(n));
+  // Retrieval stores photo resource names and resolved URLs, not Google's raw
+  // `photos` objects, so a saved activity carries no attributions.
+  const photoAttributions: string[] | undefined = undefined;
 
   const placeView = activity.location
     ? activityLocationToPlaceView(activity.location, {
@@ -474,7 +474,7 @@ export function LocationDetailPanel({
         onOpenChange={setAlsoFoundInOpen}
         location={{
           name: activity.name,
-          description: activity.location?.location_context,
+          description: activity.location?.editorial_summary,
           thumbnailUrl: photoUrls[0] ?? null,
         }}
         references={references}

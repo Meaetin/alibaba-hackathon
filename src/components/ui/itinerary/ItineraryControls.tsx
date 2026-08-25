@@ -1,41 +1,22 @@
 "use client";
 
 import type { Ref } from "react";
-import { MapPin, CalendarDays, FileText, UserRoundPlus } from "lucide-react";
+import { MapPin, CalendarDays, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DataPill } from "@/components/ui/primitives/DataPill";
-import { Avatar } from "@/components/ui/primitives/Avatar";
-import { AvatarGroup } from "@/components/ui/primitives/AvatarGroup";
-import { Button } from "@/components/ui/primitives/Button";
 import { ToggleGroup } from "@/components/ui/primitives/ToggleGroup";
 import { ItineraryTabBar, type ItineraryTab } from "./ItineraryTabBar";
 
 export type ItineraryViewMode = "view" | "edit";
-
-interface CollaboratorProfile {
-  id: string;
-  display_name?: string | null;
-  email?: string | null;
-  avatar_url?: string | null;
-}
-
-interface Collaborator {
-  user_id: string;
-  role: string;
-}
 
 interface ItineraryControlsProps {
   totalSpots: number;
   totalDays: number;
   totalAttachments: number;
   lastEdited?: string | null;
-  collaboratorProfiles: CollaboratorProfile[];
-  collaborators: Collaborator[];
-  ownerId: string;
   /** Current view/edit mode — controlled by the page (single source of truth). */
   viewMode: ItineraryViewMode;
   onViewModeChange: (mode: ItineraryViewMode) => void;
-  onInviteClick: () => void;
   /** Active edit-mode tab — drives the tab strip that replaces the pills in edit mode. */
   activeTab?: ItineraryTab;
   onTabClick?: (tab: ItineraryTab) => void;
@@ -59,31 +40,13 @@ export function ItineraryControls({
   totalDays,
   totalAttachments,
   lastEdited,
-  collaboratorProfiles,
-  collaborators,
-  ownerId,
   viewMode,
   onViewModeChange,
-  onInviteClick,
   activeTab,
   onTabClick,
   controlsRef,
   className,
 }: ItineraryControlsProps) {
-  // Resolve a member's avatar from their fetched profile (owner + collaborators
-  // alike): image when available, else name initials, else a generic icon —
-  // never the raw user id.
-  const renderMemberAvatar = (userId: string, key: string) => {
-    const profile = collaboratorProfiles.find((p) => p.id === userId);
-    const name = profile?.display_name || profile?.email?.split("@")[0] || "";
-    if (profile?.avatar_url) {
-      return (
-        <Avatar key={key} type="image" src={profile.avatar_url} alt={name || "Member"} name={name} size="md" />
-      );
-    }
-    return <Avatar key={key} type={name ? "initial" : "icon"} name={name || undefined} size="md" />;
-  };
-
   return (
     <div
       ref={controlsRef}
@@ -130,23 +93,8 @@ export function ItineraryControls({
 
       {/* Right Group — AvatarGroup, Invite, and toggle are flat siblings at gap-2 (8px) */}
       <div className="itinerary-controls-right flex min-w-0 items-center justify-between gap-2 md:justify-end">
-        {/* Collaborators */}
-        <AvatarGroup data-region="itinerary-detail-collaborators" max={5} size="md">
-          {renderMemberAvatar(ownerId, `owner-${ownerId}`)}
-          {collaborators.map((c, i) => renderMemberAvatar(c.user_id, `${c.user_id}-${i}`))}
-        </AvatarGroup>
-
-        {/* Invite */}
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="leading"
-          className="h-11 md:h-9"
-          onClick={onInviteClick}
-        >
-          <UserRoundPlus className="itinerary-controls-invite-icon size-4" />
-          Invite
-        </Button>
+        {/* Collaborators and Invite lived here. Auth is removed, so there is no
+            owner to show an avatar for and nobody to invite. */}
 
         {/* View / Edit Toggle */}
         <div
