@@ -314,6 +314,16 @@ so a replan retries. Stored URLs are the `photoUri` from a `skipHttpRedirect=tru
 response, never the `/media` URL — that one only renders with the API key
 embedded, and `GOOGLE_PLACES_API_KEY` is an unrestricted server key.
 
+### Never run `npm run build` while `next dev` is running
+Both write `.next/`. A production build drops its own `BUILD_ID` and manifests
+on top of the dev server's, and the running `next dev --turbopack` then serves
+**500 Internal Server Error** on every route with nothing useful in the
+terminal. It looks exactly like the app broke.
+
+Recovery is to stop the dev server, `rm -rf .next`, and start it again — not to
+debug the page that appeared to fail. To type-check a change while a dev server
+is up, use `npm run type-check` and `npm run lint`, which touch nothing shared.
+
 ### The demo runtime is localhost-only
 The 2026-08-24 demo runs in a long-lived local Node process. Do not flag
 post-response pipeline work as a serverless deployment blocker unless the
