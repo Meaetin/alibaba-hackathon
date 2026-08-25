@@ -5,7 +5,6 @@ import { ARCHETYPE_PRESETS } from "./presets";
 import {
   buildProfile,
   deriveBudget,
-  deriveInterests,
   derivePace,
   getFocusScoringAdjustments,
   getSocialSchedulingRules,

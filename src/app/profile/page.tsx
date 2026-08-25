@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/primitives/Button";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useProfileQuery } from "@/hooks/queries/useProfileQuery";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
-import { motionPresets, motionTransitions } from "@/lib/motion/presets";
+import { motionTransitions } from "@/lib/motion/presets";
 import type { RecentContentItem } from "@/lib/supabase/queries/home";
 
 const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
