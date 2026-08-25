@@ -6,6 +6,7 @@
  *
  * Precedence rules (the quiz augments, never replaces, the form):
  *  - dietary: always the form (hard constraint, never inferred)
+ *  - pace: form wins; `derivePace` is a fallback for when nothing asked
  *  - budget: form wins; persona is a fallback
  *  - interests: form overrides win; otherwise derived from the preset tags
  *  - typeAffinities: always the archetype preset (the persona's precision layer)
@@ -27,6 +28,13 @@ export interface TripInputs {
   startDate?: string;
   /** Hard constraints — never inferred from the persona. */
   dietary: string[];
+  /**
+   * The pace the traveller chose in the create modal. When present it wins
+   * outright: a thing the user typed beats a thing the quiz inferred, and quiz
+   * Q4 conflates *unhurried* with *unplanned* — it feeds `d1`, which is the
+   * spontaneity axis, so a wanderer who wants full days reads as relaxed.
+   */
+  pace?: Pace;
   budget?: BudgetLevel;
   /** Manual interest chips; when present they replace the persona-derived set. */
   interestOverrides?: Interest[];
@@ -82,7 +90,13 @@ export function deriveInterests(persona: PersonaResult): Interest[] {
   return interests;
 }
 
-/** d1 (Structure) → pace. Identity archetypes force packed (bridge §3). */
+/**
+ * d1 (Structure) → pace. Identity archetypes force packed (bridge §3).
+ *
+ * **A fallback, not the answer.** The create modal asks for pace directly and
+ * `buildProfile` prefers that; this runs only where nothing asked. The axis
+ * conflates unhurried with unplanned — see the note on `TripInputs.pace`.
+ */
 export function derivePace(persona: PersonaResult): Pace {
   const id = persona.archetype.id;
   if (id === "weekend_warrior" || id === "bucket_list_chaser") return "packed";
@@ -139,7 +153,7 @@ export function buildProfile(
   return {
     interests: tripInputs.interestOverrides ?? deriveInterests(persona),
     dietary: tripInputs.dietary,
-    pace: derivePace(persona),
+    pace: tripInputs.pace ?? derivePace(persona),
     budget: tripInputs.budget ?? deriveBudget(persona),
     typeAffinities: { ...preset.typeAffinities },
   };

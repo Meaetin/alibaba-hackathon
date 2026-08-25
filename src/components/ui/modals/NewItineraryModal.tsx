@@ -13,6 +13,39 @@ import { PlaceAutocomplete } from "@/components/ui/primitives/PlaceAutocomplete"
 import type { PlaceResult } from "@/components/ui/primitives/PlaceAutocomplete";
 import type { Surface } from "@/lib/domain-types";
 import { LOCAL_DEMO_PROFILE_LABEL } from "@/lib/planner/demo-profile";
+import type { Pace } from "@/lib/planner/types";
+
+/**
+ * The pace control's three options. Pace is the one preference the traveller
+ * *types*, which is why it beats anything the persona quiz infers — see the
+ * precedence rules in `src/lib/planner/knobs.ts`.
+ */
+const PACE_OPTIONS: ReadonlyArray<{ value: Pace; label: string; hint: string }> = [
+  { value: "relaxed", label: "Relaxed", hint: "Fewer stops, longer at each" },
+  { value: "balanced", label: "Balanced", hint: "A full day without rushing" },
+  { value: "packed", label: "Packed", hint: "As much as the clock allows" },
+];
+
+/**
+ * Everything the modal collects, named rather than written inline at each of
+ * the three call sites. A structurally-typed inline handler that omits a field
+ * still compiles and silently drops it — which is what happened the first time
+ * `pace` was threaded through.
+ */
+interface NewItinerarySubmission {
+  tripName: string;
+  country?: string;
+  region?: string;
+  latitude?: number;
+  longitude?: number;
+  startDate?: string;
+  endDate?: string;
+  totalDays?: number;
+  aiRecommendations: boolean;
+  /** How full the traveller wants their days. Only meaningful with AI on. */
+  pace: Pace;
+  selectedLocationIds: string[];
+}
 
 interface NewItineraryModalProps {
   /** Surface this modal was opened from — drives the create-funnel analytics. */
@@ -24,18 +57,7 @@ interface NewItineraryModalProps {
   tripNameValue?: string;
   defaultTripNameValue?: string;
   onTripNameChange?: (value: string) => void;
-  onSubmit?: (data: {
-    tripName: string;
-    country?: string;
-    region?: string;
-    latitude?: number;
-    longitude?: number;
-    startDate?: string;
-    endDate?: string;
-    totalDays?: number;
-    aiRecommendations: boolean;
-    selectedLocationIds: string[];
-  }) => void | Promise<void>;
+  onSubmit?: (data: NewItinerarySubmission) => void | Promise<void>;
   onCancel?: () => void;
   /** Pre-fill the location field. */
   defaultPlace?: PlaceResult | null;
@@ -61,6 +83,7 @@ function NewItineraryModal({
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(defaultPlace ?? null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [aiRecommendations, setAiRecommendations] = useState(false);
+  const [pace, setPace] = useState<Pace>("balanced");
   const [shakingFields, setShakingFields] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Distinguishes a close-after-submit from a genuine abandonment.
@@ -110,6 +133,7 @@ function NewItineraryModal({
       setSelectedPlace(null);
       setDateRange(undefined);
       setAiRecommendations(false);
+      setPace("balanced");
       setShakingFields(new Set());
       setIsSubmitting(false);
     }
@@ -153,6 +177,7 @@ function NewItineraryModal({
         endDate: dateRange?.to ? toLocalDateStr(dateRange.to) : undefined,
         totalDays,
         aiRecommendations,
+        pace,
         selectedLocationIds,
       });
     } finally {
@@ -275,13 +300,55 @@ function NewItineraryModal({
             </span>
           </button>
           {aiRecommendations && (
-            <p
-              className={cn(
-                "new-itinerary-modal-demo-profile max-w-80 text-center type-body-3 text-content-secondary",
-              )}
-            >
-              {LOCAL_DEMO_PROFILE_LABEL}
-            </p>
+            <>
+              {/* Pace Control */}
+              <div
+                className="new-itinerary-modal-pace flex w-full max-w-80 flex-col gap-1.5"
+                data-region="new-itinerary-pace"
+              >
+                <span className="new-itinerary-modal-pace-label type-body-4 font-medium uppercase tracking-wide text-content-tertiary">
+                  Pace
+                </span>
+                <div
+                  className="new-itinerary-modal-pace-options flex w-full gap-1 rounded-xl border border-edge bg-surface-alt p-1"
+                  role="radiogroup"
+                  aria-label="Trip pace"
+                >
+                  {PACE_OPTIONS.map((option) => {
+                    const isSelected = pace === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={isSelected}
+                        title={option.hint}
+                        onClick={() => setPace(option.value)}
+                        className={cn(
+                          "new-itinerary-modal-pace-option flex-1 rounded-lg px-2 py-1.5 type-body-3 font-medium transition-colors",
+                          isSelected
+                            ? "bg-action-brand text-content-on-brand"
+                            : "text-content-secondary hover:bg-surface",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="new-itinerary-modal-pace-hint type-body-4 text-content-placeholder">
+                  {PACE_OPTIONS.find((option) => option.value === pace)?.hint}
+                </p>
+              </div>
+
+              <p
+                className={cn(
+                  "new-itinerary-modal-demo-profile max-w-80 text-center type-body-3 text-content-secondary",
+                )}
+              >
+                {LOCAL_DEMO_PROFILE_LABEL}
+              </p>
+            </>
           )}
         </div>
       )}
@@ -292,4 +359,4 @@ function NewItineraryModal({
 NewItineraryModal.displayName = "NewItineraryModal";
 
 export { NewItineraryModal };
-export type { NewItineraryModalProps };
+export type { NewItineraryModalProps, NewItinerarySubmission };

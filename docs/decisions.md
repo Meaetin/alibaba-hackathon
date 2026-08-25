@@ -394,3 +394,27 @@
   `tsconfig.json` keeps `jsx: preserve` for Next. Chosen over adding
   `@vitejs/plugin-react` for one test file; `esbuild.jsx` is ignored because
   Vite 8 parses with oxc.
+- 2026-08-25 — **The persona is stored server-side in `travel_personas`, and a
+  retake rewrites the row in place.** The client holds only the id. One persona
+  per person means one stable pointer and nothing to migrate, at the cost of
+  the table no longer describing who planned an older trip — which is why
+  `itineraries.persona` snapshots the whole persona (answers and derived result)
+  on every plan and nothing explaining an existing trip may join to the table.
+- 2026-08-25 — **Axis precedence lives in one file, `src/lib/planner/knobs.ts`.**
+  Four pairs of quiz axes reach for the same constants in opposite directions;
+  resolving that at each call site would resolve it differently. No module below
+  reads a `PersonaResult` — each takes the knob it needs as a parameter.
+- 2026-08-25 — **A missing persona resolves to today's constants, and so does
+  every `mid` band.** One table, one rule: a genuinely middling traveller gets
+  the unopinionated plan. Two bridge proposals lose to this — a 0.1 popularity
+  weight at mid and one social venue a day at mid — because the alternative is
+  two definitions of "unopinionated" with only one of them tested.
+- 2026-08-25 — **`visitDurationBias`: pace sets the floor, immersion may raise
+  it one step and never lower it.** The bridge gives the knob to the focus axis
+  and the precedence rule gives minutes to pace; this satisfies both. A packed
+  day stays brisk, but a deep-immersion traveller does not get the 45-minute
+  version of the temple the day was built around.
+- 2026-08-25 — **Pace is asked for in the create modal, so `derivePace` is a
+  fallback.** Quiz Q4 feeds the spontaneity axis, which conflates *unhurried*
+  with *unplanned*: a wanderer who wants full days reads as relaxed. Generalised
+  — a thing the user typed beats a thing the quiz inferred.

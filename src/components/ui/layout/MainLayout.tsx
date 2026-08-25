@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/primitives/Avatar";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { NewCollectionModal } from "@/components/ui/modals/NewCollectionModal";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { Sheet } from "@/components/ui/primitives/Sheet";
 import { RightSidebarProvider } from "@/contexts/RightSidebarContext";
 import { useRightSidebar } from "@/contexts/RightSidebarContext";
@@ -211,18 +212,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleItinerarySubmit = async (data: {
-    tripName: string;
-    country?: string;
-    region?: string;
-    latitude?: number;
-    longitude?: number;
-    startDate?: string;
-    endDate?: string;
-    totalDays?: number;
-    aiRecommendations: boolean;
-    selectedLocationIds: string[];
-  }) => {
+  const handleItinerarySubmit = async (data: NewItinerarySubmission) => {
     if (!data.tripName || !data.country || !data.startDate || !data.totalDays) return;
     try {
       const result = await createItineraryRouted({
@@ -237,6 +227,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
         totalDays: data.totalDays,
         selectedLocationIds: data.selectedLocationIds,
         aiRecommendations: data.aiRecommendations,
+        pace: data.pace,
       });
       setItineraryName("");
       setItineraryModalOpen(false);

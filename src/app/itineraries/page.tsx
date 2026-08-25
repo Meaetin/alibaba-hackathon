@@ -8,6 +8,7 @@ import { ItineraryCard } from "@/components/ui";
 import { CreateCard } from "@/components/ui/dashboard/CreateCard";
 import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { ConfirmDeleteModal } from "@/components/ui/modals/ConfirmDeleteModal";
 import {
   createItineraryRouted,
@@ -203,7 +204,7 @@ export default function ItinerariesPage() {
   // The itineraries page is a no-selection entry point: locations are never
   // pre-selected here, so only the AI toggle matters — on → AI-only plan (2a),
   // off → blank itinerary (2b).
-  const handleCreateItinerary = async ({ tripName, country, region, latitude, longitude, startDate, totalDays, endDate, aiRecommendations }: { tripName: string; country?: string; region?: string; latitude?: number; longitude?: number; startDate?: string; totalDays?: number; endDate?: string; aiRecommendations: boolean }) => {
+  const handleCreateItinerary = async ({ tripName, country, region, latitude, longitude, startDate, totalDays, endDate, aiRecommendations, pace }: NewItinerarySubmission) => {
     if (!tripName || !country || !startDate || !totalDays) return;
     setIsCreating(true);
     try {
@@ -213,6 +214,7 @@ export default function ItinerariesPage() {
         startDate, endDate, totalDays,
         selectedLocationIds: [],
         aiRecommendations,
+        pace,
       });
       setIsCreateModalOpen(false);
       setNewItineraryName("");

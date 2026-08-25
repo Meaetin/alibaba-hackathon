@@ -122,6 +122,14 @@ describe("buildProfile", () => {
     expect(override.budget).toBe(4);
   });
 
+  it("form pace wins over the persona fallback", () => {
+    // The quiz's pace question feeds the spontaneity axis, so a wanderer who
+    // wants full days reads as relaxed. When the modal asked, the modal wins.
+    const wanderer = persona("spontaneous_wanderer", { structure: 90 });
+    expect(buildProfile(wanderer, trip).pace).toBe("relaxed");
+    expect(buildProfile(wanderer, { ...trip, pace: "packed" }).pace).toBe("packed");
+  });
+
   it("interest overrides replace the persona-derived set", () => {
     const profile = buildProfile(persona("culinary_nomad"), {
       ...trip,

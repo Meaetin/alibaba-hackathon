@@ -10,6 +10,7 @@ import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { NewCollectionModal } from "@/components/ui/modals/NewCollectionModal";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { CreateCard } from "@/components/ui/dashboard/CreateCard";
 import { type ListingCardType } from "@/components/ui/dashboard/ListingContextMenu";
 import { AddToDestinationModal } from "@/components/ui/modals/AddToDestinationModal";
@@ -485,7 +486,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleItinerarySubmit = async (data: { tripName: string; country?: string; region?: string; latitude?: number; longitude?: number; startDate?: string; endDate?: string; totalDays?: number; aiRecommendations: boolean; selectedLocationIds: string[] }) => {
+  const handleItinerarySubmit = async (data: NewItinerarySubmission) => {
     if (!data.tripName || !data.country || !data.startDate || !data.totalDays) return;
     try {
       const result = await createItineraryRouted({
@@ -500,6 +501,7 @@ export default function DashboardPage() {
         totalDays: data.totalDays,
         selectedLocationIds: data.selectedLocationIds,
         aiRecommendations: data.aiRecommendations,
+        pace: data.pace,
       });
       setNewItineraryModalOpen(false);
       setTripNameValue("");

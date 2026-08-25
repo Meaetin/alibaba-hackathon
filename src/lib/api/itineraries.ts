@@ -4,7 +4,7 @@ import { type Surface } from '@/lib/domain-types'
 import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
 import type { ActivityLocation } from '@/lib/supabase/queries/home'
-import type { PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
+import type { Pace, PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
 import { readPersonaId } from '@/lib/persona/storage'
 import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
 
@@ -445,6 +445,13 @@ export interface CreateItineraryRoutedInput {
   selectedLocationIds: string[]
   /** State of the "Start with AI recommendations" toggle. */
   aiRecommendations: boolean
+  /**
+   * How full the traveller wants their days, straight off the create modal.
+   * Optional so the one caller that never reaches the planner — the batch
+   * "plan from selected places" path — need not invent an answer. Defaults to
+   * `balanced`, which is what the demo profile always used.
+   */
+  pace?: Pace
   /** Surface the create modal was opened from, for analytics. */
   source: Surface
 }
@@ -498,7 +505,9 @@ export async function createItineraryRouted(
     startDate: input.startDate,
     totalDays: input.totalDays,
     name: input.tripName,
-    profile: LOCAL_DEMO_PROFILE,
+    // Pace is the one preference the traveller typed, so it overwrites the
+    // demo default rather than sitting beside it.
+    profile: { ...LOCAL_DEMO_PROFILE, pace: input.pace ?? LOCAL_DEMO_PROFILE.pace },
     ...(personaId ? { personaId } : {}),
   })
   return { kind: 'planning', job }
