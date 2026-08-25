@@ -39,6 +39,7 @@ import type { CandidatePlace, OpeningPeriod, PreferenceProfile } from "./types";
 // ── the wire ─────────────────────────────────────────────────────────────────
 
 const PLACES_SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText";
+const PLACES_SEARCH_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
 const PLACES_DETAILS_BASE_URL = "https://places.googleapis.com/v1/places";
 
 /**
@@ -95,17 +96,69 @@ export type { FetchLike } from "./http";
 
 // ── what a search is ─────────────────────────────────────────────────────────
 
+/** Google's hard ceiling on a Nearby Search circle. */
+export const NEARBY_MAX_RADIUS_METERS = 50_000;
+
+/**
+ * A circle to search inside, for `places:searchNearby`.
+ *
+ * The coordinates come from a place that is already in the pool, never from a
+ * model and never from a geocoder — which is what makes an anchor cost nothing
+ * and be impossible to hallucinate.
+ */
+export interface NearbySearch {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  /** Places types to return. Empty means "whatever is there". */
+  includedTypes: readonly string[];
+}
+
 /**
  * One billable search. Cache identity also includes the page size supplied to
  * `searchCacheKey`; a five-result pre-warm must not satisfy a twenty-result run.
+ *
+ * Two endpoints, one type, on purpose. A nearby search wants exactly the same
+ * cache, the same location persistence, the same dedupe and the same stats as a
+ * text search, and a second copy of `retrievePlaces` to get them would be a
+ * second place for the "publish the cache entry only after the rows land" rule
+ * to be forgotten.
  */
 export interface SearchRequest {
   city: string;
-  /** Text query with `{city}` already interpolated. */
+  /** Text query with `{city}` already interpolated. Ignored when `nearby` is set. */
   query: string;
   /** Optional single Places type filter. Narrows the long tail Text Search
    *  catches; most plan rows leave it unset. */
   includedType?: string;
+  /** Present ⇒ this is a Nearby Search around a circle, not a Text Search. */
+  nearby?: NearbySearch;
+}
+
+/**
+ * A nearby search as a `SearchRequest`. The radius is clamped to Google's
+ * ceiling here rather than at the call site, because the call site is deriving
+ * it from a persona knob and a model's word for "wide".
+ */
+export function nearbyRequest(
+  city: string,
+  /** A place already in the pool. Its coordinates are the circle's centre. */
+  centre: { latitude: number; longitude: number },
+  radiusMeters: number,
+  includedTypes: readonly string[],
+): SearchRequest {
+  return {
+    city,
+    // Not a query, and deliberately not empty: this string is what a failure in
+    // `stats.failures` is identified by, and "" tells nobody anything.
+    query: `nearby:${includedTypes.join("+") || "any"}`,
+    nearby: {
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
+      includedTypes: [...includedTypes].sort(),
+    },
+  };
 }
 
 /**
@@ -124,6 +177,16 @@ export function searchCacheKey(
     normalizeKeyPart(request.query),
     request.includedType ?? "",
     String(pageSize),
+    // A circle is part of what was asked. Two themes anchored on different
+    // places produce different searches and must not share one cache entry.
+    request.nearby
+      ? [
+          request.nearby.latitude.toFixed(5),
+          request.nearby.longitude.toFixed(5),
+          String(request.nearby.radiusMeters),
+          [...request.nearby.includedTypes].sort().join("+"),
+        ].join(",")
+      : "",
   ];
   return createHash("sha256").update(parts.join("|")).digest("hex");
 }
@@ -434,7 +497,7 @@ export async function retrievePlaces(
     deps.concurrency ?? DEFAULT_CONCURRENCY,
     async ({ request }): Promise<{ places?: RetrievedPlace[]; failure?: SearchFailure }> => {
       try {
-        const raw = await searchText(request, { doFetch, apiKey: deps.apiKey, pageSize });
+        const raw = await runSearch(request, { doFetch, apiKey: deps.apiKey, pageSize });
         return { places: raw.map((place) => normalizePlace(place, request.city, now)) };
       } catch (error) {
         return { failure: { request, message: messageOf(error) } };
@@ -639,14 +702,41 @@ async function fetchShortlistDetails(
   };
 }
 
-async function searchText(
+/**
+ * One search, either endpoint.
+ *
+ * **`SEARCH_FIELD_MASK` for both, and that is the cost argument.** Google sets
+ * the SKU tier from the highest-tier field in the mask, per call — so a single
+ * Atmosphere field added for a nearby search would bump the tier on every
+ * nearby call in every plan. The Atmosphere tier is bought once, later, on the
+ * ~60-place shortlist. Never here.
+ */
+async function runSearch(
   request: SearchRequest,
   ctx: { doFetch: FetchLike; apiKey: string; pageSize: number },
 ): Promise<RawPlace[]> {
-  const body: Record<string, unknown> = { textQuery: request.query, pageSize: ctx.pageSize };
-  if (request.includedType) body.includedType = request.includedType;
+  const nearby = request.nearby;
+  const url = nearby ? PLACES_SEARCH_NEARBY_URL : PLACES_SEARCH_TEXT_URL;
+  const body: Record<string, unknown> = nearby
+    ? {
+        maxResultCount: ctx.pageSize,
+        ...(nearby.includedTypes.length > 0
+          ? { includedTypes: [...nearby.includedTypes] }
+          : {}),
+        locationRestriction: {
+          circle: {
+            center: { latitude: nearby.latitude, longitude: nearby.longitude },
+            radius: nearby.radiusMeters,
+          },
+        },
+      }
+    : {
+        textQuery: request.query,
+        pageSize: ctx.pageSize,
+        ...(request.includedType ? { includedType: request.includedType } : {}),
+      };
 
-  const response = await ctx.doFetch(PLACES_SEARCH_TEXT_URL, {
+  const response = await ctx.doFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

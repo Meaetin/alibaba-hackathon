@@ -13,7 +13,7 @@
  * The fifth is that a dead Pass B still produces a trip.
  */
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import candidates from './__fixtures__/kyoto-candidates.json'
 import { createFakeGoogle, createFakeResponses } from './__tests__/fakes'
@@ -72,6 +72,8 @@ interface RunOptions {
   servesVegetarianFood?: Record<string, boolean>
   enrichments?: readonly StoredEnrichment[]
   failPassB?: boolean
+  failTheme?: boolean
+  hallucinateAnchors?: readonly string[]
   onProgress?: (progress: PlanProgress) => void
   enqueueEnrichments?: (subjects: readonly EnrichmentSubject[], now: Date) => Promise<void>
 }
@@ -92,7 +94,13 @@ async function plan(options: RunOptions = {}): Promise<{
       store: createInMemoryLocationStore(),
       enrichments: createInMemoryEnrichmentStore(options.enrichments),
       enqueueEnrichments: options.enqueueEnrichments,
-      responses: createFakeResponses(options.failPassB ? { fail: 'assign' } : {}),
+      responses: createFakeResponses({
+        ...(options.failPassB ? { fail: 'assign' as const } : {}),
+        ...(options.failTheme ? { fail: 'theme' as const } : {}),
+        ...(options.hallucinateAnchors
+          ? { hallucinateAnchors: options.hallucinateAnchors }
+          : {}),
+      }),
       fetch: google.fetch,
       now: NOW,
       rng: mulberry32(1337),
@@ -590,5 +598,118 @@ describe('the serendipity slot', () => {
     for (const day of result.days) {
       expect((day.input.flex ?? []).length).toBeLessThanOrEqual(allowed)
     }
+  })
+})
+
+describe('themed mode', () => {
+  it('is off by default — a plan with no mode runs exactly as it always did', async () => {
+    const { result, google } = await plan()
+    expect(google.nearbyCalls).toHaveLength(0)
+    expect(result.stats.explore).toBeUndefined()
+    expect(result.stats.theming).toBeUndefined()
+    expect(result.debug.themes).toBeUndefined()
+    for (const day of result.days) expect(day.areaName).toBeDefined()
+  })
+
+  it('names every day and searches around each anchor', async () => {
+    const { result, google } = await plan({ request: { mode: 'themed' } })
+
+    expect(result.stats.theming).toEqual({ themed: 3, fellBack: 0 })
+    // One Nearby Search per theme, and every circle centred on a real place we
+    // already had — which is what makes an anchor cost no geocode.
+    expect(google.nearbyCalls).toHaveLength(3)
+    const poolCoords = new Set(
+      CANDIDATES.filter((p) => p.latitude !== undefined).map(
+        (p) => `${p.latitude},${p.longitude}`,
+      ),
+    )
+    for (const call of google.nearbyCalls) {
+      expect(poolCoords.has(`${call.latitude},${call.longitude}`)).toBe(true)
+      expect(call.radius).toBeGreaterThan(0)
+    }
+
+    // Each day carries its own premise, in day order.
+    expect(result.debug.themes?.titles.map((t) => t.dayIndex)).toEqual([0, 1, 2])
+    expect(result.debug.themes?.fallbacks).toEqual([])
+  })
+
+  it('costs the Nearby Searches on a separate line from the bulk Text Search', async () => {
+    // "What did themes cost" is a question somebody will ask, and one merged
+    // counter cannot answer it — the two are different SKUs.
+    const { result } = await plan({ request: { mode: 'themed' } })
+    expect(result.stats.explore!.billedCalls).toBeGreaterThan(0)
+    expect(result.stats.retrieval.billedCalls).toBeGreaterThan(0)
+    expect(result.stats.explore).not.toBe(result.stats.retrieval)
+  })
+
+  it('never buys the Atmosphere tier on a nearby call', async () => {
+    // Google sets the SKU from the highest-tier field in the mask, per call.
+    // One Atmosphere field here would bump the tier on every nearby search in
+    // every plan, for a pool the funnel cuts to ~60 anyway.
+    const google = createFakeGoogle({ places: CANDIDATES })
+    const masks: string[] = []
+    const recording: typeof google.fetch = async (url, init) => {
+      if (url.includes('searchNearby')) masks.push(init.headers['X-Goog-FieldMask'] ?? '')
+      return google.fetch(url, init)
+    }
+    await runPlan(
+      { ...REQUEST, mode: 'themed' },
+      {
+        googleApiKey: 'test-key',
+        cache: createInMemorySearchCache(),
+        store: createInMemoryLocationStore(),
+        enrichments: createInMemoryEnrichmentStore(),
+        responses: createFakeResponses(),
+        fetch: recording,
+        now: NOW,
+        rng: mulberry32(1337),
+        getTravelLeg: createStraightLineTravel(),
+      },
+    )
+
+    expect(masks.length).toBeGreaterThan(0)
+    for (const mask of masks) {
+      expect(mask).not.toMatch(/reviews|editorialSummary|reviewSummary|serves/i)
+    }
+  })
+
+  it('falls back to geography, and still ships a trip, when the theme pass dies', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { result, google } = await plan({
+      request: { mode: 'themed' },
+      failTheme: true,
+    })
+
+    // The worst case for a themed run is the default run, one model call poorer.
+    expect(result.days).toHaveLength(3)
+    expect(result.stats.theming).toEqual({ themed: 0, fellBack: 3 })
+    expect(google.nearbyCalls).toHaveLength(0)
+    for (const day of result.days) assertValidItinerary(day.day, day.input)
+    errors.mockRestore()
+  })
+
+  it('records the day it refused, rather than losing it', async () => {
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { result } = await plan({
+      request: { mode: 'themed' },
+      hallucinateAnchors: ['a-glassblowing-quarter'],
+    })
+
+    // Day one loses its premise and gets a geographic cluster; the other two
+    // are untouched, and the reason is on the row rather than in a log line.
+    expect(result.stats.theming).toEqual({ themed: 2, fellBack: 1 })
+    expect(result.debug.themes?.fallbacks).toContainEqual({
+      dayIndex: 0,
+      anchorPlaceId: 'a-glassblowing-quarter',
+      reason: 'the anchor names a place that is not in the pool',
+    })
+    expect(result.days).toHaveLength(3)
+    warnings.mockRestore()
+  })
+
+  it('produces a themed itinerary the invariant suite accepts', async () => {
+    const { result } = await plan({ request: { mode: 'themed' } })
+    expect(result.days).toHaveLength(3)
+    for (const day of result.days) assertValidItinerary(day.day, day.input)
   })
 })

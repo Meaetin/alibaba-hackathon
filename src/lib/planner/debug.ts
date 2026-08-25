@@ -37,6 +37,20 @@ export interface AssignmentRationale {
   why: string;
 }
 
+/**
+ * One day the theme pass could not name, and why it fell back to geography.
+ *
+ * Shaped here rather than imported from `theme.ts` for the rule at the top of
+ * this file: this module depends on nothing, because `src/lib/db/schema.ts`
+ * pulls `PlannerDebug` in to type a column.
+ */
+export interface ThemeFallback {
+  dayIndex: number;
+  /** The id the model named, when it named one that does not exist. */
+  anchorPlaceId?: string;
+  reason: string;
+}
+
 /** One id Pass B named that never became a stop, worded for a person. */
 export interface AssignmentDrop {
   dayIndex: number;
@@ -81,6 +95,20 @@ export interface PlannerDebug {
     /** Shortlisted places with no usable cached enrichment at plan time. These
      *  shipped on the type heuristic and were handed to the durable batch. */
     misses: string[];
+  };
+  /**
+   * Themed runs only; absent on every geographic plan, which is the default.
+   *
+   * `fallbacks` is the answer to "why does day three have no premise" — an
+   * anchor that named a place we never retrieved, two days claiming the same
+   * anchor, a model that did not answer. Each one is recorded and none is
+   * retried: a model that named a place we do not have will name it again, and
+   * a second call is a second bill.
+   */
+  themes?: {
+    /** What each day ended up being about, best read next to the days. */
+    titles: { dayIndex: number; title: string; anchorPlaceId: string }[];
+    fallbacks: ThemeFallback[];
   };
 }
 

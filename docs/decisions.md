@@ -434,3 +434,21 @@
   Free on the Atmosphere call, but not free to keep: it needs a column, a
   migration and a row type, and nothing reads it. Adding it now would recreate
   exactly the orphan pattern this work exists to remove.
+- 2026-08-25 — **Themed planning is `PlanRequest.mode`, default `"geographic"`.**
+  Every rung falls back to geography — a dead theme pass, a hallucinated anchor,
+  an anchor with no coordinates — so the worst case for a themed run is the
+  default run plus one model call.
+- 2026-08-25 — **A Nearby Search is a `SearchRequest` with a `nearby` field, so
+  it flows through `retrievePlaces`.** Same cache, same location persistence,
+  same dedupe, same stats — and, crucially, the same "publish the cache entry
+  only after the rows land" rule. A second path to Google would be a second
+  place to forget it. `SEARCH_FIELD_MASK` for both: one Atmosphere field would
+  bump the SKU tier on every nearby call.
+- 2026-08-25 — **`runFunnel` gained `dayAligned`.** A themed cluster carries
+  `theme.dayIndex`; the funnel's default score-ranking would move day three's
+  premise onto day one, and dropping an empty cluster would renumber every day
+  after it. Off by default, which is the old behaviour.
+- 2026-08-25 — **The survey's areas are k-means clusters carrying landmarks, not
+  named neighbourhoods.** Nothing here geocodes and `formatted_address` would
+  need a parser per country. The model names areas from the best-known places in
+  them, which is evidence rather than invention.

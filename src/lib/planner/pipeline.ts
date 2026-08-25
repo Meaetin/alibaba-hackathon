@@ -60,8 +60,9 @@ import {
   type FunnelStats,
   type ScoredCluster,
 } from "./funnel";
-import { bandsFor, resolvePlannerKnobs } from "./knobs";
-import { personaBriefFor } from "./persona-brief";
+import { groupByTheme, type ThemedCluster } from "./group";
+import { bandsFor, resolvePlannerKnobs, type PlannerKnobs } from "./knobs";
+import { personaBriefFor, type PersonaBrief } from "./persona-brief";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
 import { narrateStops, stopsFromDays, type NarrateStats, type StopContent } from "./narrate";
@@ -84,6 +85,7 @@ import {
 import {
   buildSearchPlan,
   hydrateShortlist,
+  nearbyRequest,
   retrievePlaces,
   type LocationStore,
   type RetrievalStats,
@@ -92,6 +94,13 @@ import {
   type ShortlistHydrationStats,
 } from "./retrieval";
 import { scorePlace, type ScoredPlace } from "./score";
+import { surveyCity } from "./survey";
+import {
+  planThemes,
+  radiusFor,
+  type DayTheme,
+  type ThemeRejection,
+} from "./theme";
 import { resolveVisitDuration } from "./duration";
 import type {
   CandidatePlace,
@@ -125,7 +134,22 @@ export interface PlanRequest {
    * still for a traveller who never took the quiz.
    */
   persona?: TravelPersona;
+  /**
+   * How a day is decided.
+   *
+   * `"geographic"` — the default and everything this planner has ever shipped:
+   * k-means over coordinates, `k = totalDays`, one neighbourhood per day.
+   *
+   * `"themed"` — a day is a premise anchored on a real place, and its
+   * candidates are searched *around* that anchor rather than partitioned out of
+   * a pool. Costs one model call and roughly eight to twelve extra Nearby
+   * Searches; buys days that are about something. Every rung of it falls back
+   * to `"geographic"`, so the worst case is the default.
+   */
+  mode?: PlanMode;
 }
+
+export type PlanMode = "geographic" | "themed";
 
 // ── progress ─────────────────────────────────────────────────────────────────
 
@@ -136,6 +160,8 @@ export interface PlanRequest {
  */
 export type PlanStage =
   | "retrieve"
+  | "theme"
+  | "explore"
   | "cluster"
   | "hydrate"
   | "enrich"
@@ -170,6 +196,11 @@ interface StagePlan {
 /** The bar's arithmetic, in one table. */
 export const PLAN_STAGES: readonly StagePlan[] = [
   { stage: "retrieve", label: "Searching for places", ms: 12_000 },
+  // Both only fire in themed mode; a geographic run skips straight past them,
+  // which moves the bar forward and never backward. The theme call is on the
+  // critical path — nothing can be explored until the anchors are known.
+  { stage: "theme", label: "Deciding what each day is about", ms: 7_000 },
+  { stage: "explore", label: "Looking around each day's anchor", ms: 6_000 },
   { stage: "cluster", label: "Grouping them by neighbourhood", ms: 400 },
   { stage: "hydrate", label: "Reading reviews and details", ms: 8_000 },
   // Not 600ms, which is what the cache read alone costs. On a city nobody has
@@ -413,6 +444,17 @@ export interface PlannedDay {
 /** Per-stage counters — the "why isn't X in my trip" answer, in numbers. */
 export interface PlanStats {
   retrieval: RetrievalStats;
+  /**
+   * The Nearby Searches the themed path added. A different SKU from the bulk
+   * Text Search above and counted apart from it, because "what did themes
+   * cost" is a question somebody will ask. Absent on a geographic run.
+   */
+  explore?: RetrievalStats;
+  /** Themed runs only. How many days got a premise and how many fell back. */
+  theming?: {
+    themed: number;
+    fellBack: number;
+  };
   clustering: {
     /** Candidates with coordinates, which is all clustering can place. */
     located: number;
@@ -530,16 +572,42 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   });
   const pool = retrieval.places;
 
-  // 2 — clustering, then the funnel. k is the trip's length: one area per day.
+  // 2 — what each day is about, and where to look for it. Themed mode only;
+  //     every rung of it falls through to the geographic path below.
+  const baseWeekday = weekdayOf(request.startDate);
+  const dayIndices = Array.from({ length: Math.max(0, request.totalDays) }, (_, i) => i);
+  let themed: ThemedPlan | undefined;
+  if (request.mode === "themed") {
+    themed = await planThemedDays(request, pool, {
+      deps,
+      knobs,
+      brief,
+      baseWeekday,
+      dayIndices,
+      report,
+    });
+  }
+  const poolWithExplored = themed?.pool ?? pool;
+
+  // 3 — clustering, then the funnel. k is the trip's length: one area per day.
+  //     Themed mode has already grouped; this is the geographic path.
   await report("cluster");
-  const located = pool.filter((place) => place.latitude !== undefined);
-  const unlocated = pool.filter((place) => place.latitude === undefined);
-  const clusters = clusterPlaces(located, {
-    k: Math.max(1, Math.min(request.totalDays, request.options?.maxK ?? request.totalDays)),
-    rng: deps.rng,
-    maxIterations: request.options?.maxIterations,
+  const located = poolWithExplored.filter((place) => place.latitude !== undefined);
+  const unlocated = poolWithExplored.filter((place) => place.latitude === undefined);
+  const clusters =
+    themed?.clusters ??
+    clusterPlaces(located, {
+      k: Math.max(1, Math.min(request.totalDays, request.options?.maxK ?? request.totalDays)),
+      rng: deps.rng,
+      maxIterations: request.options?.maxIterations,
+    });
+  const funnel = runFunnel(clusters, profile, {
+    unlocated,
+    knobs,
+    // A themed cluster carries its own day. Ranking them would move a premise
+    // onto a different day and dropping an empty one would renumber the rest.
+    dayAligned: themed !== undefined,
   });
-  const funnel = runFunnel(clusters, profile, { unlocated, knobs });
   const shortlistIds = funnel.shortlist.map((scored) => scored.placeId);
   const scored = new Map(funnel.shortlist.map((entry) => [entry.placeId, entry]));
 
@@ -577,16 +645,12 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
 
   // 5 — Pass B. One call for the trip; never throws, degrades to the ranked list.
   await report("assign");
-  const baseWeekday = weekdayOf(request.startDate);
-  const dayRequests: AssignDayRequest[] = Array.from(
-    { length: Math.max(0, request.totalDays) },
-    (_, index) => ({
+  const dayRequests: AssignDayRequest[] = dayIndices.map((index) => ({
       dayIndex: index,
       weekday: advanceWeekday(baseWeekday, index),
       areaName: hydratedClusters[index]?.label,
       capacity: dayCapacity(profile.pace, DEFAULT_MEALS_PER_DAY, knobs),
-    }),
-  );
+  }));
   const assignment: AssignResult = await assignDays(
     {
       profile,
@@ -707,9 +771,38 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
         rejectedDishes: narration.stats.rejectedDishes,
       },
       enrichment: { misses: enrichment.misses },
+      ...(themed
+        ? {
+            themes: {
+              titles: themed.clusters.flatMap((cluster) =>
+                cluster.theme
+                  ? [
+                      {
+                        dayIndex: cluster.theme.dayIndex,
+                        title: cluster.theme.title,
+                        anchorPlaceId: cluster.theme.anchorPlaceId,
+                      },
+                    ]
+                  : [],
+              ),
+              fallbacks: themed.rejected,
+            },
+          }
+        : {}),
     },
     stats: {
       retrieval: retrieval.stats,
+      // Kept apart from `retrieval` deliberately: they are different SKUs and
+      // "how much did the theme path cost" is the question this answers.
+      ...(themed?.exploreStats ? { explore: themed.exploreStats } : {}),
+      ...(themed
+        ? {
+            theming: {
+              themed: themed.clusters.filter((cluster) => cluster.theme).length,
+              fellBack: themed.rejected.length,
+            },
+          }
+        : {}),
       clustering: {
         located: located.length,
         unlocated: unlocated.length,
@@ -779,6 +872,153 @@ function rehydrate(
     ...cluster,
     places: cluster.places.map((place) => rows.get(place.placeId) ?? place),
   };
+}
+
+// ── the themed path ──────────────────────────────────────────────────────────
+
+interface ThemedPlan {
+  /** The retrieved pool plus everything the nearby searches found. */
+  pool: RetrievedPlace[];
+  /** One per day, in day order, empties kept. Handed to the funnel as-is. */
+  clusters: ThemedCluster[];
+  /** For the diagnostic record: days that fell back, and why. */
+  rejected: ThemeRejection[];
+  /** Nearby-search counters, folded into the run's retrieval stats. */
+  exploreStats?: RetrievalStats;
+}
+
+interface ThemedContext {
+  deps: PipelineDeps;
+  knobs: PlannerKnobs;
+  brief?: PersonaBrief;
+  baseWeekday: Weekday;
+  dayIndices: readonly number[];
+  report: (stage: Exclude<PlanStage, "done">) => Promise<void>;
+}
+
+/**
+ * Survey, theme, explore, group — the four stages that turn a pool of places
+ * into days that are about something.
+ *
+ * **Nothing here throws.** Every failure is a day, or a whole trip, quietly
+ * falling back to geography: `planThemes` returns an empty list rather than
+ * raising, a failed nearby search lands in `stats.failures` and leaves the pool
+ * as it was, and `groupByTheme` clusters whatever no theme claimed. The worst
+ * case for a themed run is exactly the default run, one model call poorer.
+ */
+async function planThemedDays(
+  request: PlanRequest,
+  pool: readonly RetrievedPlace[],
+  context: ThemedContext,
+): Promise<ThemedPlan> {
+  const { deps, knobs, brief, baseWeekday, dayIndices, report } = context;
+  await report("theme");
+
+  // Deterministic, free, and the reason the model is labelling rather than
+  // inventing: it can only name places this survey already found.
+  const survey = surveyCity(pool, {
+    city: request.city,
+    totalDays: request.totalDays,
+    rng: deps.rng,
+  });
+
+  // Anchors are checked against the whole retrieved pool, not the shortlist.
+  // An anchor is a *location*: a place the funnel cut for being off-interest is
+  // still a perfectly good landmark to search around.
+  const poolIds = new Set(pool.map((place) => place.placeId));
+  const themes = await planThemes(
+    {
+      survey,
+      profile: request.profile,
+      brief,
+      days: dayIndices.map((dayIndex) => ({
+        dayIndex,
+        weekday: advanceWeekday(baseWeekday, dayIndex),
+      })),
+    },
+    poolIds,
+    {
+      client: deps.responses,
+      effort: "low",
+      promptCacheKey: promptCacheKeyFor(request),
+    },
+  );
+
+  await report("explore");
+  const explored = await explorePlaces(request, pool, themes.themes, knobs, deps);
+
+  const merged = new Map(pool.map((place) => [place.placeId, place]));
+  for (const place of explored.places) merged.set(place.placeId, place);
+  const mergedPool = [...merged.values()];
+
+  const grouped = groupByTheme({
+    places: mergedPool,
+    themes: themes.themes,
+    pool: merged,
+    totalDays: request.totalDays,
+    rng: deps.rng,
+  });
+
+  return {
+    pool: mergedPool,
+    clusters: grouped.clusters,
+    rejected: [
+      ...themes.rejected,
+      // A day that had a theme and lost it during grouping — an anchor Google
+      // gave no coordinates for — is the same outcome and belongs in the same
+      // list, or the debug page says a day fell back for no reason.
+      ...grouped.geographicDays
+        .filter((day) => !themes.rejected.some((entry) => entry.dayIndex === day))
+        .map((dayIndex) => ({
+          dayIndex,
+          reason: "the anchor has no coordinates to search around",
+        })),
+    ],
+    exploreStats: explored.stats,
+  };
+}
+
+/**
+ * One Nearby Search per theme, around its verified anchor.
+ *
+ * It goes through `retrievePlaces` rather than calling Google directly, which
+ * is what gives it the cache, the location persistence, the dedupe and the
+ * stats for free — and, more to the point, the rule that a cache entry is
+ * published only after its rows land. A second path to Google would be a
+ * second place for that to be forgotten.
+ */
+async function explorePlaces(
+  request: PlanRequest,
+  pool: readonly RetrievedPlace[],
+  themes: readonly DayTheme[],
+  knobs: PlannerKnobs,
+  deps: PipelineDeps,
+): Promise<{ places: RetrievedPlace[]; stats?: RetrievalStats }> {
+  const byPlaceId = new Map(pool.map((place) => [place.placeId, place]));
+  const requests = themes.flatMap((theme) => {
+    const anchor = byPlaceId.get(theme.anchorPlaceId);
+    if (anchor?.latitude === undefined || anchor.longitude === undefined) return [];
+    return [
+      nearbyRequest(
+        request.city,
+        { latitude: anchor.latitude, longitude: anchor.longitude },
+        // `comfortTolerance` owns distance, so the radius scales with the same
+        // knob that decides what counts as walking.
+        radiusFor(theme.radiusHint, knobs.walkMaxMeters),
+        theme.includedTypes,
+      ),
+    ];
+  });
+  if (requests.length === 0) return { places: [] };
+
+  const result = await retrievePlaces(requests, {
+    apiKey: deps.googleApiKey,
+    cache: deps.cache,
+    store: deps.store,
+    fetch: deps.fetch,
+    now: deps.now,
+  });
+  return { places: result.places, stats: result.stats };
 }
 
 /**

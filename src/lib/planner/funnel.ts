@@ -18,6 +18,7 @@
 import { DEFAULT_SCORING_KNOBS, type PlannerKnobs, type ScoringKnobs } from "./knobs";
 import type { CandidatePlace, PreferenceProfile } from "./types";
 import type { PlaceCluster } from "./cluster";
+import type { DayTheme } from "./theme";
 import {
   affinity,
   hardFilterReason,
@@ -59,6 +60,17 @@ export interface FunnelOptions {
    * exactly as it always did.
    */
   knobs?: ScoringKnobs;
+  /**
+   * The input clusters are already one per day, in day order — keep them that
+   * way, empties included.
+   *
+   * Off by default, and the default is the old behaviour: geographic clusters
+   * carry no day of their own, so the funnel ranks them and the best
+   * neighbourhood becomes day one. A **themed** cluster carries `theme.dayIndex`,
+   * and re-ranking would put day three's premise on day one. Dropping an empty
+   * one would silently renumber every day after it, which is worse.
+   */
+  dayAligned?: boolean;
 }
 
 export const FUNNEL_DEFAULTS = {
@@ -69,6 +81,7 @@ export const FUNNEL_DEFAULTS = {
   mealsPerCluster: 2,
   unlocated: [],
   knobs: DEFAULT_SCORING_KNOBS,
+  dayAligned: false,
 } as const satisfies Required<FunnelOptions>;
 
 /** Stage names double as the stats keys: a new stage added to `FunnelStages`
@@ -93,6 +106,13 @@ export interface DroppedCandidate {
  */
 export interface ScoredCluster {
   centroid: PlaceCluster["centroid"];
+  /**
+   * What this day is about, when the theme pass named it. Carried through the
+   * funnel untouched so Pass B and Pass C can read a premise the funnel had no
+   * opinion about — absent on the geographic path, which is every trip that
+   * did not ask for themes.
+   */
+  theme?: DayTheme;
   /** Neighborhood name. Still unfilled here — nothing in the deterministic
    *  core knows one; Pass B or a reverse-geocode fills it later. */
   label?: string;
@@ -196,11 +216,11 @@ export function scoreCluster(
  * cluster per day and cannot re-derive it from a flat list.
  */
 export function runFunnel(
-  clusters: readonly PlaceCluster[],
+  clusters: readonly (PlaceCluster & { theme?: DayTheme })[],
   profile: PreferenceProfile,
   options: FunnelOptions = {},
 ): FunnelResult {
-  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated, knobs } = {
+  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated, knobs, dayAligned } = {
     ...FUNNEL_DEFAULTS,
     ...options,
   };
@@ -334,6 +354,7 @@ export function runFunnel(
       return {
         centroid: cluster.centroid,
         label: cluster.label,
+        ...(cluster.theme ? { theme: cluster.theme } : {}),
         score: scoreCluster(members, profile, knobs),
         places: members,
         scored: members.map((p) => scores.get(p.placeId)!),
@@ -344,8 +365,8 @@ export function runFunnel(
           : {}),
       };
     })
-    .filter((c) => c.places.length > 0)
-    .sort((a, b) => b.score - a.score);
+    .filter((c) => dayAligned || c.places.length > 0);
+  if (!dayAligned) scoredClusters.sort((a, b) => b.score - a.score);
 
   return {
     stages: { retrieved, afterFilters, afterClusterCap, afterGlobalCap },

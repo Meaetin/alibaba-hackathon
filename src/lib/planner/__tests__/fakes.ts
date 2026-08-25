@@ -70,12 +70,17 @@ export interface FakeGoogle {
   /** Every URL asked for, in order. */
   calls: string[]
   searchCalls: string[]
+  /** One entry per `places:searchNearby` — a different SKU from Text Search,
+   *  so counted separately, which is what makes "themes cost N more calls"
+   *  assertable. */
+  nearbyCalls: { latitude: number; longitude: number; radius: number; includedTypes: string[] }[]
   detailsCalls: string[]
   /** Photo resource names turned into an image — the billed Photos SKU. */
   mediaCalls: string[]
 }
 
 const SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText'
+const NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby'
 
 /**
  * A Places stand-in over a fixture pool.
@@ -90,6 +95,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
   const queryOffsets = new Map<string, number>()
   const calls: string[] = []
   const searchCalls: string[] = []
+  const nearbyCalls: FakeGoogle['nearbyCalls'] = []
   const detailsCalls: string[] = []
   const mediaCalls: string[] = []
 
@@ -132,6 +138,32 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
       return json({ places: page })
     }
 
+    if (url === NEARBY_URL) {
+      const body = JSON.parse(init.body ?? '{}') as {
+        maxResultCount?: number
+        includedTypes?: string[]
+        locationRestriction: { circle: { center: { latitude: number; longitude: number }; radius: number } }
+      }
+      const { center, radius } = body.locationRestriction.circle
+      nearbyCalls.push({
+        latitude: center.latitude,
+        longitude: center.longitude,
+        radius,
+        includedTypes: body.includedTypes ?? [],
+      })
+      // Answers with what is genuinely near the circle's centre, which is the
+      // one property a nearby search has that a text search does not. A fake
+      // that ignored the circle would let a broken radius pass unnoticed.
+      const degrees = radius / 111_320
+      const near = pool.filter(
+        (place) =>
+          place.latitude !== undefined &&
+          Math.abs(place.latitude - center.latitude) <= degrees &&
+          Math.abs(place.longitude! - center.longitude) <= degrees,
+      )
+      return json({ places: near.slice(0, body.maxResultCount ?? 20).map(toRawPlace) })
+    }
+
     const media = /\/v1\/places\/([^/]+)\/photos\/([^/]+)\/media/.exec(url)
     if (media) {
       const placeId = decodeURIComponent(media[1])
@@ -157,7 +189,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
     throw new Error(`the Google fake was asked for an endpoint it does not serve: ${url}`)
   }
 
-  return { fetch, calls, searchCalls, detailsCalls, mediaCalls }
+  return { fetch, calls, searchCalls, nearbyCalls, detailsCalls, mediaCalls }
 }
 
 // ── OpenAI ───────────────────────────────────────────────────────────────────
@@ -172,9 +204,12 @@ interface AssignPayload {
 
 export interface FakeResponsesOptions {
   /** Throw on every call — the "Pass B is down" case. */
-  fail?: 'assign' | 'narrate' | 'all'
+  fail?: 'assign' | 'narrate' | 'theme' | 'all'
   /** The error the failing call throws. */
   error?: Error
+  /** Anchor ids the theme fake should name instead of real ones — the
+   *  hallucination case, which is the whole reason anchors are verified. */
+  hallucinateAnchors?: readonly string[]
 }
 
 export interface FakeResponses extends ResponsesClient {
@@ -201,17 +236,68 @@ export function createFakeResponses(options: FakeResponsesOptions = {}): FakeRes
       const isAssign = request.model === MODELS.assign
       if (options.fail === 'all' || options.fail === (isAssign ? 'assign' : 'narrate')) throw boom
 
-      const content = request.input.at(-1)!.content
-      if (typeof content !== 'string') throw new Error('Fake expects a text payload')
+      // The theme pass shares `MODELS.assign`, so the model name cannot tell
+      // the two apart — the payload can. Dispatching on shape also means a
+      // renamed model does not silently route a call to the wrong answer.
+      const content = userContentOf(request)
       const payload = JSON.parse(content) as Record<string, unknown>
+      const isTheme = 'survey' in payload
+      if (isTheme && options.fail === 'theme') throw boom
       return {
-        output_text: isAssign
-          ? JSON.stringify(assignmentFor(payload as unknown as AssignPayload))
-          : JSON.stringify(narrationFor(payload)),
+        output_text: isTheme
+          ? JSON.stringify(themesFor(payload as unknown as ThemePayload, options))
+          : isAssign
+            ? JSON.stringify(assignmentFor(payload as unknown as AssignPayload))
+            : JSON.stringify(narrationFor(payload)),
         usage: { input_tokens: 500, output_tokens: 100, input_tokens_details: { cached_tokens: 0 } },
       }
     },
   }
+}
+
+interface ThemePayload {
+  city: string
+  days: { day: number; weekday: number }[]
+  survey: {
+    areas: {
+      area: number
+      landmarks: { place_id: string; name: string; types: string[] }[]
+    }[]
+  }
+}
+
+/**
+ * One theme per day, anchored on the best-known place in the day's own area —
+ * which is what a model doing this job properly would land on, and, crucially,
+ * always a real id. A fake that invented ids would exercise the rejection path
+ * and nothing else; `hallucinateAnchors` is how a test asks for that on purpose.
+ */
+function themesFor(payload: ThemePayload, options: FakeResponsesOptions) {
+  return {
+    themes: payload.days.map((day, index) => {
+      const area = payload.survey.areas[index % Math.max(1, payload.survey.areas.length)]
+      const landmark = area?.landmarks[0]
+      const anchor = options.hallucinateAnchors?.[index] ?? landmark?.place_id ?? 'missing'
+      return {
+        day: day.day,
+        title: `Around ${landmark?.name ?? 'town'}`,
+        premise: `A day built around ${landmark?.name ?? 'the centre'} and what is walkable from it.`,
+        anchor_place_id: anchor,
+        included_types: landmark?.types.slice(0, 3) ?? ['tourist_attraction'],
+        radius_hint: 'walkable',
+      }
+    }),
+  }
+}
+
+/** The last text block, whichever role it carries. The theme request appends a
+ *  developer block after the payload when the traveller has a persona. */
+function userContentOf(request: ResponsesRequest): string {
+  for (let i = request.input.length - 1; i >= 0; i--) {
+    const block = request.input[i]
+    if (block.role === 'user' && typeof block.content === 'string') return block.content
+  }
+  throw new Error('Fake expects a text payload')
 }
 
 function assignmentFor(payload: AssignPayload) {
