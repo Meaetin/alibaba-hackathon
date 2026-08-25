@@ -66,6 +66,7 @@ import {
 import { repairFeasibility, type FeasibilityRepair } from "./feasibility";
 import { groupByTheme, type ThemedCluster } from "./group";
 import { bandsFor, resolvePlannerKnobs, type PlannerKnobs } from "./knobs";
+import { metersBetween as greatCircleMeters } from "./geo";
 import { personaBriefFor, type PersonaBrief } from "./persona-brief";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
@@ -359,7 +360,6 @@ export function searchLocality(city: string, country?: string): string {
 
 // ── travel legs ──────────────────────────────────────────────────────────────
 
-const EARTH_RADIUS_M = 6_371_000;
 /** Walking pace, metres per minute. */
 const WALK_M_PER_MIN = 80;
 /** Transit: a fixed wait plus a faster metre. */
@@ -399,6 +399,9 @@ export function createStraightLineTravel(): TravelLegProvider {
   };
 }
 
+/** Zero for a place with no coordinates: a leg is minutes, and `NaN` minutes
+ *  would poison every arrival time downstream. Clustering already dropped
+ *  those, so only a hand-built input reaches it. */
 function metersBetween(from: CandidatePlace, to: CandidatePlace): number {
   if (
     from.latitude === undefined ||
@@ -408,13 +411,10 @@ function metersBetween(from: CandidatePlace, to: CandidatePlace): number {
   ) {
     return 0;
   }
-  const rad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = rad(to.latitude - from.latitude);
-  const dLng = rad(to.longitude - from.longitude);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(from.latitude)) * Math.cos(rad(to.latitude)) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a)));
+  return greatCircleMeters(
+    { latitude: from.latitude, longitude: from.longitude },
+    { latitude: to.latitude, longitude: to.longitude },
+  );
 }
 
 // ── the result ───────────────────────────────────────────────────────────────
@@ -625,7 +625,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
 
   // 3 — Atmosphere fields, shortlist only. This is the expensive Details call.
   await report("hydrate");
-  const hydration = await hydrateShortlist(pool, shortlistIds, {
+  const hydration = await hydrateShortlist(poolWithExplored, shortlistIds, {
     apiKey: deps.googleApiKey,
     store: deps.store,
     fetch: deps.fetch,
@@ -635,7 +635,13 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   // snapshot: `servesVegetarianFood` arrives here and the dietary rule in
   // `validate.ts` reads it. The funnel is NOT re-run — hydration only adds
   // fields, and re-filtering would change a shortlist already reported.
-  const rows = new Map(pool.map((place) => [place.placeId, place]));
+  // `poolWithExplored`, never `pool`: in themed mode every place a Nearby
+  // Search found lives only in the wider pool. Reading `pool` here drops them
+  // from `rows`, and `rows` is what becomes `result.places` — so those stops
+  // reach the database with no `location_id`, no photo and no Atmosphere
+  // fields, while the itinerary still looks complete. The `notInPool` counters
+  // on hydration, enrichment and photos are what this line moves.
+  const rows = new Map(poolWithExplored.map((place) => [place.placeId, place]));
   for (const place of hydration.places) rows.set(place.placeId, place);
   const hydratedClusters = funnel.clusters.map((cluster) => rehydrate(cluster, rows));
 
@@ -1027,7 +1033,13 @@ async function planThemedDays(
     pool: merged,
     totalDays: request.totalDays,
     rng: deps.rng,
+    walkMaxMeters: knobs.walkMaxMeters,
   });
+  if (grouped.unclaimed > 0) {
+    console.warn(
+      `[group] ${grouped.unclaimed} place${grouped.unclaimed === 1 ? "" : "s"} sat outside every theme's reach and joined no day`,
+    );
+  }
 
   // A theme that cannot seat two meals, repaired without a second model call.
   // Rung 1 costs one more Nearby Search on a thin day only; rungs 2 and 3 are
@@ -1051,6 +1063,9 @@ async function planThemedDays(
     // what they wanted, so it is computed from the leftovers the same way
     // `groupByTheme` does — one k-means over what no theme is using.
     geographicFor: (dayIndex) => geographicFallbackFor(grouped.clusters, dayIndex, deps.rng),
+    // Same reach the membership cap uses, so rung 2 cannot hand back a place
+    // rung 0 refused.
+    walkMaxMeters: knobs.walkMaxMeters,
   });
 
   return {

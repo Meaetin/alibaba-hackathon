@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mulberry32 } from "./__tests__/rng";
-import { TYPE_MATCH_DISCOUNT, groupByTheme } from "./group";
+import { MEMBER_RADIUS_SLACK, TYPE_MATCH_DISCOUNT, groupByTheme } from "./group";
 import type { DayTheme } from "./theme";
 import type { CandidatePlace } from "./types";
 
@@ -29,15 +29,23 @@ function theme(dayIndex: number, anchorPlaceId: string, includedTypes: string[] 
 const NORTH_ANCHOR = place("north-anchor", 35.05, 135.75);
 const SOUTH_ANCHOR = place("south-anchor", 34.9, 135.6);
 
+/**
+ * `walkMaxMeters` is deliberately absurd by default, which makes every anchor
+ * in this file within reach. These cases are about *which* theme wins a place,
+ * and the reach cap is a separate rule with its own describe block below.
+ */
+const UNBOUNDED_REACH = 20_000;
+
 function group(
   places: readonly CandidatePlace[],
   themes: readonly DayTheme[],
   totalDays = themes.length,
+  walkMaxMeters = UNBOUNDED_REACH,
 ) {
   const pool = new Map(
     [...places, NORTH_ANCHOR, SOUTH_ANCHOR].map((place) => [place.placeId, place]),
   );
-  return groupByTheme({ places, themes, pool, totalDays, rng: mulberry32(1337) });
+  return groupByTheme({ places, themes, pool, totalDays, rng: mulberry32(1337), walkMaxMeters });
 }
 
 describe("groupByTheme", () => {
@@ -144,6 +152,7 @@ describe("groupByTheme", () => {
       pool,
       totalDays: 1,
       rng: mulberry32(1337),
+      walkMaxMeters: UNBOUNDED_REACH,
     });
     expect(result.geographicDays).toEqual([0]);
     expect(result.clusters[0].theme).toBeUndefined();
@@ -154,5 +163,73 @@ describe("groupByTheme", () => {
     // missing entry here would renumber every day after it.
     const { clusters } = group([NORTH_ANCHOR], [theme(0, "north-anchor")], 3);
     expect(clusters).toHaveLength(3);
+  });
+});
+
+describe("the reach cap", () => {
+  // `walkable` is 1200 m, so a walkable theme reaches 1800 m at this setting.
+  const WALKABLE = 1_200;
+  const reach = WALKABLE * MEMBER_RADIUS_SLACK;
+
+  // 0.01 degrees of latitude is about 1.1 km, so `near` is inside the reach and
+  // `far` is about 5.6 km out — the shape of the Singapore cafe that cost a day
+  // seven of its ten stops.
+  const near = place("near", 35.06, 135.75);
+  const far = place("far", 35.1, 135.75);
+
+  it("refuses a place no anchor is close enough to, and counts it", () => {
+    const { clusters, unclaimed } = group(
+      [NORTH_ANCHOR, near, far],
+      [theme(0, "north-anchor")],
+      1,
+      WALKABLE,
+    );
+    const ids = clusters[0].places.map((p) => p.placeId);
+    expect(ids).toContain("near");
+    expect(ids).not.toContain("far");
+    // Counted, not merely subtracted: a cut that only shrinks a list is the bug
+    // this project already knows about.
+    expect(unclaimed).toBe(1);
+  });
+
+  it("does not let a type match buy extra reach", () => {
+    // The discount decides *which* theme wins a place it could join. It must not
+    // decide *whether* it can join at all — that was the actual defect: a cafe
+    // 5.7 km out matched the coffee theme's types and was treated as 40% closer.
+    const distantCafe = place("distant-cafe", 35.1, 135.75, ["cafe"]);
+    const { clusters, unclaimed } = group(
+      [NORTH_ANCHOR, distantCafe],
+      [theme(0, "north-anchor", ["cafe"])],
+      1,
+      WALKABLE,
+    );
+    expect(clusters[0].places.map((p) => p.placeId)).not.toContain("distant-cafe");
+    expect(unclaimed).toBe(1);
+  });
+
+  it("reaches further for a traveller who walks further", () => {
+    // `comfortTolerance` owns distance, and it owns it here too rather than in a
+    // second table that could drift away from `radiusFor`.
+    const { clusters } = group([NORTH_ANCHOR, far], [theme(0, "north-anchor")], 1, 4_000);
+    expect(clusters[0].places.map((p) => p.placeId)).toContain("far");
+  });
+
+  it("hands what it refused to a themeless day rather than losing it", () => {
+    // The cap decides what a *theme* is about. It is not a filter on the trip.
+    const { clusters, unclaimed } = group(
+      [NORTH_ANCHOR, near, far],
+      [theme(0, "north-anchor")],
+      2,
+      WALKABLE,
+    );
+    expect(unclaimed).toBe(1);
+    expect(clusters[1].places.map((p) => p.placeId)).toContain("far");
+  });
+
+  it("claims a place sitting exactly on the reach", () => {
+    // The boundary is inclusive, and something has to pin which side it is on.
+    const onEdge = place("on-edge", NORTH_ANCHOR.latitude! + reach / 111_195, 135.75);
+    const { clusters } = group([NORTH_ANCHOR, onEdge], [theme(0, "north-anchor")], 1, WALKABLE);
+    expect(clusters[0].places.map((p) => p.placeId)).toContain("on-edge");
   });
 });

@@ -81,6 +81,8 @@ interface RunOptions {
   hallucinateAnchors?: readonly string[]
   onProgress?: (progress: PlanProgress) => void
   enqueueEnrichments?: (subjects: readonly EnrichmentSubject[], now: Date) => Promise<void>
+  /** Places only a Nearby Search can reach. See `FakeGoogleOptions.nearbyOnly`. */
+  nearbyOnly?: readonly CandidatePlace[]
 }
 
 async function plan(options: RunOptions = {}): Promise<{
@@ -90,6 +92,7 @@ async function plan(options: RunOptions = {}): Promise<{
   const google = createFakeGoogle({
     places: CANDIDATES,
     servesVegetarianFood: options.servesVegetarianFood,
+    ...(options.nearbyOnly ? { nearbyOnly: options.nearbyOnly } : {}),
   })
   const result = await runPlan(
     { ...REQUEST, ...options.request },
@@ -771,6 +774,66 @@ describe('themed mode', () => {
     })
     expect(result.days).toHaveLength(3)
     warnings.mockRestore()
+  })
+
+  it('carries a place only the Nearby Search found all the way to the result', async () => {
+    // The explored half of the pool lives only in `poolWithExplored`. A stage
+    // that reads `pool` instead still produces a complete-looking itinerary —
+    // the day has the stop — but the stop reaches the database with no
+    // `location_id`, no photo and no Atmosphere fields. Nothing else in this
+    // suite could see that, because the Google fake used to answer nearby
+    // searches out of the text-search pool.
+    const first = await plan({ request: { mode: 'themed' } })
+    const byId = new Map(CANDIDATES.map((p) => [p.placeId, p]))
+    const nearbyOnly = first.result.debug
+      .themes!.titles.flatMap((theme, index) => {
+        const anchor = byId.get(theme.anchorPlaceId)
+        if (anchor?.latitude === undefined || anchor.longitude === undefined) return []
+        return [
+          {
+            placeId: `nearby-only-diner-${index}`,
+            name: `Circle Diner ${index}`,
+            types: ['restaurant', 'vegetarian_restaurant'],
+            latitude: anchor.latitude + 0.0005,
+            longitude: anchor.longitude + 0.0005,
+            rating: 4.9,
+            userRatingCount: 5_000,
+            priceLevel: 2,
+          },
+          {
+            placeId: `nearby-only-temple-${index}`,
+            name: `Circle Temple ${index}`,
+            types: ['tourist_attraction'],
+            latitude: anchor.latitude - 0.0005,
+            longitude: anchor.longitude - 0.0005,
+            rating: 4.9,
+            userRatingCount: 6_000,
+          },
+        ] as CandidatePlace[]
+      })
+    expect(nearbyOnly.length).toBeGreaterThan(0)
+
+    const { result } = await plan({ request: { mode: 'themed' }, nearbyOnly })
+    const scheduled = result.days.flatMap((planned) =>
+      planned.day.segments.flatMap((segment) =>
+        segment.kind === 'activity' ? [segment.placeId] : [],
+      ),
+    )
+
+    // Not vacuous: the circles really did find them and they really are in the
+    // trip. Without this the two assertions below pass on an empty set.
+    expect(scheduled.some((id) => id.startsWith('nearby-only-'))).toBe(true)
+
+    // The row every stop needs to reach the database with a name.
+    for (const placeId of scheduled) {
+      expect(result.places.has(placeId), `${placeId} is scheduled but not in result.places`).toBe(
+        true,
+      )
+    }
+
+    // The counters that were non-zero on every themed run and that nobody read.
+    expect(result.stats.hydration.notInPool).toBe(0)
+    expect(result.stats.photos.notInPool).toBe(0)
   })
 
   it('produces a themed itinerary the invariant suite accepts', async () => {

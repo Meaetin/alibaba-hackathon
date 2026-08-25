@@ -337,10 +337,10 @@ export function packDay(
   let stops = selectStops(input, plan);
 
   while (stops.length > 0) {
-    const segments = fitDay(stops, plan, getTravelLeg);
-    if (segments) return { segments, dropped };
+    const outcome = fitDay(stops, plan, getTravelLeg);
+    if (outcome.segments) return { segments: outcome.segments, dropped };
 
-    const victim = pickVictim(stops);
+    const victim = pickVictim(stops, outcome.blockedBefore);
     dropped.push(drop(victim, OVER_BUDGET_REASON));
     stops = stops.filter((stop) => stop !== victim);
   }
@@ -390,10 +390,35 @@ function toStop(
   return { place, role, score, duration, isAnchor, isFlex, base, size: base };
 }
 
-/** Flex first, then lowest score, then meals — whatever else goes, lunch stays. */
-function pickVictim(stops: Stop[]): Stop {
+/** What `fitDay` produced: a stamped day, or nothing plus the stop it stuck on. */
+type FitOutcome =
+  | { segments: TimelineSegment[]; blockedBefore?: undefined }
+  | { segments: null; blockedBefore?: number };
+
+/**
+ * The stop to give up, flex first, then lowest score, then meals — whatever
+ * else goes, lunch stays.
+ *
+ * `blockedBefore` is the index of a meal that could not be seated in its
+ * window, and it narrows the field to the stops **before** that meal. Nothing
+ * after a meal can move it earlier, so dropping from there is a cut that costs
+ * a stop and buys nothing — and because the day stays infeasible, the next
+ * round cuts again. That is how one late lunch used to cost a whole afternoon:
+ * the day shed every low-scored stop after the meal before it touched the one
+ * in front of it that was actually the cause.
+ *
+ * The narrowing excludes meals, and falls back to the whole day when it leaves
+ * nothing — so this always returns a stop, and `packDay` always terminates.
+ */
+function pickVictim(stops: Stop[], blockedBefore?: number): Stop {
   const rank = (stop: Stop) => (stop.isFlex ? 0 : isMealRole(stop.role) ? 2 : 1);
-  return [...stops].sort((a, b) => rank(a) - rank(b) || a.score - b.score)[0];
+  const worstFirst = (a: Stop, b: Stop) => rank(a) - rank(b) || a.score - b.score;
+
+  if (blockedBefore !== undefined) {
+    const blame = stops.slice(0, blockedBefore).filter((stop) => !isMealRole(stop.role));
+    if (blame.length > 0) return [...blame].sort(worstFirst)[0];
+  }
+  return [...stops].sort(worstFirst)[0];
 }
 
 /**
@@ -409,21 +434,28 @@ function fitDay(
   stops: Stop[],
   plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
-): TimelineSegment[] | null {
+): FitOutcome {
   for (const stop of stops) stop.base = baseSize(stop.duration, stop.isAnchor, plan);
 
   const ordinary = stops.filter((stop) => !stop.isAnchor);
   const anchors = stops.filter((stop) => stop.isAnchor);
-  const fits = () => stampDay(stops, plan, getTravelLeg).feasible;
+  // The blocker from the *tightest* attempt is the one worth reporting: earlier
+  // attempts were still carrying slack the squeeze went on to surrender.
+  let blockedBefore: number | undefined;
+  const fits = () => {
+    const stamped = stampDay(stops, plan, getTravelLeg);
+    blockedBefore = stamped.blockedBefore;
+    return stamped.feasible;
+  };
 
   applyCut(ordinary, 0, plan);
   applyCut(anchors, 0, plan);
-  if (fits()) return growDay(stops, plan, getTravelLeg);
+  if (fits()) return { segments: growDay(stops, plan, getTravelLeg) };
 
   const ordinarySlack = totalSlack(ordinary, plan);
   for (let cut = 1; cut <= ordinarySlack; cut++) {
     applyCut(ordinary, cut, plan);
-    if (fits()) return growDay(stops, plan, getTravelLeg);
+    if (fits()) return { segments: growDay(stops, plan, getTravelLeg) };
   }
 
   // Ordinary visits are on their floors. An anchor giving up minutes is still
@@ -432,10 +464,10 @@ function fitDay(
   const anchorSlack = totalSlack(anchors, plan);
   for (let cut = 1; cut <= anchorSlack; cut++) {
     applyCut(anchors, cut, plan);
-    if (fits()) return growDay(stops, plan, getTravelLeg);
+    if (fits()) return { segments: growDay(stops, plan, getTravelLeg) };
   }
 
-  return null;
+  return { segments: null, blockedBefore };
 }
 
 function baseSize(duration: VisitDuration, isAnchor: boolean, plan: EffectivePlan): number {
@@ -541,7 +573,7 @@ function stampDay(
   stops: Stop[],
   plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
-): { segments: TimelineSegment[]; feasible: boolean } {
+): { segments: TimelineSegment[]; feasible: boolean; blockedBefore?: number } {
   const segments: TimelineSegment[] = [];
   const [cafeOpen, cafeClose] = SLOT_WINDOWS.cafe_break;
   // An assigned cafe already occupies that role; don't invent a second one.
@@ -587,7 +619,11 @@ function stampDay(
       const [opens, latestStart] = SLOT_WINDOWS[stop.role];
       start = Math.max(arrival, opens);
       // Meal windows are hard; the cafe window is a preference that yields.
-      if (isMealRole(stop.role) && start > latestStart) return { segments, feasible: false };
+      // Report *which* stop could not be seated. A meal is late because of what
+      // runs before it, and the caller needs that index to drop something that
+      // can actually help — see `pickVictim`.
+      if (isMealRole(stop.role) && start > latestStart)
+        return { segments, feasible: false, blockedBefore: index };
       if (!isMealRole(stop.role) && start > latestStart) start = arrival;
     }
     if (index > 0) fillIdle(arrival, start);

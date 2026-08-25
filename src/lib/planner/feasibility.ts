@@ -30,8 +30,10 @@
  * ramen shop.
  */
 
-import type { ThemedCluster } from "./group";
+import { metersBetween } from "./geo";
+import { MEMBER_RADIUS_SLACK, type ThemedCluster } from "./group";
 import { isRestaurant } from "./taxonomy";
+import { radiusFor } from "./theme";
 import type { CandidatePlace } from "./types";
 
 /** Which rung of the ladder a day ended on. `ok` means it never needed one. */
@@ -64,6 +66,20 @@ export interface FeasibilityDeps {
    * says so rather than being replaced by nothing.
    */
   geographicFor?: (dayIndex: number) => ThemedCluster | undefined;
+  /**
+   * `knobs.walkMaxMeters`. Bounds rung 2 by the same reach `groupByTheme` uses,
+   * so a borrowed restaurant is one the traveller could actually reach on the
+   * borrowing day.
+   *
+   * Without this bound the repair undoes the cap: membership refuses a place
+   * five kilometres from the anchor, and then merge hands over one from the
+   * next theme along. The day reads as fixed — it has its two restaurants —
+   * and the packer still spends the morning on transit.
+   *
+   * Optional, and absent means no distance bound, which is what this ladder did
+   * before the cap existed.
+   */
+  walkMaxMeters?: number;
 }
 
 export interface FeasibilityResult {
@@ -119,7 +135,7 @@ export async function repairFeasibility(
     }
 
     // Rung 2 — borrow from the nearest theme that can spare it.
-    const borrowedFrom = borrow(working, index, deps.mealsPerDay);
+    const borrowedFrom = borrow(working, index, deps.mealsPerDay, reachOf(cluster, deps));
     if (borrowedFrom !== undefined) {
       repairs.push({
         dayIndex,
@@ -163,6 +179,7 @@ function borrow(
   clusters: ThemedCluster[],
   index: number,
   mealsPerDay: number,
+  reach: number,
 ): number | undefined {
   const borrower = clusters[index];
   const need = mealsPerDay - mealCapacity(borrower);
@@ -182,6 +199,7 @@ function borrow(
     if (spare <= 0) continue;
     const moving = donor.places
       .filter(isRestaurant)
+      .filter((place) => withinReach(place, borrower.centroid, reach))
       .sort(
         (a, b) =>
           squaredDistance(pointOf(a), borrower.centroid) -
@@ -213,4 +231,30 @@ function squaredDistance(
  *  it can still be borrowed, just last. */
 function pointOf(place: CandidatePlace): { latitude: number; longitude: number } {
   return { latitude: place.latitude ?? 1e6, longitude: place.longitude ?? 1e6 };
+}
+
+/**
+ * The reach a borrowed place must sit inside, matching `groupByTheme`'s cap so
+ * one rule governs both halves. `Infinity` when the caller passed no
+ * `walkMaxMeters` — the unbounded behaviour this ladder had before the cap.
+ */
+function reachOf(cluster: ThemedCluster, deps: FeasibilityDeps): number {
+  if (deps.walkMaxMeters === undefined || !cluster.theme) return Infinity;
+  return radiusFor(cluster.theme.radiusHint, deps.walkMaxMeters) * MEMBER_RADIUS_SLACK;
+}
+
+/**
+ * A place with no coordinates is refused whenever there is a bound to check it
+ * against: unreachable is the safe reading of unknown, and the alternative is
+ * feeding `pointOf`'s sentinel latitude into trigonometry that happily returns
+ * a small number for it.
+ */
+function withinReach(
+  place: CandidatePlace,
+  centre: { latitude: number; longitude: number },
+  reach: number,
+): boolean {
+  if (reach === Infinity) return true;
+  if (place.latitude === undefined || place.longitude === undefined) return false;
+  return metersBetween({ latitude: place.latitude, longitude: place.longitude }, centre) <= reach;
 }

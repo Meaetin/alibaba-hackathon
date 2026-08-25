@@ -473,3 +473,10 @@
   `point_of_interest`, …). Both come back on real places; asking Google to
   filter on one is a 400 for the whole circle, not a warning. Two of three
   Singapore nearby searches were lost this way before the fix.
+
+## 2026-08-25 — three planner fixes from the first live themed Singapore run
+
+- **Build `rows` from `poolWithExplored`, not `pool` (`pipeline.ts`).** Explored places were absent from `result.places`, so their stops were saved with a null `location_id`, no photo and no Atmosphere fields. Why: `result.places` is the list `saveItinerary` resolves ids from. The suite missed it because the Google fake served nearby searches from the text-search pool; `nearbyOnly` now separates them.
+- **`pickVictim` drops from before the meal that missed its window (`pack.ts`).** Why: nothing after a meal can move it earlier, so those cuts buy nothing and the loop cuts again — one late lunch cost a whole afternoon. `stampDay` reports `blockedBefore`; the narrowing falls back to the whole day so the loop still terminates.
+- **Cap theme membership at `radiusFor(hint, walkMaxMeters) * 1.5` (`group.ts`), and bound borrowing by the same reach (`feasibility.ts`).** Why: `nearestTheme` had no distance limit and the type-match discount let a cafe 5.7 km out join a walkable theme. Rejected: capping by squared degrees — an absolute threshold cannot ride a monotonic transform. Refused places are counted as `unclaimed` rather than silently dropped.
+- **Not done: a minute-level feasibility check.** Considered and rejected — it would be a second packer, and with the reach cap in place the infeasibility it was meant to catch is prevented at grouping time instead.

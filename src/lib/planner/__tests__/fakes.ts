@@ -63,6 +63,15 @@ export interface FakeGoogleOptions {
   reviews?: Readonly<Record<string, readonly string[]>>
   /** Place ids whose photo media call fails. */
   photoFailures?: readonly string[]
+  /**
+   * Places only `places:searchNearby` can return — invisible to Text Search.
+   *
+   * Without these the fake cannot tell a themed run apart from a plain one:
+   * every "explored" place would already be in the text-search pool, so a
+   * pipeline that dropped the explored half would still look complete. That is
+   * the shape of a real bug this suite could not see.
+   */
+  nearbyOnly?: readonly CandidatePlace[]
 }
 
 export interface FakeGoogle {
@@ -92,6 +101,9 @@ const NEARBY_URL = 'https://places.googleapis.com/v1/places:searchNearby'
  */
 export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
   const pool = [...options.places]
+  // Reachable by circle only. Details and photos still answer for them, the
+  // way Google does once you hold an id.
+  const nearbyPool = [...pool, ...(options.nearbyOnly ?? [])]
   const queryOffsets = new Map<string, number>()
   const calls: string[] = []
   const searchCalls: string[] = []
@@ -155,7 +167,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
       // one property a nearby search has that a text search does not. A fake
       // that ignored the circle would let a broken radius pass unnoticed.
       const degrees = radius / 111_320
-      const near = pool.filter(
+      const near = nearbyPool.filter(
         (place) =>
           place.latitude !== undefined &&
           Math.abs(place.latitude - center.latitude) <= degrees &&

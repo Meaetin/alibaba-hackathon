@@ -561,6 +561,59 @@ When testing this, note that a **themed** donor gets repaired on the next pass o
 the loop and borrows its own restaurants straight back. An assertion written
 against two themed clusters passes whatever the rule says. Use a themeless donor.
 
+### Three fixes from one live Singapore run, 2026-08-25
+
+A themed 3-day Singapore trip came out with 3 stops on day two and five stops
+with no name. All 687 tests were green through both.
+
+**`rows` must be built from `poolWithExplored`, never `pool`.** Every place a
+themed Nearby Search finds lives only in the wider pool. Reading `pool` dropped
+them from `rows`, and `rows` becomes `result.places` — which is the list
+`saveItinerary` resolves `location_id` from. So an explored stop reached the
+database with a null `location_id`, no photo and no Atmosphere fields, while
+the itinerary still rendered as complete. The `notInPool` counters on
+hydration, enrichment and photos had been reporting it on every themed run.
+
+The suite could not see it because `createFakeGoogle` answered `searchNearby`
+out of the **text-search pool**, so an "explored" place was always already in
+`pool`. `FakeGoogleOptions.nearbyOnly` is what makes the two pools distinct.
+Any test about explored places is vacuous without it.
+
+**`pickVictim` must drop from in front of the meal that failed.** A meal has a
+hard window — lunch must *start* by 13:30 — and it is late because of what runs
+before it. Dropping a low-scored stop *after* it costs a stop and moves the meal
+not at all, so the day stays infeasible and the loop cuts again. One late lunch
+therefore shed a whole afternoon before touching the single morning stop that
+caused it. `stampDay` now returns `blockedBefore` and `pickVictim` narrows to
+that prefix, falling back to the whole day so it always returns a stop.
+
+**`nearestTheme` needs a distance cap, and `MEMBER_RADIUS_SLACK` is it.** It had
+none: every place joined its nearest anchor however far, and a type match made it
+look 40% closer. A cafe **5.7 km** from the anchor joined a walkable coffee theme
+and cost that day seven of its ten stops. The cap is
+`radiusFor(theme.radiusHint, walkMaxMeters) * 1.5` — the circle the theme was
+actually billed for, plus slack for text-search finds just outside it. The
+discount decides *which* theme wins a place; it must never decide *whether* one
+can join.
+
+The cap is metres while the choice stays squared degrees. That is not drift: a
+comparison between two distances from the same place rides a monotonic transform
+for free, and an absolute threshold cannot.
+
+`feasibility.ts` takes the same `walkMaxMeters` for the same reason. Without it
+rung 2 hands back exactly what membership refused, and the day reads as repaired
+— it has its two restaurants — while the packer still spends the morning on
+transit.
+
+Places no theme will claim are counted as `GroupResult.unclaimed` and warned
+about, because a cut that only shrinks a list is the bug this project already
+knows about. On a themeless day they come back as leftovers.
+
+`metersBetween` now lives once, in `geo.ts`. It takes **definite** coordinates:
+the three callers each mean something different by a missing one (zero-minute
+leg, joins no theme, sorts last when borrowed), so the guard stays at the call
+site and only the trigonometry is shared.
+
 ### Two failures the whole offline suite cannot see
 Both were found by one live run and neither moved a single test.
 

@@ -302,6 +302,55 @@ describe('over budget', () => {
 
 // ── under budget ─────────────────────────────────────────────────────────────
 
+describe('a meal that missed its window', () => {
+  /**
+   * Nothing has slack, so the shrink ladder cannot help and the packer must
+   * drop. Lunch cannot start until 14:00 because of the one stop in front of
+   * it; the cheap gallery sits after lunch and is the lowest-scored thing in
+   * the day.
+   */
+  const lateLunch = (): PackDayInput => ({
+    assignments: [
+      assign('long_morning', 'activity', 0.9, dur(300, 300, 300)),
+      assign('tofu_lunch', 'lunch', 0.8, dur(45, 45, 45)),
+      assign('cheap_gallery', 'activity', 0.1, dur(30, 30, 30)),
+      assign('izakaya', 'dinner', 0.75, dur(60, 60, 60)),
+    ],
+  })
+
+  it('drops the stop in front of the meal, not the cheapest one behind it', () => {
+    const day = packDay(lateLunch(), 'balanced', NO_TRAVEL)
+
+    // Only `long_morning` can move lunch earlier. Dropping the gallery costs a
+    // stop and leaves lunch exactly as late as it was, which is how one missed
+    // window used to cost a whole afternoon.
+    expect(droppedIds(day)).toEqual(['ChIJ_long_morning'])
+    expect(segmentFor(day, 'cheap_gallery')).toBeDefined()
+    expect(segmentFor(day, 'tofu_lunch')!.startMin).toBeLessThanOrEqual(DAY_SKELETON[0].window[1])
+    expectContiguous(day)
+  })
+
+  it('still drops by score when the day merely runs long', () => {
+    // No meal misses its window here — the day just overruns — so there is no
+    // stop to blame and the ordinary worst-first rule stands.
+    const day = packDay(
+      {
+        assignments: [
+          assign('temple', 'activity', 0.9, dur(200, 200, 200)),
+          assign('tofu_lunch', 'lunch', 0.8, dur(45, 45, 45)),
+          assign('cheap_gallery', 'activity', 0.1, dur(200, 200, 200)),
+          assign('museum', 'activity', 0.95, dur(200, 200, 200)),
+          assign('izakaya', 'dinner', 0.75, dur(60, 60, 60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+    expect(droppedIds(day)).toContain('ChIJ_cheap_gallery')
+    expect(segmentFor(day, 'museum')).toBeDefined()
+  })
+})
+
 describe('under budget', () => {
   it('stretches durations toward max first', () => {
     const day = packDay(typicalDay(), 'balanced', NO_TRAVEL)
