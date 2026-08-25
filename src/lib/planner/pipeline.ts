@@ -39,7 +39,13 @@
 
 import type { TravelPersona } from "@/lib/persona/types";
 
-import { assignDays, dayCapacity, type AssignDayRequest, type AssignResult } from "./assign";
+import {
+  DEFAULT_MEALS_PER_DAY,
+  assignDays,
+  dayCapacity,
+  type AssignDayRequest,
+  type AssignResult,
+} from "./assign";
 import { clusterPlaces } from "./cluster";
 import { PLANNER_DEBUG_VERSION, type PlannerDebug } from "./debug";
 import {
@@ -49,16 +55,20 @@ import {
   type EnrichmentSubject,
 } from "./enrich";
 import {
+  pickSerendipitySlots,
   runFunnel,
   type FunnelStats,
   type ScoredCluster,
 } from "./funnel";
+import { resolvePlannerKnobs } from "./knobs";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
 import { narrateStops, stopsFromDays, type NarrateStats, type StopContent } from "./narrate";
 import type { ResponsesClient } from "./openai";
 import {
+  type FlexPick,
   type PackDayInput,
+  type PackKnobs,
   type PackedDay,
   type TravelLeg,
   type TravelLegProvider,
@@ -80,7 +90,7 @@ import {
   type SearchCache,
   type ShortlistHydrationStats,
 } from "./retrieval";
-import type { ScoredPlace } from "./score";
+import { scorePlace, type ScoredPlace } from "./score";
 import { resolveVisitDuration } from "./duration";
 import type {
   CandidatePlace,
@@ -491,6 +501,14 @@ export interface PipelineDeps {
  */
 export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise<PlanResult> {
   const { profile } = request;
+  // The traveller's persona becomes constants here, once, and travels as
+  // parameters from this line down. No stage below reads a `PersonaResult`, and
+  // with no persona every one of these is what it was before personas existed.
+  const knobs = resolvePlannerKnobs(profile, request.persona?.result, profile.pace);
+  const packKnobs: PackKnobs = {
+    visitDurationBias: knobs.visitDurationBias,
+    walkMaxMeters: knobs.walkMaxMeters,
+  };
   const getTravelLeg = deps.getTravelLeg ?? createStraightLineTravel();
   const report = async (stage: Exclude<PlanStage, "done">) => {
     await deps.onProgress?.(progressFor(stage));
@@ -517,7 +535,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     rng: deps.rng,
     maxIterations: request.options?.maxIterations,
   });
-  const funnel = runFunnel(clusters, profile, { unlocated });
+  const funnel = runFunnel(clusters, profile, { unlocated, knobs });
   const shortlistIds = funnel.shortlist.map((scored) => scored.placeId);
   const scored = new Map(funnel.shortlist.map((entry) => [entry.placeId, entry]));
 
@@ -562,7 +580,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       dayIndex: index,
       weekday: advanceWeekday(baseWeekday, index),
       areaName: hydratedClusters[index]?.label,
-      capacity: dayCapacity(profile.pace),
+      capacity: dayCapacity(profile.pace, DEFAULT_MEALS_PER_DAY, knobs),
     }),
   );
   const assignment: AssignResult = await assignDays(
@@ -576,15 +594,34 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   );
 
   // 6 — pack, check, repair, re-pack. Pure: no clock, no network, no model.
+  //
+  // The wildcards are chosen here rather than inside the funnel because a
+  // wildcard must not already be in the trip, and what is in the trip is only
+  // known once Pass B has spent its picks. They are added as flex, which means
+  // the packer surrenders them first when a day runs long — a surprise that
+  // costs you a temple is not a nice surprise.
   await report("schedule");
+  const serendipity = assignSerendipity(
+    pickSerendipitySlots(funnel.stages.afterGlobalCap, profile, knobs),
+    hydratedClusters,
+    assignment,
+    profile,
+    enrichment.enrichments,
+  );
   const days: PlannedDay[] = assignment.days.map((assigned, index) => {
     const cluster = hydratedClusters[index];
-    const validation = validateDay(assigned.input, {
+    const wildcards = serendipity.get(assigned.dayIndex) ?? [];
+    const withFlex: PackDayInput =
+      wildcards.length === 0
+        ? assigned.input
+        : { ...assigned.input, flex: [...(assigned.input.flex ?? []), ...wildcards] };
+    const validation = validateDay(withFlex, {
       pace: profile.pace,
       weekday: dayRequests[index].weekday,
       profile,
       getTravelLeg,
-      alternates: alternatesFor(cluster, assigned.input, profile, enrichment.enrichments),
+      packKnobs,
+      alternates: alternatesFor(cluster, withFlex, profile, enrichment.enrichments),
     });
     return {
       dayIndex: assigned.dayIndex,
@@ -723,6 +760,55 @@ function rehydrate(
     ...cluster,
     places: cluster.places.map((place) => rows.get(place.placeId) ?? place),
   };
+}
+
+/**
+ * Puts each wildcard on the day whose cluster already holds it, as a flex pick.
+ *
+ * A wildcard on the wrong side of the city is not serendipity, it is a
+ * two-hour bus ride — so a pick whose cluster produced no day, or that Pass B
+ * already spent, is dropped rather than forced somewhere. Zero picks is the
+ * ordinary case: `serendipityPerTrip` is 0 without a persona and 0 for every
+ * band except `improvised`.
+ *
+ * Exported for its own test. Whether a wildcard landed on the right day is not
+ * observable from a finished itinerary — a flex pick and an assigned stop look
+ * identical once the timeline is stamped.
+ */
+export function assignSerendipity(
+  picks: readonly CandidatePlace[],
+  clusters: readonly ScoredCluster[],
+  assignment: AssignResult,
+  profile: PreferenceProfile,
+  enrichments: ReadonlyMap<string, PlaceEnrichment>,
+): Map<number, FlexPick[]> {
+  const byDay = new Map<number, FlexPick[]>();
+  if (picks.length === 0) return byDay;
+
+  const alreadyPlanned = new Set(
+    assignment.days.flatMap((day) => [
+      ...day.input.assignments.map((slot) => slot.place.placeId),
+      ...(day.input.flex ?? []).map((flex) => flex.place.placeId),
+    ]),
+  );
+
+  for (const pick of picks) {
+    if (alreadyPlanned.has(pick.placeId)) continue;
+    const clusterIndex = clusters.findIndex((cluster) =>
+      cluster.places.some((place) => place.placeId === pick.placeId),
+    );
+    const day = assignment.days[clusterIndex];
+    if (clusterIndex < 0 || !day) continue;
+    const entry: FlexPick = {
+      place: pick,
+      // Scored the same way every other candidate on this day was, so the
+      // packer's "drop the worst flex pick first" rule stays comparable.
+      score: scorePlace(pick, profile).score,
+      duration: resolveVisitDuration(pick, enrichments.get(pick.placeId), profile.pace),
+    };
+    byDay.set(day.dayIndex, [...(byDay.get(day.dayIndex) ?? []), entry]);
+  }
+  return byDay;
 }
 
 /**

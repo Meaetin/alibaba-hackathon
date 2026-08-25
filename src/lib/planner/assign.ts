@@ -153,6 +153,25 @@ export const DEFAULT_MEALS_PER_DAY = 2;
 export const DEFAULT_FLEX_PER_DAY = 1;
 
 /**
+ * The two capacity numbers a persona may move: how long a meal runs
+ * (`solitude` — shared tables run long, a counter for one does not) and how
+ * many slots are left loose rather than named (`spontaneity` owns openness).
+ *
+ * Named as its own type rather than taking a whole `PlannerKnobs` so a change
+ * to the scoring weights cannot invalidate a capacity test.
+ */
+export interface CapacityKnobs {
+  mealMinutes: number;
+  flexPerDay: number;
+}
+
+/** Today's capacity, for every caller with no persona to hand. */
+export const DEFAULT_CAPACITY_KNOBS: CapacityKnobs = {
+  mealMinutes: MEAL_MINUTES,
+  flexPerDay: DEFAULT_FLEX_PER_DAY,
+};
+
+/**
  * The minute budget stated to the model, derived from the clock rather than
  * picked. For a balanced day:
  *
@@ -168,11 +187,15 @@ export const DEFAULT_FLEX_PER_DAY = 1;
  * Exported so the route handler and the tests derive capacity the same way; a
  * second copy of this arithmetic is a budget nothing keeps honest.
  */
-export function dayCapacity(pace: Pace, meals = DEFAULT_MEALS_PER_DAY): DayCapacity {
+export function dayCapacity(
+  pace: Pace,
+  meals = DEFAULT_MEALS_PER_DAY,
+  knobs: CapacityKnobs = DEFAULT_CAPACITY_KNOBS,
+): DayCapacity {
   const dayMinutes = PACE_PLANS[pace].dayEndMin - DAY_START_MIN;
   const travelMinutes = Math.round(dayMinutes * TRAVEL_SHARE[pace]);
-  const activityMinutes = Math.max(0, dayMinutes - meals * MEAL_MINUTES - travelMinutes);
-  return { activityMinutes, meals, flex: DEFAULT_FLEX_PER_DAY };
+  const activityMinutes = Math.max(0, dayMinutes - meals * knobs.mealMinutes - travelMinutes);
+  return { activityMinutes, meals, flex: knobs.flexPerDay };
 }
 
 // ── input and output ─────────────────────────────────────────────────────────

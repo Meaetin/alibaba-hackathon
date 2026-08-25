@@ -12,7 +12,12 @@ import {
   hardFilterReason,
   scorePlace,
   scoreCandidates,
+  popularity,
+  typeAffinityBonus,
+  TYPE_AFFINITY_MAX,
+  WEIGHTS,
 } from './score'
+import { DEFAULT_SCORING_KNOBS } from './knobs'
 
 function makePlace(overrides: Partial<CandidatePlace> = {}): CandidatePlace {
   return {
@@ -222,5 +227,138 @@ describe('match reasons', () => {
     const scored = scoreCandidates([bare], makeProfile())
     expect(scored).toHaveLength(1)
     expect(scored[0].reasons.length).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe('popularity', () => {
+  it('is log-scaled — a hundred reviews is halfway to ten thousand', () => {
+    // Not a linear fraction: on a linear scale a 100-review place would score
+    // one hundredth, and the whole term would be about landmarks only.
+    expect(popularity(100)).toBeCloseTo(0.5, 2)
+    expect(popularity(10_000)).toBe(1)
+    expect(popularity(50_000)).toBe(1)
+  })
+
+  it('reads an unknown count as unknown fame, not average fame', () => {
+    expect(popularity(undefined)).toBe(0)
+    expect(popularity(0)).toBe(0)
+  })
+
+  it('asks a different question from quality', () => {
+    // A superb little place nobody has been to: high quality, low fame. If
+    // these two moved together the tourist-trap penalty would be a quality
+    // penalty, which is not what any traveller asked for.
+    expect(quality(4.9, 40)).toBeGreaterThan(quality(4.0, 40))
+    expect(popularity(40)).toBe(popularity(40))
+    expect(popularity(40)).toBeLessThan(popularity(9000))
+  })
+})
+
+describe('typeAffinityBonus', () => {
+  const affinities = { museum: 1.3, shopping_mall: 0.9 }
+
+  it('reads the map as an offset from neutral', () => {
+    expect(typeAffinityBonus(makePlace({ types: ['museum'] }), affinities)).toBeCloseTo(0.3)
+    expect(typeAffinityBonus(makePlace({ types: ['shopping_mall'] }), affinities)).toBeCloseTo(-0.1)
+  })
+
+  it('says nothing about a type the map never mentions', () => {
+    // Silence is not a zero opinion expressed loudly — an unlisted type must
+    // score the same as a place with no map at all.
+    expect(typeAffinityBonus(makePlace({ types: ['laundry'] }), affinities)).toBe(0)
+    expect(typeAffinityBonus(makePlace({ types: ['museum'] }), undefined)).toBe(0)
+  })
+
+  it('takes the strongest opinion when a place has several types', () => {
+    const place = makePlace({ types: ['shopping_mall', 'museum'] })
+    expect(typeAffinityBonus(place, affinities)).toBeCloseTo(0.3)
+  })
+
+  it('is bounded, so one preset entry cannot out-vote the whole score', () => {
+    expect(typeAffinityBonus(makePlace({ types: ['museum'] }), { museum: 4 })).toBe(
+      TYPE_AFFINITY_MAX,
+    )
+    expect(typeAffinityBonus(makePlace({ types: ['museum'] }), { museum: 0 })).toBe(
+      -TYPE_AFFINITY_MAX,
+    )
+  })
+
+  it('lifts a place the interest union cannot express', () => {
+    // The seven-member union has no "art gallery" member. Without the type map
+    // this place matches nothing at all and rides on quality alone.
+    const gallery = makePlace({ types: ['art_gallery'], rating: 4.4, userRatingCount: 600 })
+    const plain = makeProfile({ interests: ['food'] })
+    const persona = makeProfile({ interests: ['food'], typeAffinities: { art_gallery: 1.4 } })
+    expect(scorePlace(gallery, persona).score).toBeGreaterThan(
+      scorePlace(gallery, plain).score,
+    )
+  })
+})
+
+describe('priceFit under budget', () => {
+  it('treats cheap as a perfect fit by default', () => {
+    expect(priceFit(0, 3)).toBe(1)
+    expect(priceFit(3, 3)).toBe(1)
+  })
+
+  it('penalises cheap only for the traveller who asked for polish', () => {
+    // Symmetric, and only here: the default curve must stay asymmetric or the
+    // hard filter directly below it ("cheap is never a violation") contradicts
+    // the score that follows it.
+    expect(priceFit(0, 3, true)).toBeLessThan(priceFit(0, 3, false))
+    expect(priceFit(3, 3, true)).toBe(1)
+    // Above budget is unaffected by the flag — that half was never in dispute.
+    expect(priceFit(4, 2, true)).toBe(priceFit(4, 2, false))
+  })
+})
+
+describe('scorePlace with persona knobs', () => {
+  const famous = makePlace({ types: ['cafe'], rating: 4.5, userRatingCount: 9000 })
+  const obscure = makePlace({
+    placeId: 'ChIJ_obscure',
+    types: ['cafe'],
+    rating: 4.5,
+    userRatingCount: 60,
+  })
+
+  it('defaults to today: no popularity term, no fame penalty', () => {
+    expect(WEIGHTS.popularity).toBe(0)
+    // Same rating, wildly different fame. Without a persona the two differ only
+    // by the Bayesian shrink in `quality`, and the famous one wins on that.
+    const gap = scorePlace(famous, makeProfile()).score - scorePlace(obscure, makeProfile()).score
+    expect(gap).toBeGreaterThan(0)
+    expect(gap).toBeLessThan(0.05)
+  })
+
+  it('lets the highlights traveller pay for fame', () => {
+    const knobs = {
+      ...DEFAULT_SCORING_KNOBS,
+      weights: { affinity: 0.33, quality: 0.25, priceFit: 0.21, popularity: 0.21 },
+    }
+    const before = scorePlace(famous, makeProfile()).score - scorePlace(obscure, makeProfile()).score
+    const after =
+      scorePlace(famous, makeProfile(), knobs).score -
+      scorePlace(obscure, makeProfile(), knobs).score
+    expect(after).toBeGreaterThan(before)
+  })
+
+  it('lets the deep traveller charge for it instead', () => {
+    const knobs = { ...DEFAULT_SCORING_KNOBS, touristTrapPenalty: 0.15 }
+    // The whole point of the axis: the famous cafe now loses to the quiet one
+    // despite the identical rating.
+    expect(scorePlace(famous, makeProfile(), knobs).score).toBeLessThan(
+      scorePlace(obscure, makeProfile(), knobs).score,
+    )
+  })
+
+  it('exempts the types where cheap is the experience', () => {
+    const hawker = makePlace({ types: ['food_court'], priceLevel: 0 })
+    const polished = { ...DEFAULT_SCORING_KNOBS, priceFitPenalisesBelow: true }
+    const polishedAndDeep = { ...polished, cheapTypeExemptions: ['food_court'] }
+    const profile = makeProfile({ budget: 3 })
+
+    expect(scorePlace(hawker, profile, polishedAndDeep).score).toBeGreaterThan(
+      scorePlace(hawker, profile, polished).score,
+    )
   })
 })

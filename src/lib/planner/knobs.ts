@@ -226,6 +226,23 @@ export const DEFAULT_KNOBS: Omit<PlannerKnobs, "visitDurationBias" | "budgetWide
   minSocialVenuesPerDay: 0,
 };
 
+/**
+ * The subset `score.ts` reads. Narrow on purpose: a module takes the knobs it
+ * needs, so a change to `mealMinutes` cannot invalidate a scoring test.
+ */
+export type ScoringKnobs = Pick<
+  PlannerKnobs,
+  "weights" | "touristTrapPenalty" | "priceFitPenalisesBelow" | "cheapTypeExemptions"
+>;
+
+/** Today's scoring, for every call site that has no persona to hand. */
+export const DEFAULT_SCORING_KNOBS: ScoringKnobs = {
+  weights: DEFAULT_KNOBS.weights,
+  touristTrapPenalty: DEFAULT_KNOBS.touristTrapPenalty,
+  priceFitPenalisesBelow: DEFAULT_KNOBS.priceFitPenalisesBelow,
+  cheapTypeExemptions: DEFAULT_KNOBS.cheapTypeExemptions,
+};
+
 /** The most `widenBudget` can walk on the 0–4 ordinal. */
 const MAX_BUDGET_WIDEN_STEPS = 3;
 

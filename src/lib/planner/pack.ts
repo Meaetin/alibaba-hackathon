@@ -254,8 +254,8 @@ export interface PackedDay {
   dropped: DroppedPlace[];
 }
 
-export function travelModeForMeters(meters: number): TravelMode {
-  return meters < WALK_MAX_METERS ? "walk" : "transit";
+export function travelModeForMeters(meters: number, walkMaxMeters = WALK_MAX_METERS): TravelMode {
+  return meters < walkMaxMeters ? "walk" : "transit";
 }
 
 // ── the packer ───────────────────────────────────────────────────────────────
@@ -272,6 +272,35 @@ interface Stop {
   base: number;
   /** Current size in minutes. */
   size: number;
+}
+
+/**
+ * The two settings that belong to the *traveller* rather than to the pace, and
+ * that the packer nonetheless needs at every level: how long a visit is built
+ * at, and how far a person will walk before it becomes a transit leg.
+ *
+ * `visitDurationBias` overrides `PacePlan.durationBias` — **pace sets the floor
+ * and `immersion` may raise it one step, never lower it**, and that arithmetic
+ * has already happened in `resolvePlannerKnobs`. By the time it arrives here it
+ * is simply the answer.
+ *
+ * There is deliberately **no** default constant for this type: the no-persona
+ * default for `visitDurationBias` is `PACE_PLANS[pace].durationBias`, which
+ * depends on the pace and so cannot be written down as one value. A caller with
+ * no persona passes nothing and `packDay` reads the pace, exactly as before.
+ */
+export interface PackKnobs {
+  visitDurationBias: DurationBias;
+  walkMaxMeters: number;
+}
+
+/**
+ * A `PacePlan` with the traveller's two settings folded in, so every helper
+ * below keeps taking exactly one object. Internal — the public input is
+ * `PackKnobs`, which says only what a persona may move.
+ */
+interface EffectivePlan extends PacePlan {
+  walkMaxMeters: number;
 }
 
 const OVER_BUDGET_REASON = "over budget — no room left in the day";
@@ -297,8 +326,13 @@ export function packDay(
   input: PackDayInput,
   pace: Pace,
   getTravelLeg: TravelLegProvider,
+  knobs?: PackKnobs,
 ): PackedDay {
-  const plan = PACE_PLANS[pace];
+  const plan: EffectivePlan = {
+    ...PACE_PLANS[pace],
+    ...(knobs ? { durationBias: knobs.visitDurationBias } : {}),
+    walkMaxMeters: knobs?.walkMaxMeters ?? WALK_MAX_METERS,
+  };
   const dropped: DroppedPlace[] = [];
   let stops = selectStops(input, plan);
 
@@ -328,7 +362,7 @@ function drop(stop: Stop, reason: string): DroppedPlace {
  * lands just before the last meal, in the elastic afternoon, rather than after
  * it where it would read as a second dinner.
  */
-function selectStops(input: PackDayInput, plan: PacePlan): Stop[] {
+function selectStops(input: PackDayInput, plan: EffectivePlan): Stop[] {
   const assignments = input.assignments.map((a) =>
     toStop(a.place, a.role, a.score, a.duration, false, plan),
   );
@@ -349,7 +383,7 @@ function toStop(
   score: number,
   duration: VisitDuration,
   isFlex: boolean,
-  plan: PacePlan,
+  plan: EffectivePlan,
 ): Stop {
   const isAnchor = duration.min >= ANCHOR_MIN_MINUTES;
   const base = baseSize(duration, isAnchor, plan);
@@ -373,7 +407,7 @@ function pickVictim(stops: Stop[]): Stop {
  */
 function fitDay(
   stops: Stop[],
-  plan: PacePlan,
+  plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
 ): TimelineSegment[] | null {
   for (const stop of stops) stop.base = baseSize(stop.duration, stop.isAnchor, plan);
@@ -404,7 +438,7 @@ function fitDay(
   return null;
 }
 
-function baseSize(duration: VisitDuration, isAnchor: boolean, plan: PacePlan): number {
+function baseSize(duration: VisitDuration, isAnchor: boolean, plan: EffectivePlan): number {
   const { min, preferred, max } = duration;
   const biased = isAnchor
     ? preferred
@@ -416,11 +450,11 @@ function baseSize(duration: VisitDuration, isAnchor: boolean, plan: PacePlan): n
   return Math.min(max, Math.max(min, biased));
 }
 
-function floorFor(stop: Stop, plan: PacePlan): number {
+function floorFor(stop: Stop, plan: EffectivePlan): number {
   return stop.isAnchor ? stop.duration.min : stop.duration[plan.shrinkFloor];
 }
 
-function totalSlack(stops: Stop[], plan: PacePlan): number {
+function totalSlack(stops: Stop[], plan: EffectivePlan): number {
   return stops.reduce((sum, stop) => sum + Math.max(0, stop.base - floorFor(stop, plan)), 0);
 }
 
@@ -430,7 +464,7 @@ function totalSlack(stops: Stop[], plan: PacePlan): number {
  * min" is one global move, and a squeeze that spared the best-scored place
  * would just push the day onto the next rung, where things get dropped.
  */
-function applyCut(stops: Stop[], cut: number, plan: PacePlan): void {
+function applyCut(stops: Stop[], cut: number, plan: EffectivePlan): void {
   const slack = stops.map((stop) => Math.max(0, stop.base - floorFor(stop, plan)));
   const available = slack.reduce((sum, value) => sum + value, 0);
   if (available === 0) {
@@ -477,7 +511,7 @@ function applyCut(stops: Stop[], cut: number, plan: PacePlan): void {
  */
 function growDay(
   stops: Stop[],
-  plan: PacePlan,
+  plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
 ): TimelineSegment[] {
   for (const stop of [...stops].sort((a, b) => b.score - a.score)) {
@@ -505,7 +539,7 @@ function growDay(
  */
 function stampDay(
   stops: Stop[],
-  plan: PacePlan,
+  plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
 ): { segments: TimelineSegment[]; feasible: boolean } {
   const segments: TimelineSegment[] = [];
@@ -539,7 +573,7 @@ function stampDay(
       const length = Math.max(0, Math.round(leg.minutes)) + plan.bufferMin;
       segments.push({
         kind: "travel",
-        mode: travelModeForMeters(leg.meters),
+        mode: travelModeForMeters(leg.meters, plan.walkMaxMeters),
         startMin: cursor,
         endMin: cursor + length,
         fromName: previous.place.name,

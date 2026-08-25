@@ -418,3 +418,19 @@
   fallback.** Quiz Q4 feeds the spontaneity axis, which conflates *unhurried*
   with *unplanned*: a wanderer who wants full days reads as relaxed. Generalised
   — a thing the user typed beats a thing the quiz inferred.
+- 2026-08-25 — **`getFocusScoringAdjustments` and `getSocialSchedulingRules`
+  deleted, not connected.** `knobs.ts` says the same thing with bands that cut
+  at 33/66 rather than 30/60/70, and with mid rows equal to today's constants.
+  Connecting the originals would have left two mappings disagreeing. Three of
+  their fields had no mechanism to connect to and are named in `profile.ts`
+  rather than lost: `eveningActivityRequired`, `preferQuietPlaces`,
+  `allowSolitudeSlots`.
+- 2026-08-25 — **The server composes the profile, not the client.** The browser
+  holds only a persona id, so `POST /api/plan` calls `buildProfile` after
+  resolving it. `profile.interests` on the wire is the demo placeholder and is
+  deliberately not treated as a choice; a real interest picker sends the new
+  `interestOverrides` field instead.
+- 2026-08-25 — **`goodForChildren` was NOT added to `SHORTLIST_FIELD_MASK`.**
+  Free on the Atmosphere call, but not free to keep: it needs a column, a
+  migration and a row type, and nothing reads it. Adding it now would recreate
+  exactly the orphan pattern this work exists to remove.

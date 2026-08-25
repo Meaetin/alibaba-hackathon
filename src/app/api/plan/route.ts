@@ -28,8 +28,10 @@ import { z } from "zod";
 
 import { toJobProgress, type JobRow } from "@/lib/db/itineraries";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
+import { buildProfile } from "@/lib/persona/profile";
 import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
 import type { TravelPersona } from "@/lib/persona/types";
+import type { Interest, PreferenceProfile } from "@/lib/planner/types";
 import {
   completedProgress,
   stageOutlook,
@@ -73,6 +75,17 @@ const PlanRequestSchema = z.object({
     budget: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
     typeAffinities: z.record(z.string(), z.number()).optional(),
   }),
+  /**
+   * Interests the traveller picked themselves, as opposed to the placeholder
+   * set in `profile.interests`.
+   *
+   * The distinction is load-bearing and cannot be inferred: with a persona
+   * resolved, `buildProfile` derives interests from the archetype, and it must
+   * be able to tell "the demo sent its four defaults" from "the traveller chose
+   * these four". There is no interest-picking UI yet — this is the named seam
+   * for when there is.
+   */
+  interestOverrides: z.array(InterestSchema).optional(),
   /**
    * The row in `travel_personas`, not the persona itself. In the body rather
    * than a cookie on purpose: `route.test.ts` drives this handler through the
@@ -118,9 +131,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: PLAN_FAILED_MESSAGE }, { status: 503 });
   }
 
-  const { personaId, ...trip } = parsed.data;
+  const { personaId, interestOverrides, ...trip } = parsed.data;
   const persona = await resolvePersona(personaId, deps);
-  const planRequest: PlanRequest = { ...trip, ...(persona ? { persona } : {}) };
+  const planRequest: PlanRequest = {
+    ...trip,
+    profile: composeProfile(trip.profile, persona, interestOverrides),
+    ...(persona ? { persona } : {}),
+  };
 
   // The payload is the request as accepted, so a client reading the job row
   // back can see exactly what it asked for.
@@ -166,6 +183,41 @@ async function resolvePersona(
     console.error(`[POST /api/plan] persona ${personaId} could not be read`, error);
     return undefined;
   }
+}
+
+/**
+ * The submitted form and the resolved persona, combined into the profile the
+ * pipeline plans from.
+ *
+ * This is the line where a persona stops being a stored row and starts changing
+ * the trip. **Without one the submitted profile passes through untouched** —
+ * `buildProfile` is never called, so a traveller who skipped the quiz gets the
+ * plan this app produced before the quiz existed.
+ *
+ * With one, `buildProfile` owns the precedence and it is worth restating: the
+ * form wins on dietary (a hard constraint is never inferred) and on pace (a
+ * thing the user typed beats a thing the quiz inferred); the persona supplies
+ * interests, a budget fallback, and the `typeAffinities` map that is its most
+ * precise signal. The client's `profile.interests` are deliberately *not*
+ * passed as overrides — they are the demo's placeholder, and treating a
+ * placeholder as a choice is how the persona would end up changing nothing.
+ */
+function composeProfile(
+  submitted: PreferenceProfile,
+  persona: TravelPersona | undefined,
+  interestOverrides: Interest[] | undefined,
+): PreferenceProfile {
+  if (!persona) return submitted;
+  return buildProfile(persona.result, {
+    // `buildProfile` takes these for symmetry with the bridge doc; nothing in
+    // the profile it returns reads either.
+    city: "",
+    totalDays: 0,
+    dietary: submitted.dietary,
+    pace: submitted.pace,
+    budget: submitted.budget,
+    ...(interestOverrides ? { interestOverrides } : {}),
+  });
 }
 
 /**

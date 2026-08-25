@@ -58,6 +58,8 @@ const NOW = new Date('2026-08-24T09:00:00.000Z')
 
 /** A complete quiz: every question answered with its first option. */
 const QUIZ_ANSWERS: QuizAnswers = Array(QUESTIONS.length).fill(0)
+/** The opposite traveller: every question answered with its last option. */
+const QUIZ_ANSWERS_LAST: QuizAnswers = QUESTIONS.map((question) => question.options.length - 1)
 
 const originalCreate = planRouteDeps.create
 
@@ -398,6 +400,53 @@ describe('POST /api/plan', () => {
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
     expect(harness.store.saved[0].itinerary.persona).toBeNull()
+  })
+
+  it('builds the profile from the persona, and two travellers differ', async () => {
+    // The point of the whole persona layer: same city, same dates, same form,
+    // two people, two different plans. If this stops being true the quiz is
+    // collecting twelve answers and spending none of them.
+    async function planAs(answers: QuizAnswers) {
+      const harness = install()
+      const stored = await harness.personas.upsert({
+        answers,
+        dimensions: calculatePersona(answers).dimensions,
+        archetype: calculatePersona(answers).archetype.id,
+        now: NOW,
+      })
+      const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+      await settled(harness.store, job.id)
+      return harness.store.saved[0]
+    }
+
+    const first = await planAs(QUIZ_ANSWERS)
+    const second = await planAs(QUIZ_ANSWERS_LAST)
+
+    // The submitted interests were the demo placeholder; the persona replaced
+    // them, and the archetype's type map came with them.
+    expect(first.itinerary.profile.interests).not.toEqual(PROFILE.interests)
+    expect(first.itinerary.profile.typeAffinities).toBeDefined()
+    expect(first.itinerary.profile.interests).not.toEqual(second.itinerary.profile.interests)
+
+    // Dietary is a hard constraint and is never inferred; pace was typed.
+    expect(first.itinerary.profile.dietary).toEqual(PROFILE.dietary)
+    expect(first.itinerary.profile.pace).toBe(PROFILE.pace)
+    expect(second.itinerary.profile.pace).toBe(PROFILE.pace)
+
+    // And the trips themselves are not the same trip.
+    const stopsOf = (saved: typeof first) => saved.activities.map((a) => a.slot_role).join('|')
+    expect(
+      stopsOf(first) !== stopsOf(second) ||
+        first.result.scored.size !== second.result.scored.size ||
+        [...first.result.places.keys()].join() !== [...second.result.places.keys()].join(),
+    ).toBe(true)
+  })
+
+  it('leaves the submitted profile alone when there is no persona', async () => {
+    const harness = install()
+    const job = (await (await post()).json()) as JobRow
+    await settled(harness.store, job.id)
+    expect(harness.store.saved[0].itinerary.profile).toEqual(PROFILE)
   })
 
   it('still completes when Pass B is down', async () => {

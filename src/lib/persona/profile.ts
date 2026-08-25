@@ -115,34 +115,29 @@ export function deriveBudget(persona: PersonaResult): BudgetLevel {
   return 1;
 }
 
-/** d3 (Focus) → scoring weight adjustments (bridge §3). */
-export function getFocusScoringAdjustments(persona: PersonaResult) {
-  const d3 = persona.dimensions.focus;
-  return {
-    qualityWeight: d3 > 60 ? 0.45 : 0.3,
-    popularityWeight: d3 < 40 ? 0.25 : 0.1,
-    touristTrapPenalty: d3 > 70 ? 0.15 : 0,
-    visitDurationBias: (d3 > 70 ? "max" : d3 < 30 ? "min" : "preferred") as
-      | "min"
-      | "preferred"
-      | "max",
-  };
-}
-
-/** d4 (Social) → scheduling adjustments (bridge §3). */
-export function getSocialSchedulingRules(persona: PersonaResult) {
-  const d4 = persona.dimensions.social;
-  return {
-    eveningActivityRequired: d4 < 30,
-    minSocialVenuesPerDay: d4 < 30 ? 2 : d4 < 60 ? 1 : 0,
-    preferQuietPlaces: d4 > 70,
-    allowSolitudeSlots: d4 > 60,
-    crowdPreference: (d4 > 70 ? "quiet" : d4 < 30 ? "packed" : "moderate") as
-      | "quiet"
-      | "moderate"
-      | "packed",
-  };
-}
+/**
+ * Two functions used to live here — `getFocusScoringAdjustments` and
+ * `getSocialSchedulingRules` — mapping d3 and d4 onto planner constants. They
+ * are gone, and `src/lib/planner/knobs.ts` is where those mappings live now.
+ *
+ * Not a rewrite for its own sake. They were never called, and connecting them
+ * would have left the planner with **two** statements of the same mapping
+ * disagreeing about their thresholds: they cut at 30/60/70 while the bands cut
+ * at 33/66, and their mid values were not this planner's current constants,
+ * which is the property that keeps a persona-less trip identical. Two rules
+ * that disagree is worse than either rule.
+ *
+ * Everything they said that has a consumer moved across: `qualityWeight` and
+ * `popularityWeight` became the renormalised `weights`, `touristTrapPenalty`
+ * and `visitDurationBias` kept their names, and `minSocialVenuesPerDay` and
+ * `crowdPreference` sit on `PlannerKnobs`.
+ *
+ * Three fields did **not** move, and are named here rather than lost quietly:
+ * `eveningActivityRequired`, `preferQuietPlaces` and `allowSolitudeSlots`.
+ * Nothing in `assign.ts` or `pack.ts` can express any of them — there is no
+ * concept of an evening requirement or a solitude slot in the day skeleton —
+ * so wiring them would have meant inventing the mechanism, not connecting one.
+ */
 
 /** Persona + trip form → the planner's PreferenceProfile (bridge §2). */
 export function buildProfile(

@@ -6,8 +6,6 @@ import {
   buildProfile,
   deriveBudget,
   derivePace,
-  getFocusScoringAdjustments,
-  getSocialSchedulingRules,
   type TripInputs,
 } from "./profile";
 import type { DimensionScores, PersonaResult, TravelArchetypeId } from "./types";
@@ -62,37 +60,6 @@ describe("deriveBudget", () => {
   });
 });
 
-describe("focus adjustments", () => {
-  it("high d3 boosts quality and penalizes traps", () => {
-    const adj = getFocusScoringAdjustments(persona("cultural_diver", { focus: 90 }));
-    expect(adj.qualityWeight).toBe(0.45);
-    expect(adj.touristTrapPenalty).toBe(0.15);
-    expect(adj.visitDurationBias).toBe("max");
-  });
-
-  it("low d3 boosts popularity and shortens stays", () => {
-    const adj = getFocusScoringAdjustments(persona("bucket_list_chaser", { focus: 20 }));
-    expect(adj.popularityWeight).toBe(0.25);
-    expect(adj.touristTrapPenalty).toBe(0);
-    expect(adj.visitDurationBias).toBe("min");
-  });
-});
-
-describe("social rules", () => {
-  it("low d4 requires evenings and packed crowds", () => {
-    const rules = getSocialSchedulingRules(persona("social_explorer", { social: 10 }));
-    expect(rules.eveningActivityRequired).toBe(true);
-    expect(rules.minSocialVenuesPerDay).toBe(2);
-    expect(rules.crowdPreference).toBe("packed");
-  });
-
-  it("high d4 allows solitude and prefers quiet", () => {
-    const rules = getSocialSchedulingRules(persona("soulful_soloist", { social: 90 }));
-    expect(rules.allowSolitudeSlots).toBe(true);
-    expect(rules.preferQuietPlaces).toBe(true);
-    expect(rules.crowdPreference).toBe("quiet");
-  });
-});
 
 describe("buildProfile", () => {
   it("keeps dietary from the form and copies preset affinities", () => {

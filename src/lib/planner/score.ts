@@ -2,10 +2,17 @@
  * Stage 3 — deterministic scoring. Rank in code first: auditable, debuggable,
  * free. See "Stage 3" in `docs/personalization-pipeline.md`.
  *
- *   score = w1·affinity + w2·quality + w3·priceFit
+ *   score = w1·affinity + w2·quality + w3·priceFit + w4·popularity
+ *         − touristTrapPenalty·popularity
  *
- * (The doc's −w4·duplication term is a set-level concern — the funnel's
+ * (The doc's −w5·duplication term is a set-level concern — the funnel's
  * per-type quotas own it; a single place can't know it's a duplicate.)
+ *
+ * The last two terms are the traveller's persona reaching this far in. Both are
+ * **zero by default**: `WEIGHTS.popularity` is 0 and `touristTrapPenalty` is 0
+ * unless a persona moved them, so a planner with no persona scores exactly what
+ * it scored before either existed. Every knob arrives as a parameter — nothing
+ * here reads a `PersonaResult`.
  *
  * Hard filters run FIRST: a permanently closed place or a dietary violation
  * is not a low score, it's a system failure. `scorePlace` is never handed a
@@ -13,6 +20,7 @@
  */
 
 import type { PriceLevelOrdinal } from "@/lib/maps/price-level";
+import { DEFAULT_SCORING_KNOBS, type ScoringKnobs } from "./knobs";
 import type { BudgetLevel, CandidatePlace, Interest, PreferenceProfile } from "./types";
 import { bridgeFor } from "./taxonomy";
 
@@ -24,14 +32,15 @@ export interface ScoredPlace {
 }
 
 /**
- * Component weights, in one place so a tuning change is a one-line diff and
- * the tests stay written as comparisons, not absolutes.
+ * Component weights when nobody has said otherwise — the same four numbers as
+ * `DEFAULT_SCORING_KNOBS.weights`, kept here because this is the module every
+ * scoring test reads them from.
+ *
+ * `popularity` at zero is what "there is no popularity term" means once the
+ * term exists. A persona that wants one raises it, and `resolvePlannerKnobs`
+ * renormalises so the four still sum to 1.
  */
-export const WEIGHTS = {
-  affinity: 0.4,
-  quality: 0.35,
-  priceFit: 0.25,
-} as const;
+export const WEIGHTS = DEFAULT_SCORING_KNOBS.weights;
 
 // ── quality ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +59,30 @@ export function quality(rating: number | undefined, userRatingCount: number | un
   return (
     (rating * n + QUALITY_PRIOR_MEAN * QUALITY_PRIOR_WEIGHT) / (n + QUALITY_PRIOR_WEIGHT)
   );
+}
+
+// ── popularity ───────────────────────────────────────────────────────────────
+
+/** Review count at which a place is as famous as this scale can express. */
+export const POPULARITY_SATURATION = 10_000;
+
+/**
+ * How well known a place is, 0–1, on a log scale — 100 reviews is halfway to
+ * 10,000, not a hundredth of the way.
+ *
+ * Deliberately **not** `quality`. That function asks "is this good?" and uses
+ * the review count only to decide how much to trust the stars. This one asks
+ * "does everyone go here?", which two different travellers want opposite
+ * answers to: one is here for the famous things, the other is here to avoid
+ * them. Both read this number; the weights and `touristTrapPenalty` decide the
+ * sign.
+ *
+ * An unknown count is 0, not neutral: "no evidence of fame" is the honest read,
+ * and it is the same rule `pickSerendipity` already applies.
+ */
+export function popularity(userRatingCount: number | undefined): number {
+  if (userRatingCount == null || userRatingCount <= 0) return 0;
+  return Math.min(1, Math.log10(userRatingCount) / Math.log10(POPULARITY_SATURATION));
 }
 
 // ── affinity ─────────────────────────────────────────────────────────────────
@@ -71,6 +104,37 @@ export function affinity(place: CandidatePlace, interests: readonly Interest[]):
   return matchedInterests(place, interests).length / interests.length;
 }
 
+/** How far from neutral the type bonus may pull a place, either way. */
+export const TYPE_AFFINITY_MAX = 0.5;
+
+/**
+ * `PreferenceProfile.typeAffinities` as an offset from neutral.
+ *
+ * The map is `{ googleType: weight }` with 1.0 meaning neutral — it comes from
+ * `ARCHETYPE_PRESETS`, and it is the persona's precision layer: the `Interest`
+ * union has seven members and cannot say "this traveller is here for the
+ * galleries but not the shopping malls". The strongest opinion the profile
+ * expresses about any of this place's types wins; a type the map never mentions
+ * says nothing rather than saying zero.
+ *
+ * Bounded because it tunes a ranking rather than replacing one. Unbounded, one
+ * preset entry of 3.0 would out-vote every other term in the score.
+ */
+export function typeAffinityBonus(
+  place: CandidatePlace,
+  typeAffinities: Record<string, number> | undefined,
+): number {
+  if (!typeAffinities) return 0;
+  let strongest: number | undefined;
+  for (const type of place.types) {
+    if (!Object.hasOwn(typeAffinities, type)) continue;
+    const offset = typeAffinities[type] - 1;
+    if (strongest === undefined || Math.abs(offset) > Math.abs(strongest)) strongest = offset;
+  }
+  if (strongest === undefined) return 0;
+  return Math.max(-TYPE_AFFINITY_MAX, Math.min(TYPE_AFFINITY_MAX, strongest));
+}
+
 // ── priceFit ─────────────────────────────────────────────────────────────────
 
 /** What an unknown priceLevel scores: neutral, never 0 — "we don't know" must
@@ -79,18 +143,26 @@ export function affinity(place: CandidatePlace, interests: readonly Interest[]):
 export const PRICE_FIT_NEUTRAL = 0.5;
 
 /**
- * Distance ABOVE budget on the 0–4 ordinal scale, mapped to 1…0. Asymmetric on
- * purpose: under budget is a perfect fit, not a mismatch. A symmetric score
+ * Distance ABOVE budget on the 0–4 ordinal scale, mapped to 1…0. Asymmetric by
+ * default: under budget is a perfect fit, not a mismatch. A symmetric score
  * contradicts the hard filter directly below it ("cheap is never a violation")
  * and, in the Gate A fixture, ranked a ¥¥ ramen shop above a ¥ Kiyomizu-dera
  * for a ¥¥ traveller. Nobody's budget means "no free temples".
+ *
+ * `penalisesBelow` is the one traveller for whom that is wrong: the one who
+ * said they want it polished. For them the curve becomes symmetric and the
+ * hawker stall stops out-ranking the restaurant. Nobody else sees it — it is
+ * off unless a persona turns it on, and `comfortTolerance` is the only axis
+ * allowed to. See the collision rules in `knobs.ts`.
  */
 export function priceFit(
   priceLevel: PriceLevelOrdinal | undefined,
   budget: BudgetLevel | undefined,
+  penalisesBelow = false,
 ): number {
   if (priceLevel == null || budget == null) return PRICE_FIT_NEUTRAL;
-  if (priceLevel <= budget) return 1;
+  if (priceLevel < budget) return penalisesBelow ? 1 - (budget - priceLevel) / 4 : 1;
+  if (priceLevel === budget) return 1;
   return 1 - (priceLevel - budget) / 4;
 }
 
@@ -199,8 +271,13 @@ function formatReviewCount(count: number): string {
   return `${(count / 1000).toFixed(1).replace(/\.0$/, "")}k`;
 }
 
-function buildReasons(place: CandidatePlace, matched: readonly Interest[]): string[] {
+function buildReasons(
+  place: CandidatePlace,
+  matched: readonly Interest[],
+  typeBonus: number,
+): string[] {
   const reasons = matched.map((interest) => `matches: ${interest}`);
+  if (typeBonus > 0) reasons.push("your kind of place");
   if (place.rating != null && place.userRatingCount != null) {
     reasons.push(`${place.rating}★ · ${formatReviewCount(place.userRatingCount)} reviews`);
   }
@@ -213,15 +290,49 @@ function buildReasons(place: CandidatePlace, matched: readonly Interest[]): stri
 /**
  * Score ONE place that already passed hard filters. For lists, use
  * `scoreCandidates`, which filters first.
+ *
+ * `knobs` defaults to today's constants, so every call site that has no persona
+ * — and every existing test — scores exactly what it scored before.
  */
-export function scorePlace(place: CandidatePlace, profile: PreferenceProfile): ScoredPlace {
+export function scorePlace(
+  place: CandidatePlace,
+  profile: PreferenceProfile,
+  knobs: ScoringKnobs = DEFAULT_SCORING_KNOBS,
+): ScoredPlace {
   const matched = matchedInterests(place, profile.interests);
-  const affinityScore = affinity(place, profile.interests);
+  const typeBonus = typeAffinityBonus(place, profile.typeAffinities);
+  // The seven-member interest union and the persona's type map are two
+  // statements about the same thing, so they add rather than compete — and the
+  // sum is clamped, because a place cannot match more than all of what you like.
+  const affinityScore = clamp01(affinity(place, profile.interests) + typeBonus);
   const qualityScore = quality(place.rating, place.userRatingCount) / 5; // → 0–1
-  const fitScore = priceFit(place.priceLevel, profile.budget);
+  const fame = popularity(place.userRatingCount);
+  const fitScore = priceFit(
+    place.priceLevel,
+    profile.budget,
+    knobs.priceFitPenalisesBelow && !isCheapTypeExempt(place, knobs.cheapTypeExemptions),
+  );
   const score =
-    WEIGHTS.affinity * affinityScore + WEIGHTS.quality * qualityScore + WEIGHTS.priceFit * fitScore;
-  return { placeId: place.placeId, score, reasons: buildReasons(place, matched) };
+    knobs.weights.affinity * affinityScore +
+    knobs.weights.quality * qualityScore +
+    knobs.weights.priceFit * fitScore +
+    knobs.weights.popularity * fame -
+    knobs.touristTrapPenalty * fame;
+  return { placeId: place.placeId, score, reasons: buildReasons(place, matched, typeBonus) };
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+/**
+ * How `immersion` says "the market is the point" without reshaping a curve it
+ * does not own. A deep-immersion traveller who also wants polish still gets the
+ * symmetric price curve everywhere except the handful of types where cheap is
+ * the whole experience.
+ */
+function isCheapTypeExempt(place: CandidatePlace, exemptions: readonly string[]): boolean {
+  return exemptions.some((type) => place.types.includes(type));
 }
 
 /** Hard filters, then scores, sorted best-first. The pipeline's entry point. */
@@ -229,8 +340,9 @@ export function scoreCandidates(
   places: readonly CandidatePlace[],
   profile: PreferenceProfile,
   context: HardFilterContext = {},
+  knobs: ScoringKnobs = DEFAULT_SCORING_KNOBS,
 ): ScoredPlace[] {
   return applyHardFilters(places, profile, context)
-    .map((place) => scorePlace(place, profile))
+    .map((place) => scorePlace(place, profile, knobs))
     .sort((a, b) => b.score - a.score);
 }

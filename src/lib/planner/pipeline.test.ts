@@ -25,10 +25,13 @@ import {
   type EnrichmentSubject,
   type StoredEnrichment,
 } from './enrich'
+import { dayCapacity, type AssignResult } from './assign'
+import type { ScoredCluster } from './funnel'
 import {
   addDays,
   advanceWeekday,
   alternatesFor,
+  assignSerendipity,
   createStraightLineTravel,
   parseIsoDate,
   runPlan,
@@ -477,5 +480,115 @@ describe('the diagnostic record', () => {
     const { result } = await plan()
     expect(result.debug.recordedAt).toBe(NOW.toISOString())
     expect(result.debug.version).toBe(1)
+  })
+})
+
+describe('the serendipity slot', () => {
+  const profile: PreferenceProfile = { interests: ['cafes'], dietary: [], pace: 'balanced' }
+
+  function place(placeId: string, overrides: Partial<CandidatePlace> = {}): CandidatePlace {
+    return { placeId, name: placeId, types: ['cafe'], ...overrides }
+  }
+
+  const gem = place('gem')
+  const spent = place('spent')
+
+  function clusterOf(places: CandidatePlace[], score = 1): ScoredCluster {
+    return {
+      centroid: { latitude: 35, longitude: 135.7 },
+      score,
+      places,
+      scored: places.map((p) => ({ placeId: p.placeId, score: 0.5, reasons: [] })),
+    }
+  }
+
+  /** Two days, each with one assigned stop, and nothing in flex. */
+  function assignmentOf(assigned: CandidatePlace[][]): AssignResult {
+    return {
+      days: assigned.map((places, dayIndex) => ({
+        dayIndex,
+        fallback: false,
+        input: {
+          assignments: places.map((place, position) => ({
+            place,
+            role: 'activity' as const,
+            position,
+            score: 0.5,
+            duration: { min: 60, preferred: 60, max: 60 },
+          })),
+        },
+      })),
+      rationale: [],
+      dropped: [],
+    }
+  }
+
+  it('puts a wildcard on the day whose cluster holds it', () => {
+    const byDay = assignSerendipity(
+      [gem],
+      [clusterOf([spent]), clusterOf([gem])],
+      assignmentOf([[spent], []]),
+      profile,
+      new Map(),
+    )
+    // Day 1, not day 0. A wildcard on the wrong side of the city is not
+    // serendipity, it is a bus ride.
+    expect([...byDay.keys()]).toEqual([1])
+    expect(byDay.get(1)?.[0].place.placeId).toBe('gem')
+  })
+
+  it('drops a wildcard Pass B already spent', () => {
+    const byDay = assignSerendipity(
+      [spent],
+      [clusterOf([spent])],
+      assignmentOf([[spent]]),
+      profile,
+      new Map(),
+    )
+    expect(byDay.size).toBe(0)
+  })
+
+  it('drops a wildcard whose cluster produced no day', () => {
+    // Three clusters, two days: the third cluster's places have nowhere to go.
+    const orphan = place('orphan')
+    const byDay = assignSerendipity(
+      [orphan],
+      [clusterOf([spent]), clusterOf([gem]), clusterOf([orphan])],
+      assignmentOf([[spent], [gem]]),
+      profile,
+      new Map(),
+    )
+    expect(byDay.size).toBe(0)
+  })
+
+  it('sizes the wildcard from the same duration ladder every other stop used', () => {
+    const enrichment: PlaceEnrichment = {
+      description: 'a quiet room',
+      tags: [],
+      confidence: 0.9,
+      avgVisitMinutes: [100, 140],
+    }
+    const byDay = assignSerendipity(
+      [gem],
+      [clusterOf([gem])],
+      assignmentOf([[]]),
+      profile,
+      new Map([['gem', enrichment]]),
+    )
+    expect(byDay.get(0)?.[0].duration).toEqual(
+      resolveVisitDuration(gem, enrichment, profile.pace),
+    )
+  })
+
+  it('adds nothing to a run with no persona, through the whole pipeline', async () => {
+    // The requirement that keeps Gate A still: `serendipityPerTrip` is 0 unless
+    // a persona raised it, so a day still carries exactly the one flex pick
+    // Pass B was given room for, never a second one from here.
+    const { result } = await plan()
+    const allowed = dayCapacity(PROFILE.pace).flex
+    expect(allowed).toBe(1)
+    for (const day of result.days) {
+      expect((day.input.flex ?? []).length).toBeLessThanOrEqual(allowed)
+    }
   })
 })
