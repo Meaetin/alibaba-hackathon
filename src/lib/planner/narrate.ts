@@ -52,6 +52,7 @@ import {
   type ResponsesResult,
 } from "./openai";
 import { isMealRole, type PackedDay, type SlotRole, type TravelMode } from "./pack";
+import { renderPersonaBrief, type PersonaBrief } from "./persona-brief";
 import type { CandidatePlace, PlaceEnrichment, PreferenceProfile } from "./types";
 
 // ── what a stop is, on the way in ────────────────────────────────────────────
@@ -243,7 +244,17 @@ export function profileSlice(profile: PreferenceProfile): {
  * building it once is what makes byte-identity a property of the code rather
  * than a thing to hope for.
  */
-export function buildSharedPrefix(profile: PreferenceProfile): ResponseInputBlock[] {
+export function buildSharedPrefix(
+  profile: PreferenceProfile,
+  brief?: PersonaBrief,
+): ResponseInputBlock[] {
+  // The brief goes HERE and nowhere else. It is per-itinerary, so it belongs in
+  // the block that is byte-identical across every stop; putting it in the
+  // per-stop payload would turn fifteen cache reads into fifteen misses.
+  //
+  // `renderPersonaBrief` returns "" without a persona, so this prefix stays
+  // byte-for-byte what it was before personas existed.
+  const persona = renderPersonaBrief(brief, "narrate");
   return [
     { role: "system", content: NARRATE_SYSTEM_PROMPT },
     {
@@ -252,7 +263,16 @@ export function buildSharedPrefix(profile: PreferenceProfile): ResponseInputBloc
         type: "input_text",
         text: `traveller_profile_slice: ${JSON.stringify(profileSlice(profile))}
 Apply this to every stop you are sent in this conversation. Interests set what
-you emphasise. Dietary needs are hard constraints, not preferences.`,
+you emphasise. Dietary needs are hard constraints, not preferences.${
+          persona
+            ? `
+
+The traveller took a persona quiz. Use it to choose your VOICE and what to
+emphasise — never to change which places are in the trip, which is already
+decided.
+${persona}`
+            : ""
+        }`,
         prompt_cache_breakpoint: { mode: "explicit" },
       }],
     },
@@ -426,6 +446,9 @@ export interface NarrateDeps {
   /** Per-itinerary constant. Every call in one run shares it, which is what
    *  routes all fifteen to the same prompt cache. */
   promptCacheKey: string;
+  /** The traveller's persona as prompt words. Absent means no persona, and the
+   *  shared prefix is then identical to the one this pass has always sent. */
+  brief?: PersonaBrief;
   concurrency?: number;
   /** Defaults to 1. Not a backoff policy — the fallback is always available,
    *  so a job that keeps retrying is strictly worse than one that degrades. */
@@ -471,7 +494,7 @@ export async function narrateStops(
   profile: PreferenceProfile,
   deps: NarrateDeps,
 ): Promise<NarrateResult> {
-  const sharedPrefix = buildSharedPrefix(profile);
+  const sharedPrefix = buildSharedPrefix(profile, deps.brief);
   const format = jsonSchemaFormat("stop_content", StopContentSchema);
   const model = deps.model ?? MODELS.narrate;
   const effort: ReasoningEffort = deps.effort ?? "none";

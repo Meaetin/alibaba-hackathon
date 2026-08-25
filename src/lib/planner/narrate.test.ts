@@ -129,6 +129,9 @@ function fakeClient(options: FakeOptions = {}): ResponsesClient & {
 
 // ── the fan-out never takes the itinerary with it ────────────────────────────
 
+import { QUESTIONS, matchArchetype } from "@/lib/persona/quiz";
+import { buildPersonaBrief } from "./persona-brief";
+
 describe("narrateStops — degradation", () => {
   it("returns fourteen narrated stops and one fallback when a single call fails", async () => {
     const client = fakeClient({ failFor: (placeId) => placeId === "p-7" });
@@ -302,6 +305,56 @@ describe("narrateStops — prompt cache prefix", () => {
 });
 
 // ── the profile slice is a slice ─────────────────────────────────────────────
+
+describe("narrateStops — the persona brief", () => {
+  const BRIEF = buildPersonaBrief(
+    matchArchetype({ structure: 85, comfort: 80, focus: 90, social: 85 }),
+    Array(QUESTIONS.length).fill(2),
+  );
+
+  it("rides in the cached prefix, never in the per-stop payload", async () => {
+    const client = fakeClient();
+    await narrateStops(fifteenStops(), PROFILE, {
+      client,
+      promptCacheKey: PROMPT_CACHE_KEY,
+      brief: BRIEF,
+    });
+
+    const prefixText = client.requests[0].input
+      .slice(0, SHARED_PREFIX_BLOCK_COUNT)
+      .map(textOf)
+      .join("\n");
+    expect(prefixText).toContain(BRIEF.traits[0]);
+    expect(prefixText).toContain(BRIEF.archetype);
+
+    // The whole point of putting it in the prefix: fifteen cache reads, not
+    // fifteen misses. A brief in the per-stop block would still *work*.
+    for (const request of client.requests) {
+      const perStop = request.input.slice(SHARED_PREFIX_BLOCK_COUNT).map(textOf).join("\n");
+      expect(perStop).not.toContain(BRIEF.traits[0]);
+    }
+    const prefixes = new Set(
+      client.requests.map((r) => JSON.stringify(r.input.slice(0, SHARED_PREFIX_BLOCK_COUNT))),
+    );
+    expect(prefixes.size).toBe(1);
+  });
+
+  it("leaves the prefix byte-identical when there is no persona", async () => {
+    // The requirement that keeps the Gate A snapshots and every warm cache
+    // still for a traveller who never took the quiz.
+    expect(JSON.stringify(buildSharedPrefix(PROFILE, undefined))).toBe(
+      JSON.stringify(buildSharedPrefix(PROFILE)),
+    );
+  });
+
+  it("tells the narrator the trip is already decided", async () => {
+    // Pass C writes about a timeline that is finished. A brief that read as
+    // "pick places like this" would invite it to editorialise about stops the
+    // scheduler chose and it cannot change.
+    const prefix = buildSharedPrefix(PROFILE, BRIEF).map(textOf).join("\n");
+    expect(prefix).toMatch(/never to change which places are in the trip/i);
+  });
+});
 
 describe("narrateStops — profile slice", () => {
   it("sends only interests and dietary", async () => {

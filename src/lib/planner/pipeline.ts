@@ -60,7 +60,8 @@ import {
   type FunnelStats,
   type ScoredCluster,
 } from "./funnel";
-import { resolvePlannerKnobs } from "./knobs";
+import { bandsFor, resolvePlannerKnobs } from "./knobs";
+import { personaBriefFor } from "./persona-brief";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
 import { narrateStops, stopsFromDays, type NarrateStats, type StopContent } from "./narrate";
@@ -505,6 +506,9 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   // parameters from this line down. No stage below reads a `PersonaResult`, and
   // with no persona every one of these is what it was before personas existed.
   const knobs = resolvePlannerKnobs(profile, request.persona?.result, profile.pace);
+  // The persona as prompt words, built once. Undefined without a persona, which
+  // is what keeps every prompt in this run byte-identical to what it was.
+  const brief = personaBriefFor(request.persona);
   const packKnobs: PackKnobs = {
     visitDurationBias: knobs.visitDurationBias,
     walkMaxMeters: knobs.walkMaxMeters,
@@ -672,7 +676,12 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       matchReasons,
     ),
     profile,
-    { client: deps.responses, effort: "none", promptCacheKey: promptCacheKeyFor(request) },
+    {
+      client: deps.responses,
+      effort: "none",
+      promptCacheKey: promptCacheKeyFor(request),
+      brief,
+    },
   );
 
   return {
@@ -737,12 +746,22 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
  */
 function promptCacheKeyFor(request: PlanRequest): string {
   const { profile } = request;
+  const bands = bandsFor(request.persona?.result);
   return [
     "plan",
     request.city.trim().toLowerCase(),
     profile.pace,
     [...profile.interests].sort().join("+"),
     [...profile.dietary].sort().join("+"),
+    // The four bands, because the persona brief is in the cached prefix now.
+    // Not a correctness bug without them — routing is on the prefix hash, not
+    // on this string — but two personas would thrash one key instead of each
+    // keeping a warm one. A traveller with no persona reads as the neutral row,
+    // so their key is unchanged.
+    bands.spontaneity,
+    bands.comfortTolerance,
+    bands.immersion,
+    bands.solitude,
   ].join(":");
 }
 
