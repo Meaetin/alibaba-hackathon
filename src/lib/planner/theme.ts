@@ -21,6 +21,17 @@
  * and is recorded. It is never retried: a model that named a place we do not
  * have will name it again, and a second call is a second bill.
  *
+ * The same discipline applies to `includedTypes`, for a sharper reason. Google
+ * rejects the **whole** Nearby Search with a 400 if any one type is not
+ * searchable — not "ignores that type", the entire circle is lost. A live run
+ * lost two of three searches that way.
+ *
+ * Two rules, because one is not enough. A proposed type must be one the pool
+ * demonstrably contains, which kills anything invented; **and** it must not be
+ * one of Google's descriptive-only types, because `food` and `place_of_worship`
+ * come back on real places and still cannot be searched for. See
+ * `NON_SEARCHABLE_TYPES`.
+ *
  * ## What a theme is not allowed to do
  *
  * It is an aspiration, not a rule. Dietary needs and budget are enforced by
@@ -41,6 +52,7 @@ import {
   type ResponsesUsage,
 } from "./openai";
 import { renderPersonaBrief, type PersonaBrief } from "./persona-brief";
+import { NON_SEARCHABLE_TYPES } from "./retrieval";
 import type { CitySurvey } from "./survey";
 import type { Weekday } from "./hours";
 import type { PreferenceProfile } from "./types";
@@ -120,8 +132,12 @@ Rules:
 - premise is ONE sentence, written to the planner: what this day is for and what
   kind of place belongs in it.
 - title is two to five words, for the traveller to read.
-- included_types are Google Places types, for a search around the anchor. Three
-  to six of them. Prefer types the survey shows this city actually has.
+- included_types are searchable Google Places types, for a search around the
+  anchor. Three to six of them, chosen from the types the survey lists. Broad
+  descriptive words are NOT searchable types and are dropped: never use "food",
+  "point_of_interest", "establishment", "place_of_worship", "landmark" or
+  "natural_feature". Use the specific type instead — "restaurant", "cafe",
+  "hindu_temple", "park", "museum".
 - radius_hint: "tight" for a dense quarter you walk in an hour, "walkable" for a
   neighbourhood, "wide" when the day is built around somewhere out of town.
 
@@ -135,6 +151,21 @@ export interface ThemeRequestDay {
   /** 0 = Sunday … 6 = Saturday. The model is told, so it can avoid a Monday
    *  museum day; nothing here enforces it — `validate.ts` does. */
   weekday: Weekday;
+}
+
+/**
+ * What a theme is allowed to name. Both halves are evidence from the pool, not
+ * a list somebody has to keep up to date.
+ */
+export interface ThemeVocabulary {
+  /** Ids an anchor may name — the whole retrieved pool, wider than the
+   *  shortlist on purpose: an anchor is a *location*, and a place the funnel
+   *  cut for being off-interest is still a good landmark to search around. */
+  placeIds: ReadonlySet<string>;
+  /** Places types this city demonstrably has. Necessary but **not sufficient**
+   *  — a descriptive-only type is in here too, and would still 400 the whole
+   *  search. `isSearchableType` applies both rules. */
+  types: ReadonlySet<string>;
 }
 
 export interface ThemeInput {
@@ -166,6 +197,10 @@ export interface ThemeResult {
   themes: DayTheme[];
   /** Days that will fall back to geography, and why. */
   rejected: ThemeRejection[];
+  /** Types the model proposed that this city has no evidence of. Dropped, not
+   *  fatal — but worth seeing, because every one is a search that would have
+   *  returned a 400 and lost its whole circle. */
+  unknownTypes: string[];
   /** True when the call itself failed — every day falls back. */
   unavailable: boolean;
   usage?: ResponsesUsage;
@@ -173,19 +208,15 @@ export interface ThemeResult {
 
 /**
  * Names each day of the trip, or returns nothing and lets geography do it.
- *
- * `poolIds` is the set every anchor is checked against. It is passed rather
- * than derived so the caller decides what "in the pool" means — today the whole
- * retrieval result, which is wider than the funnel's shortlist on purpose: an
- * anchor is a *location*, and a place the funnel cut for being off-interest is
- * still a perfectly good landmark to search around.
  */
 export async function planThemes(
   input: ThemeInput,
-  poolIds: ReadonlySet<string>,
+  vocabulary: ThemeVocabulary,
   deps: ThemeDeps,
 ): Promise<ThemeResult> {
-  if (input.days.length === 0) return { themes: [], rejected: [], unavailable: false };
+  if (input.days.length === 0) {
+    return { themes: [], rejected: [], unknownTypes: [], unavailable: false };
+  }
 
   const outcome = await withRetry(async () => {
     const response = await deps.client.create(buildThemeRequest(input, deps));
@@ -200,17 +231,25 @@ export async function planThemes(
         dayIndex: day.dayIndex,
         reason: "the theme pass did not answer",
       })),
+      unknownTypes: [],
       unavailable: true,
     };
   }
 
-  const { themes, rejected } = validateThemes(outcome.value.answer, input, poolIds);
+  const { themes, rejected, unknownTypes } = validateThemes(
+    outcome.value.answer,
+    input,
+    vocabulary,
+  );
   for (const rejection of rejected) {
     console.warn(
       `[theme] day ${rejection.dayIndex + 1} falls back to geography — ${rejection.reason}`,
     );
   }
-  return { themes, rejected, unavailable: false, usage: outcome.value.usage };
+  if (unknownTypes.length > 0) {
+    console.warn(`[theme] dropped types this city has no evidence of: ${unknownTypes.join(", ")}`);
+  }
+  return { themes, rejected, unknownTypes, unavailable: false, usage: outcome.value.usage };
 }
 
 export function buildThemeRequest(input: ThemeInput, deps: ThemeDeps): ResponsesRequest {
@@ -285,12 +324,13 @@ function parseThemes(text: string): ThemeAnswer {
 export function validateThemes(
   answer: ThemeAnswer,
   input: ThemeInput,
-  poolIds: ReadonlySet<string>,
-): { themes: DayTheme[]; rejected: ThemeRejection[] } {
+  vocabulary: ThemeVocabulary,
+): { themes: DayTheme[]; rejected: ThemeRejection[]; unknownTypes: string[] } {
   const byDay = new Map(answer.themes.map((theme) => [theme.day, theme]));
   const themes: DayTheme[] = [];
   const rejected: ThemeRejection[] = [];
   const claimedAnchors = new Set<string>();
+  const unknownTypes = new Set<string>();
 
   for (const day of input.days) {
     const proposed = byDay.get(day.dayIndex + 1);
@@ -298,7 +338,7 @@ export function validateThemes(
       rejected.push({ dayIndex: day.dayIndex, reason: "no theme was proposed for this day" });
       continue;
     }
-    if (!poolIds.has(proposed.anchor_place_id)) {
+    if (!vocabulary.placeIds.has(proposed.anchor_place_id)) {
       // The hallucination case, and the reason the constraint exists.
       rejected.push({
         dayIndex: day.dayIndex,
@@ -317,17 +357,34 @@ export function validateThemes(
       continue;
     }
     claimedAnchors.add(proposed.anchor_place_id);
+    const proposedTypes = dedupe(proposed.included_types);
+    for (const type of proposedTypes) {
+      if (!isSearchableType(type, vocabulary)) unknownTypes.add(type);
+    }
     themes.push({
       dayIndex: day.dayIndex,
       title: proposed.title.trim(),
       premise: proposed.premise.trim(),
       anchorPlaceId: proposed.anchor_place_id,
-      includedTypes: dedupe(proposed.included_types),
+      // An empty list is fine and is not a failure: the nearby search then asks
+      // for whatever is around the anchor, which is a weaker query but a legal
+      // one. A 400 would have lost the circle entirely.
+      includedTypes: proposedTypes.filter((type) => isSearchableType(type, vocabulary)),
       radiusHint: proposed.radius_hint,
     });
   }
 
-  return { themes, rejected };
+  return { themes, rejected, unknownTypes: [...unknownTypes] };
+}
+
+/**
+ * Both rules: this city has such places, **and** Google will search for them.
+ *
+ * Exported because the two halves fail for different reasons and a caller
+ * debugging a lost circle wants to be able to ask about one type.
+ */
+export function isSearchableType(type: string, vocabulary: ThemeVocabulary): boolean {
+  return vocabulary.types.has(type) && !NON_SEARCHABLE_TYPES.has(type);
 }
 
 function dedupe(values: readonly string[]): string[] {

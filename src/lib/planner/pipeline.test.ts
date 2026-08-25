@@ -28,10 +28,12 @@ import {
 import { dayCapacity, type AssignResult } from './assign'
 import type { ScoredCluster } from './funnel'
 import {
+  MAX_PROMPT_CACHE_KEY,
   addDays,
   advanceWeekday,
   alternatesFor,
   assignSerendipity,
+  promptCacheKeyFor,
   createStraightLineTravel,
   parseIsoDate,
   runPlan,
@@ -43,6 +45,7 @@ import {
   type PlanResult,
 } from './pipeline'
 import { buildSearchPlan, createInMemoryLocationStore, createInMemorySearchCache } from './retrieval'
+import { QUESTIONS, calculatePersona } from '@/lib/persona/quiz'
 import { MODELS } from './openai'
 import { SHARED_PREFIX_BLOCK_COUNT } from './narrate'
 import { isRestaurant } from './taxonomy'
@@ -600,6 +603,58 @@ describe('the serendipity slot', () => {
     for (const day of result.days) {
       expect((day.input.flex ?? []).length).toBeLessThanOrEqual(allowed)
     }
+  })
+})
+
+describe('the prompt cache key', () => {
+  const base: PlanRequest = {
+    city: 'Kyoto',
+    startDate: '2026-09-14',
+    totalDays: 3,
+    profile: { interests: ['temples'], dietary: [], pace: 'balanced' },
+  }
+
+  it('never exceeds the provider limit, however long the inputs are', () => {
+    // The bug a real run found and no test did: spelled out, this key is 84
+    // characters, OpenAI answers 400 on *every* model call in the run, and each
+    // one degrades to its documented fallback — so the plan completes and the
+    // trip still looks like a trip.
+    const worst: PlanRequest = {
+      ...base,
+      city: 'Ciudad Autonoma de Buenos Aires, Argentina',
+      profile: {
+        interests: ['outdoors', 'cafes', 'temples', 'museums', 'food', 'nightlife', 'shopping'],
+        dietary: ['vegetarian', 'vegan', 'halal', 'gluten-free'],
+        pace: 'relaxed',
+        budget: 4,
+      },
+      persona: {
+        answers: Array(QUESTIONS.length).fill(0),
+        result: calculatePersona(Array(QUESTIONS.length).fill(0)),
+      },
+    }
+    expect(promptCacheKeyFor(worst).length).toBeLessThanOrEqual(MAX_PROMPT_CACHE_KEY)
+    expect(promptCacheKeyFor(base).length).toBeLessThanOrEqual(MAX_PROMPT_CACHE_KEY)
+  })
+
+  it('still says which city it belongs to', () => {
+    expect(promptCacheKeyFor(base)).toMatch(/^plan:kyoto:/)
+  })
+
+  it('gives two travellers with the same taste one warm key', () => {
+    expect(promptCacheKeyFor(base)).toBe(promptCacheKeyFor({ ...base, name: 'Another trip' }))
+  })
+
+  it('gives two personas two keys rather than letting them thrash one', () => {
+    const withPersona = (answers: number[]): PlanRequest => ({
+      ...base,
+      persona: { answers, result: calculatePersona(answers) },
+    })
+    const first = withPersona(Array(QUESTIONS.length).fill(0))
+    const last = withPersona(QUESTIONS.map((q) => q.options.length - 1))
+    expect(promptCacheKeyFor(first)).not.toBe(promptCacheKeyFor(last))
+    // And no persona is not one of them — it reads as the neutral row.
+    expect(promptCacheKeyFor(base)).not.toBe(promptCacheKeyFor(first))
   })
 })
 

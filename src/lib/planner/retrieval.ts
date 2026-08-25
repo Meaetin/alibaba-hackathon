@@ -100,6 +100,53 @@ export type { FetchLike } from "./http";
 export const NEARBY_MAX_RADIUS_METERS = 50_000;
 
 /**
+ * Places types Google **returns** but will not **filter** on.
+ *
+ * The API splits its types into two tables: Table A is searchable, Table B is
+ * only ever descriptive. Both arrive in `places.types`, which makes this trap
+ * invisible from the data — a live Singapore run saw `food` and
+ * `place_of_worship` on real places, proposed them as `includedTypes`, and
+ * Google answered **400 for the whole request**. Not "ignored that type": the
+ * entire circle was lost, twice out of three searches.
+ *
+ * So "this city has places of that type" is necessary and not sufficient, and
+ * this list is the rest of it. Google owns the list, so it can grow; anything
+ * missed still costs only its own circle, which the feasibility ladder can
+ * widen around.
+ */
+export const NON_SEARCHABLE_TYPES: ReadonlySet<string> = new Set([
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "country",
+  "establishment",
+  "finance",
+  "floor",
+  "food",
+  "general_contractor",
+  "geocode",
+  "health",
+  "intersection",
+  "landmark",
+  "natural_feature",
+  "neighborhood",
+  "place_of_worship",
+  "plus_code",
+  "point_of_interest",
+  "political",
+  "post_box",
+  "postal_code",
+  "premise",
+  "room",
+  "route",
+  "street_address",
+  "street_number",
+  "sublocality",
+  "sublocality_level_1",
+  "subpremise",
+  "town_square",
+]);
+
+/**
  * A circle to search inside, for `places:searchNearby`.
  *
  * The coordinates come from a place that is already in the pool, never from a

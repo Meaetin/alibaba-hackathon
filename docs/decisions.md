@@ -461,3 +461,15 @@
   Fusing two thin days would leave the trip a day short and renumber every day
   after it. The thin day takes surplus restaurants from its nearest neighbour by
   anchor distance, and the donor is never taken below its own feasibility.
+- 2026-08-25 — **`promptCacheKeyFor` is hashed, because OpenAI caps
+  `prompt_cache_key` at 64 characters.** Spelled out, Singapore plus four
+  interests plus four persona bands is 84, and the provider answers 400 on
+  *every* model call in the run — each of which then degrades to its documented
+  fallback, so the trip still completes and still looks like a trip. No test
+  caught it; one live run did. A short readable city prefix survives.
+- 2026-08-25 — **A theme's `includedTypes` must pass two rules, not one.** The
+  type must appear in the retrieved pool (kills invented types) **and** not be
+  one of Google's descriptive-only Table B types (`food`, `place_of_worship`,
+  `point_of_interest`, …). Both come back on real places; asking Google to
+  filter on one is a 400 for the whole circle, not a warning. Two of three
+  Singapore nearby searches were lost this way before the fix.

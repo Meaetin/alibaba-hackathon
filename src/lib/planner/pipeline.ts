@@ -37,6 +37,8 @@
  * precisely so a real provider can replace it without touching this file.
  */
 
+import { createHash } from "node:crypto";
+
 import type { TravelPersona } from "@/lib/persona/types";
 
 import {
@@ -845,31 +847,57 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
 }
 
 /**
+ * OpenAI rejects a `prompt_cache_key` longer than this. A 400, on every call in
+ * the run — Pass B, the theme pass and all fifteen narrations — which then
+ * degrade to their fallbacks and produce a trip nobody can tell was broken.
+ */
+export const MAX_PROMPT_CACHE_KEY = 64;
+
+/** How much of the city name survives into the readable half of the key. */
+const CACHE_KEY_CITY_CHARS = 16;
+
+/**
  * One cache key for the whole itinerary. OpenAI's prompt caching routes on a
  * prefix hash, so this must be a per-run constant — a per-stop key turns
- * fifteen cache reads into fifteen misses. Keyed on city and profile rather
- * than on a random id, so two travellers with the same taste in the same city
- * share the cache instead of each paying to warm their own.
+ * fifteen cache reads into fifteen misses. Keyed on city, profile and persona
+ * rather than on a random id, so two travellers with the same taste in the same
+ * city share the cache instead of each paying to warm their own.
+ *
+ * **It is hashed because it has a hard 64-character ceiling and the inputs do
+ * not.** Spelled out, "Singapore + four interests + four persona bands" is 84
+ * characters, and the provider answers that with a 400 on *every* model call in
+ * the run. Each one then degrades to its documented fallback, so the plan still
+ * completes and the itinerary still looks like an itinerary — which is why no
+ * test caught it and a single real run did. A short readable prefix survives so
+ * a key in a log still says which city it belongs to.
  */
-function promptCacheKeyFor(request: PlanRequest): string {
+export function promptCacheKeyFor(request: PlanRequest): string {
   const { profile } = request;
   const bands = bandsFor(request.persona?.result);
-  return [
-    "plan",
-    request.city.trim().toLowerCase(),
+  const city = request.city
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, CACHE_KEY_CITY_CHARS)
+    .replace(/^-|-$/g, "");
+  const identity = [
     profile.pace,
     [...profile.interests].sort().join("+"),
     [...profile.dietary].sort().join("+"),
     // The four bands, because the persona brief is in the cached prefix now.
-    // Not a correctness bug without them — routing is on the prefix hash, not
-    // on this string — but two personas would thrash one key instead of each
-    // keeping a warm one. A traveller with no persona reads as the neutral row,
-    // so their key is unchanged.
+    // Without them two personas thrash one key instead of each keeping a warm
+    // one. A traveller with no persona reads as the neutral row, so their key
+    // is unchanged from run to run.
     bands.spontaneity,
     bands.comfortTolerance,
     bands.immersion,
     bands.solitude,
   ].join(":");
+  const digest = createHash("sha256")
+    .update(`${request.city.trim().toLowerCase()}:${identity}`)
+    .digest("hex")
+    .slice(0, 32);
+  return `plan:${city}:${digest}`;
 }
 
 /**
@@ -960,10 +988,14 @@ async function planThemedDays(
     rng: deps.rng,
   });
 
-  // Anchors are checked against the whole retrieved pool, not the shortlist.
-  // An anchor is a *location*: a place the funnel cut for being off-interest is
-  // still a perfectly good landmark to search around.
-  const poolIds = new Set(pool.map((place) => place.placeId));
+  // Both halves of what a theme may name are evidence from the pool: the ids an
+  // anchor may be, and the Places types this city demonstrably has. The second
+  // is not pedantry — Google 400s the *entire* Nearby Search if one type is not
+  // searchable, and a live Singapore run lost two whole circles to `food`.
+  const vocabulary = {
+    placeIds: new Set(pool.map((place) => place.placeId)),
+    types: new Set(pool.flatMap((place) => place.types)),
+  };
   const themes = await planThemes(
     {
       survey,
@@ -974,7 +1006,7 @@ async function planThemedDays(
         weekday: advanceWeekday(baseWeekday, dayIndex),
       })),
     },
-    poolIds,
+    vocabulary,
     {
       client: deps.responses,
       effort: "low",
