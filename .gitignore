@@ -8,3 +8,6 @@ out
 
 # Fetched Google Places content — cacheable for 30 days, not committable
 scripts/output/
+
+# Qoder repowiki — generated, not committable
+.qoder/

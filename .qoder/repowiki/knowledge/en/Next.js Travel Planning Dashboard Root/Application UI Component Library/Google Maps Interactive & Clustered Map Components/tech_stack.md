@@ -1,1 +1,0 @@
-Next.js client components (`"use client"`, `next/dynamic` SSR off) built on `@vis.gl/react-google-maps` (`APIProvider`, `Map`, `AdvancedMarker`, `Polyline`, `useMapsLibrary`, `useMap`), `next-themes` for light/dark map IDs, and `class-variance-authority` for marker variant styling. Map IDs are read from `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT` / `_DARK` env vars.

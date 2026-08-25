@@ -1,1 +1,0 @@
-`getDb()` requires `DATABASE_URL` at first call; integration tests bootstrap a real Neon connection via `createDb(connectionString)` while unit tests can inject an in-memory store implementation of the same port.

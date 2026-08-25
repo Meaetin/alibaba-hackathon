@@ -1,1 +1,0 @@
-Provides the application's root MainLayout shell (navbar, right sidebar, global modals) and dashboard action primitives for multi-selecting, saving to collections/itineraries, and per-card context menus.

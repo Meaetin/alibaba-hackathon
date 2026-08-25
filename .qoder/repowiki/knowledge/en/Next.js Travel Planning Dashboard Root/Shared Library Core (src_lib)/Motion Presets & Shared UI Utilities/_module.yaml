@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: lib_core/motion_and_utils
-title: Motion Presets & Shared UI Utilities
-scope:
-    - src/lib/motion/
-    - src/lib/utils/
-source_files: []
-depends_on: []
-related_to: []

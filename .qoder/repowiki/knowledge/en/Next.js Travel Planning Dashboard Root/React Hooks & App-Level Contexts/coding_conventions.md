@@ -1,6 +1,0 @@
-- Each hook file exports a single named function prefixed with `use` and returns a plain object of state/values rather than mutating props.
-- TanStack Query wrappers live in `hooks/queries/` as thin functions that call `useQuery` with a key from `@/lib/query/queryKeys` and a corresponding API function from `@/lib/api/*`.
-- Supabase realtime subscriptions are created inside `useEffect` with a channel name built from a stable identifier (e.g. `jobs_queue_${userId}_${instanceId}` where `instanceId = useId().replace(/[^a-zA-Z0-9]/g, '')`), and channels are removed in the effect cleanup.
-- Context files follow a three-part pattern: a `createContext<T | undefined>(undefined)` constant, a `useXxx()` hook that returns safe no-op defaults when the provider is absent, and a `XxxProvider` component wrapping children in `<Context.Provider>`.
-- Hooks that touch the DOM or window APIs guard against SSR by checking `typeof window !== 'undefined'` and using `useSyncExternalStore` / `useRef` to avoid hydration mismatches.
-- Callback refs passed into hooks are kept current via a `useRef` updated in a separate `useEffect`, so observers/effects can read the latest callback without re-subscribing.

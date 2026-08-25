@@ -1,1 +1,0 @@
-Deterministic, staged pipeline that scores, filters, clusters, and narrows retrieved places into a shortlist for itinerary assembly, with built-in degradation ladders so no day fails under tight constraints.

@@ -1,1 +1,0 @@
-React tab components that render the Bookings, Expenses, Flight, Lodging, and Notes sections of an itinerary detail view by composing shared sidebar/detail-view primitives.

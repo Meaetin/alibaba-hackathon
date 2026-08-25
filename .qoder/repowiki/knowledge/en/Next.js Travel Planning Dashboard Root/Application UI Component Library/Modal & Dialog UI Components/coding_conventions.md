@@ -1,6 +1,0 @@
-- Each modal is a single-file component that wraps its content in Dialog.Root, Dialog.Portal, Dialog.Backdrop, and Dialog.Popup from @base-ui/react/dialog.
-- Modals accept controlled open and onOpenChange props so ownership stays with the caller rather than managing internal open state.
-- Destructive dialogs expose an onConfirm callback and use Dialog.Close or explicit onOpenChange(false) to dismiss after the action fires.
-- Variant-driven visual treatment is expressed via cva variants with a neutral default, allowing callers to pass a semantic variant prop.
-- Mobile-first responsive layout is handled through useBreakpoint to switch between centered desktop popups and bottom-sheet-style overlays with data-mobile-sheet attributes.
-- Submit flows use an isSubmitting flag to disable buttons and swap the label for a spinner plus submittingLabel, with async handlers wrapped in try/finally to reset loading state.

@@ -1,6 +1,0 @@
-- All source imports use the `@/*` alias mapped to `src/` via tsconfig paths.
-- Component class names are composed through `cn()` (clsx + tailwind-merge) and variants via CVA instead of string concatenation.
-- Semantic Tailwind tokens from `globals.css` (`bg-surface-*`, `text-content-*`, `border-edge-*`, etc.) are used instead of hard-coded colors, spacing, or typography values.
-- Major JSX sections are labeled with `{/* Section Name */}` comments and structural elements carry `data-region="{page}-{region}"` attributes named by role, not component name.
-- User-facing errors are surfaced via `getFriendlyApiError` / `getFriendlyAuthError` from `src/lib/errors/userMessages.ts` rather than rendering raw backend messages.
-- Tests are colocated next to their module as `*.test.ts` files and inject randomness/time/clients as parameters instead of using a mocking framework.

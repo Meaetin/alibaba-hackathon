@@ -1,1 +1,0 @@
-Supabase JS client via `@supabase/ssr`'s `createBrowserClient`, with environment-driven `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`; uses Postgres RLS-enforced joins (`!inner`) and a server-side `search_all` RPC for full-text search; timezone resolution via `tz-lookup`.

@@ -1,1 +1,0 @@
-Next.js App Router file-based routing with React Server Components; dynamic route segments (`[id]`, `[token]`) for detail/public views; Tailwind CSS via `globals.css`.

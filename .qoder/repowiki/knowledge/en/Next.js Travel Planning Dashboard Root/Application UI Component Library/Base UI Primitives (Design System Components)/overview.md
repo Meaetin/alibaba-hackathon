@@ -1,1 +1,0 @@
-A React component library of low-level, theme-driven UI primitives (buttons, inputs, menus, popovers, sheets, pills, avatars, etc.) built on Base UI and styled with Tailwind CSS and class-variance-authority.

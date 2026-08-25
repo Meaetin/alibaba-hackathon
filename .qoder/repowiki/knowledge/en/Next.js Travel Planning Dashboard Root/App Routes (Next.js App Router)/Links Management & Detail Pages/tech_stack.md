@@ -1,1 +1,0 @@
-Next.js App Router client components, motion/react for layout animations, lucide-react icons, Supabase client for detail data, and a custom `useJobsQueue` hook for WebSocket-driven background job status.

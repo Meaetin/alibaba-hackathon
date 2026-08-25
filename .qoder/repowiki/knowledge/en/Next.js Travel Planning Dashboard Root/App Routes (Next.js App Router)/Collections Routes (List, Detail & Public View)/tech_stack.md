@@ -1,1 +1,0 @@
-Next.js App Router (client components marked with `"use client"`), React Query for data fetching and cache invalidation, Framer Motion (`motion/react`) for animated transitions, Tailwind CSS with custom CSS variables for layout, and lucide-react icons.

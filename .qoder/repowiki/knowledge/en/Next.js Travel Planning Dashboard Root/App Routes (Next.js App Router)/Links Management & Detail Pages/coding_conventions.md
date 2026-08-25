@@ -1,6 +1,0 @@
-- Each route file starts with `"use client"` and exports a default component, paired with sibling `loading.tsx` skeleton files that mirror the real layout using `animate-pulse` placeholders.
-- Background work is modeled as queued jobs consumed via `useJobsQueue` with typed `type` filters and `onJobCompleted/onJobFailed/onJobRejected` callbacks that update local state and toast users.
-- Optimistic UI updates are keyed by stable IDs (`content_id`) so a completing job card morphs in place into its finished LinkCard without remount or flicker.
-- User feedback and quota enforcement go through `useToast` and `useQuotaGate.showQuotaToast` rather than ad-hoc alerts, with quota errors handled specially before re-throwing.
-- DOM regions are tagged with `data-region` attributes (e.g. `links-page`, `links-cards-grid`, `link-detail-hero`) for testable structural selectors.
-- Heavy/lazy subcomponents like `StaticMap` are loaded via `next/dynamic` with `ssr: false` to avoid SSR mismatches.

@@ -1,6 +1,0 @@
-- Each resource file exports one function per endpoint, taking strongly-typed parameters and returning typed results defined as local `interface` declarations in the same file.
-- Successful JSON responses are parsed via `unwrap<T>(res, message)` while no-body responses use `ensureOk(res, message)`, keeping error unwrapping centralized in `client.ts`.
-- Business-level failure modes are surfaced as dedicated `Error` subclasses (e.g. `AlreadyAnalyzedError`, `LinkQuotaError`, `ItineraryQuotaError`) constructed with structured fields instead of raw string messages.
-- Authentication is obtained lazily per request through `authFetch`, which reads the current Supabase session and injects a `Bearer` Authorization header automatically.
-- Optional query/body fields are spread conditionally using `{ ...(cond ? { key } : {}) }` patterns rather than mutating a base object.
-- Public or unauthenticated endpoints (invite info, public itinerary view) call `fetch` directly against `API_URL` without `authFetch`, while all authenticated flows go through `authFetch`.

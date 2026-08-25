@@ -1,1 +1,0 @@
-TypeScript string-literal unions for domain enums; clsx + tailwind-merge for class name resolution; CSS custom properties via `var(--edge-brand)` and `color-mix()` for dynamic rubber-band colors.

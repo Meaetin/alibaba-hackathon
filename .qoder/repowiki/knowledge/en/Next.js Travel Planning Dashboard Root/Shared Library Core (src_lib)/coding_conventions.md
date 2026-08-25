@@ -1,3 +1,0 @@
-- Cross-module shared constants and enums (surface names, shareable entity types, quota types) live in `domain-types.ts` and are imported by every child instead of being redefined locally.
-- Data fetching layers (`api_clients`, `supabase_layer`) return typed results and integrate with the shared React Query client/key factory under `query/` rather than managing their own caches.
-- Site-wide runtime configuration (e.g., `SITE_URL`) is centralized in `site.ts` and read via `process.env` at import time, not passed as parameters.

@@ -1,5 +1,0 @@
-- Each component file declares `"use client"` at the top and exports both the component function and its props type as named exports.
-- Styling is composed by chaining Tailwind utility strings through the shared `cn` helper from `@/lib/utils` rather than using class objects or inline styles.
-- Loading states are handled uniformly via a `loading` boolean prop that disables the button and swaps children for a spinning `Loader2` icon.
-- Design-token-aware styling uses CSS custom properties (e.g. `--motion-*`, `--edge-*`, `--action-*`) referenced in Tailwind arbitrary values instead of hard-coded durations or colors.
-- Optional trailing/clear actions on inputs are gated by computed flags (`hasValue`, `clearable`) and rendered conditionally behind `tabIndex={-1}` buttons with explicit `aria-label` attributes.

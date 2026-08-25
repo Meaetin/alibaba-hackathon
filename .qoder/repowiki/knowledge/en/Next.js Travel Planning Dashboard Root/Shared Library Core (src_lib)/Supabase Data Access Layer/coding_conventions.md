@@ -1,6 +1,0 @@
-- Every database function takes a `SupabaseClient` parameter rather than importing a singleton, enabling dependency injection and testing with mocks.
-- Database rows are mapped to explicit TypeScript types defined at the top of each file, with raw Supabase results cast via inline type assertions before transformation.
-- Errors from Supabase calls are handled defensively by returning empty arrays or null instead of throwing, with `console.error` logging the error object.
-- Collection preview images are fetched once per batch via the shared `getCollectionPreviewImages` helper and attached to result items, avoiding duplicate queries across home/search/recently-viewed modules.
-- Cursor-based pagination is implemented by accepting an optional ISO timestamp cursor and chaining `.lt('updated_at', cursor)` on the query chain when present.
-- Mutations that need identity call `supabase.auth.getUser()` inside the function and short-circuit if no user is present, relying on RLS for authorization.

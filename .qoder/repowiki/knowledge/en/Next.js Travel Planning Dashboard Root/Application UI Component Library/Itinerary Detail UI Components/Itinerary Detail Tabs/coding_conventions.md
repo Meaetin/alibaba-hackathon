@@ -1,5 +1,0 @@
-- Each tab is a `"use client"` React function component that exports a named component and a corresponding `*TabProps` interface declaring all props including an optional `className`.
-- The root container uses a `data-slot="<entity>-tab"` attribute alongside a class like `<entity>-tab-root flex flex-col ... h-full` to identify and style the tab shell.
-- Tailwind class strings are merged through the shared `cn` utility from `@/lib/utils` rather than concatenated manually.
-- List-bearing tabs delegate rendering to sibling detail-view components (e.g., `FlightSidebar`, `LodgingSidebar`, `ExpensesSidebar`, `NotesGrid`) and only forward data and event handlers.
-- Optional attachment/file management is expressed via paired `onAddFile` / `onRemoveFile` callbacks and a conditional `FilePillHeader` rendered when files are present.

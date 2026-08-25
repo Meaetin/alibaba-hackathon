@@ -1,1 +1,0 @@
-Root-level React context providers for TanStack Query and next-themes, plus a Supabase realtime listener that notifies users when background itinerary-planning jobs complete or fail.

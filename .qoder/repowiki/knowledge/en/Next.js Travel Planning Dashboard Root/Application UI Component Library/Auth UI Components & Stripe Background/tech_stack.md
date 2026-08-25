@@ -1,1 +1,0 @@
-React Server Components with `"use client"` directives; Base UI (`@base-ui/react/field`, `@button`) for accessible form primitives; Motion (`motion/react` + `framer-motion`-compatible API) for input icon transitions and decorative animations; Tailwind CSS v4 with design tokens accessed via CSS variables; Lucide icons for glyphs.

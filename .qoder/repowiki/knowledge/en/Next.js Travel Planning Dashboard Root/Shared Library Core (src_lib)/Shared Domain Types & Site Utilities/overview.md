@@ -1,1 +1,0 @@
-Provides shared TypeScript domain types, site URL configuration, CSS class merging utility, and selection/rubber-band styling helpers used across the application.
