@@ -560,3 +560,25 @@ leave the trip a day short and renumber everything after it.
 When testing this, note that a **themed** donor gets repaired on the next pass of
 the loop and borrows its own restaurants straight back. An assertion written
 against two themed clusters passes whatever the rule says. Use a themeless donor.
+
+### Two failures the whole offline suite cannot see
+Both were found by one live run and neither moved a single test.
+
+**`prompt_cache_key` is capped at 64 characters.** Spelled out, "Singapore +
+four interests + four persona bands" is 84, and OpenAI answers **400 on every
+model call in the run** — theme, Pass B and all fifteen narrations. Each one then
+degrades to its documented fallback, so the plan completes and the itinerary
+still looks like an itinerary. `promptCacheKeyFor` hashes now and
+`MAX_PROMPT_CACHE_KEY` is pinned by a test with pathological inputs.
+
+**Google's Places types split into searchable and descriptive-only, and both
+arrive in `places.types`.** `food`, `place_of_worship`, `point_of_interest` and
+the rest of `NON_SEARCHABLE_TYPES` come back on real places and cannot be used
+as `includedTypes` — the API rejects the **entire** Nearby Search with a 400, not
+just that type. Two of three Singapore circles were lost that way. "The pool
+contains this type" is necessary and not sufficient; `isSearchableType` applies
+both rules.
+
+The lesson generalises: every degradation ladder in this pipeline is also a way
+for a real failure to reach production looking like success. When a stage has a
+fallback, its test must assert on the counter, not on the output.
