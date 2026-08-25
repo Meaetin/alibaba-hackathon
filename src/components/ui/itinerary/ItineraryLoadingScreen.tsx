@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/primitives/Button";
 import { ProgressBar } from "@/components/ui/primitives/ProgressBar";
 import { useProgressAnimation } from "@/hooks/useProgressAnimation";
 import { useProgressEta } from "@/hooks/useProgressEta";
-import type { QueueJob } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
 
 interface ItineraryLoadingScreenProps {
   className?: string;
@@ -77,7 +77,7 @@ function TrackedProgress({ job }: { job: QueueJob }) {
   const progress = useProgressAnimation(job);
   const { label: etaLabel, isOverrun } = useProgressEta(job);
 
-  const isWaiting = job.status === "queued" || job.status === "pending";
+  const isWaiting = job.status === "queued";
   const stage = isWaiting ? "Waiting to start" : job.progress?.label ?? "Getting started";
   // Always time, never a percentage — the bar already carries the percentage.
   const trailing = isWaiting ? "In queue" : isOverrun || !etaLabel ? "Almost there" : etaLabel;

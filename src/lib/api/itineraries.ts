@@ -1,8 +1,11 @@
 import { authFetch, unwrap, ensureOk } from './client'
+import { getFriendlyApiError } from '@/lib/errors/userMessages'
 import { type Surface } from '@/lib/domain-types'
+import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
 import type { ActivityLocation } from '@/lib/supabase/queries/home'
 import type { PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
+import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
 
 export interface ItineraryWithRole {
   id: string
@@ -117,6 +120,53 @@ export async function generateItinerary(params: GenerateItineraryParams): Promis
   }
 
   return res.json()
+}
+
+export interface PlanItineraryParams {
+  /** The city being planned, as typed. Drives Places retrieval. */
+  city: string
+  country?: string
+  /** ISO date, `YYYY-MM-DD`. */
+  startDate: string
+  totalDays: number
+  /** Trip name. The server falls back to the city when omitted. */
+  name?: string
+  /** The traveller. Drives retrieval, scoring, slot assignment and narration. */
+  profile: PreferenceProfile
+  /** Scheduler/clustering knobs. Never the traveller — see `profile`. */
+  options?: SchedulerOptions
+}
+
+/**
+ * Queues a plan on **this app's own** Next route and returns the created `jobs`
+ * row, ready to hand straight to `useJobsQueue`'s `upsertJob`.
+ *
+ * Deliberately a plain `fetch`, not `authFetch`. `authFetch` prefixes
+ * `NEXT_PUBLIC_API_URL` and demands a Supabase session, and auth was removed
+ * from this app — it would throw 401 before sending anything. That is also the
+ * difference from {@link generateItinerary} directly below: same intent, but
+ * that one posts to the old external backend and is left untouched.
+ */
+export async function planItinerary(params: PlanItineraryParams): Promise<QueueJob> {
+  const res = await fetch('/api/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    // Keep the technical detail in the console; the caller gets a plain sentence.
+    console.error('Failed to queue itinerary plan:', res.status, body)
+    throw new Error(
+      getFriendlyApiError(
+        new Error(typeof body?.error === 'string' ? body.error : ''),
+        'We couldn’t start planning that trip. Please try again.',
+      ),
+    )
+  }
+
+  return res.json() as Promise<QueueJob>
 }
 
 export async function updateItinerary(
@@ -372,7 +422,7 @@ export async function createItinerary(name: string, country: string, region?: st
  */
 export type ItineraryCreateResult =
   | { kind: 'blank'; itinerary: Itinerary }
-  | { kind: 'planning'; job: GenerateItineraryJob }
+  | { kind: 'planning'; job: QueueJob }
 
 export interface CreateItineraryRoutedInput {
   tripName: string
@@ -392,21 +442,27 @@ export interface CreateItineraryRoutedInput {
 }
 
 /**
- * Routes the four itinerary-creation cases to the correct endpoint:
+ * Routes the localhost demo's supported itinerary-creation cases:
  *
  *   | AI toggle | locations | → endpoint                        |
  *   | --------- | --------- | --------------------------------- |
  *   | off       | none      | POST /api/itineraries/blank       | (2b → { kind: 'blank' })
- *   | on        | none      | POST /api/itineraries (ids: [])   | (2a → { kind: 'planning' })
- *   | on/off    | some      | POST /api/itineraries             | (1a/1b → { kind: 'planning' })
+ *   | on        | none      | POST /api/plan                    | (2a → { kind: 'planning' })
+ *   | on/off    | some      | unsupported until pins reach the local planner |
  *
- * `aiFillGaps` mirrors the AI toggle, so the planner skips gap-fill + meals for 1b.
- * Quota errors propagate from the underlying calls unchanged.
+ * Selected locations must never be silently dropped. The local planner does
+ * not accept pinned place ids yet, so that case fails with a plain demo message.
  */
 export async function createItineraryRouted(
   input: CreateItineraryRoutedInput,
 ): Promise<ItineraryCreateResult> {
   const hasLocations = input.selectedLocationIds.length > 0
+
+  if (hasLocations) {
+    throw new Error(
+      'Planning from selected places is not available in this demo yet. Start with AI recommendations and no selected places.',
+    )
+  }
 
   // Case 2b: no locations + AI off → empty itinerary.
   if (!hasLocations && !input.aiRecommendations) {
@@ -423,17 +479,14 @@ export async function createItineraryRouted(
     return { kind: 'blank', itinerary }
   }
 
-  // Cases 1a / 1b / 2a → async planning job.
-  const job = await generateItinerary({
-    title: input.tripName,
-    location_ids: input.selectedLocationIds,
-    aiFillGaps: input.aiRecommendations,
-    start_date: input.startDate,
-    total_days: input.totalDays,
+  // Case 2a: AI-only planning goes through this app's local pipeline.
+  const job = await planItinerary({
+    city: input.region?.trim() || input.country,
     country: input.country,
-    region: input.region,
-    latitude: input.latitude,
-    longitude: input.longitude,
+    startDate: input.startDate,
+    totalDays: input.totalDays,
+    name: input.tripName,
+    profile: LOCAL_DEMO_PROFILE,
   })
   return { kind: 'planning', job }
 }

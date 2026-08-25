@@ -684,12 +684,17 @@ Client injected. No test in this file asserts anything about tag *quality*.
 - an empty `description` is treated as a **failure and retried**, not stored
 - a miss serves the heuristic fallback **without blocking** — assert
   `generateItinerary` completes with an unenriched place present
+- a miss not already present in an open durable batch is submitted and the provider
+  batch id plus exact subjects are persisted; `npm run enrichment:collect` checks
+  every open batch once and writes completed rows
 - on success, `locations.stay_duration` is backfilled where null, and **not**
   overwritten where already set
-- `effort: 'low'` is on the request (cost, and it's the kind of thing that silently
-  regresses)
+- `effort: 'none'` is on the request (cost, and it's the kind of thing that silently
+  regresses). An earlier draft of this line said `'low'`; the design doc's
+  "run it at `reasoning: { effort: "none" }`" is the settled answer, and tag
+  extraction has no reasoning to buy.
 
-**Verify:** `npx vitest run src/lib/planner/enrich`
+**Verify:** `npx vitest run src/lib/planner/enrich src/lib/planner/enrichment-queue`
 
 ---
 
@@ -740,11 +745,19 @@ Until then, day headings would read "Cluster 2".
   Assert the itinerary is returned, not thrown. This is `Promise.allSettled` vs.
   `Promise.all` as a test, and it is the difference between a demo and a stack trace.
 - **all fifteen failing still returns a complete itinerary**, every stop on fallback
-- prompt block order: the shared system prompt and profile slice come first, the
-  `cache_control: { type: 'ephemeral' }` breakpoint is on the **last shared block**,
-  and per-stop content is strictly **after** it. Assert on the assembled block array.
-  Backwards, this silently costs 15× and no other test notices.
-- all fifteen calls share a byte-identical prefix up to the breakpoint
+- prompt block order: the shared system prompt and the profile slice come first as
+  their own blocks, and per-stop content is strictly **after** them. There is no
+  `cache_control` breakpoint to assert on — that is Anthropic's model; OpenAI's
+  prompt caching is automatic and routes on a **prefix hash**. Assert on the
+  assembled block array of two different requests: the shared prefix compares
+  byte-identical, the suffixes differ. Backwards, this silently costs 15× and no
+  other test notices.
+- the shared prefix clears **1024 tokens**, below which nothing caches at all.
+  Assert a minimum character length standing in for that floor.
+- `prompt_cache_key` is one value for the whole itinerary, on all fifteen calls, so
+  they route to the same cache. Verify in production with
+  `usage.input_tokens_details.cached_tokens` — the Responses API name; the design
+  doc's `prompt_tokens_details` is Chat Completions and does not exist here.
 - meal slots always request `food_recommendations`, and a returned dish **not in**
   the supplied `signature_dishes` is rejected — the anti-hallucination rule
 - non-meal slots omit `food_recommendations`

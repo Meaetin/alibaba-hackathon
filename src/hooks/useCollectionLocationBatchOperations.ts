@@ -2,19 +2,18 @@
 
 import { useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { generateItinerary } from "@/lib/api/itineraries";
+import { createItineraryRouted } from "@/lib/api/itineraries";
 import { addLocationsToCollection } from "@/lib/supabase/queries";
+import type { QueueJob } from "@/lib/jobs/types";
 
 interface UseCollectionLocationBatchOperationsOptions {
   source: "links" | "collections";
-  collectionId?: string;
   onRefresh?: () => void;
-  onJobCreated?: (job: { id: string }) => void;
+  onJobCreated?: (job: QueueJob) => void;
 }
 
 export function useCollectionLocationBatchOperations({
   source,
-  collectionId,
   onRefresh,
   onJobCreated,
 }: UseCollectionLocationBatchOperationsOptions) {
@@ -50,23 +49,22 @@ export function useCollectionLocationBatchOperations({
       longitude?: number,
       aiFillGaps: boolean = true,
     ) => {
-      if (source === "collections" && collectionId) {
-      }
-      const job = await generateItinerary({
-        title: title ?? "New Itinerary",
-        location_ids: locationIds,
-        aiFillGaps,
-        start_date: startDate,
-        total_days: totalDays,
+      const result = await createItineraryRouted({
+        source: source === "collections" ? "collection_detail" : "link_detail",
+        tripName: title ?? "New Itinerary",
+        selectedLocationIds: locationIds,
+        aiRecommendations: aiFillGaps,
+        startDate,
+        totalDays,
         country,
         region,
         latitude,
         longitude,
       });
-      onJobCreated?.(job);
-      return job;
+      if (result.kind === "planning") onJobCreated?.(result.job);
+      return result;
     },
-    [source, collectionId, onJobCreated],
+    [source, onJobCreated],
   );
 
   return {

@@ -438,7 +438,12 @@ function windowLabel(role: DaySlot["role"]): string {
   return `${hhmm(opens)}–${hhmm(latest)}`;
 }
 
-function hhmm(minutes: number): string {
+/**
+ * Minutes from midnight as a 24-hour clock face. Exported because the debug
+ * view renders the same unit, and a fourth copy of this three-line function is
+ * a fourth place for it to drift.
+ */
+export function hhmm(minutes: number): string {
   const clamped = ((minutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
 }

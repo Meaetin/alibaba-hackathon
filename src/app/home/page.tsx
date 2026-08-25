@@ -20,7 +20,9 @@ import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } 
 import { createCollection } from "@/lib/api/collections";
 import { createClient } from "@/lib/supabase/client";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
-import { useJobsQueue, type QueueJob } from "@/hooks/useJobsQueue";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
+import { announcePlanningJob } from "@/lib/jobs/events";
 import { ItineraryQueueCardItem } from "@/components/ui/itinerary/ItineraryQueueCardItem";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useMapClusters } from "@/hooks/useMapClusters";
@@ -189,7 +191,7 @@ export default function DashboardPage() {
     return () => window.removeEventListener("argo:content-prepended", handler);
   }, [prependItem]);
 
-  useJobsQueue(userId, {
+  useJobsQueue({
     type: "content-analysis",
     onJobCompleted: (job) => {
       refresh();
@@ -220,10 +222,10 @@ export default function DashboardPage() {
     jobs: planningJobs,
     removeJob: removePlanningJob,
     upsertJob: upsertPlanningJob,
-  } = useJobsQueue(userId, {
+  } = useJobsQueue({
     type: "itinerary-planning",
-    // No "Itinerary ready" toast here — the global ItineraryJobNotifier owns it,
-    // and raising it in both places showed it twice.
+    // No "Itinerary ready" toast here — MainLayout's persistent local queue
+    // owns it, and raising it in both places shows it twice.
     onJobCompleted: (job) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
       if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.upcomingItineraries(userId) });
@@ -236,7 +238,7 @@ export default function DashboardPage() {
       refresh();
     },
     // Failure is surfaced by the queue card (error copy + Try Again) and the
-    // global notifier's toast — a third announcement here made it fire twice.
+    // layout queue's toast — a third announcement here shows it twice.
   });
 
   // Hand off to the canonical row once the refresh lands (same key → no remount).
@@ -505,6 +507,8 @@ export default function DashboardPage() {
       // AI-only itinerary (no locations + AI on) → async job; the
       // itinerary-planning queue below surfaces a "View" toast on completion.
       if (result.kind === "planning") {
+        upsertPlanningJob(result.job);
+        announcePlanningJob(result.job);
         showToast({ title: "Generating itinerary…", variant: "success" });
         return;
       }

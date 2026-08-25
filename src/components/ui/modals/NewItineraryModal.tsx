@@ -12,6 +12,7 @@ import { Calendar } from "@/components/ui/primitives/Calendar";
 import { PlaceAutocomplete } from "@/components/ui/primitives/PlaceAutocomplete";
 import type { PlaceResult } from "@/components/ui/primitives/PlaceAutocomplete";
 import type { Surface } from "@/lib/domain-types";
+import { LOCAL_DEMO_PROFILE_LABEL } from "@/lib/planner/demo-profile";
 
 interface NewItineraryModalProps {
   /** Surface this modal was opened from — drives the create-funnel analytics. */
@@ -273,6 +274,15 @@ function NewItineraryModal({
               Start with AI recommendations
             </span>
           </button>
+          {aiRecommendations && (
+            <p
+              className={cn(
+                "new-itinerary-modal-demo-profile max-w-80 text-center type-body-3 text-content-secondary",
+              )}
+            >
+              {LOCAL_DEMO_PROFILE_LABEL}
+            </p>
+          )}
         </div>
       )}
     </FormModal>

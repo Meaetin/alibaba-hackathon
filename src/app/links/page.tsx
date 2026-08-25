@@ -14,7 +14,8 @@ import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } 
 import { deleteContent } from "@/lib/api/content";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
-import { useJobsQueue, type QueueJob } from "@/hooks/useJobsQueue";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
 import { usePaginatedContent } from "@/hooks/usePaginatedContent";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useProgressAnimation } from "@/hooks/useProgressAnimation";
@@ -42,7 +43,7 @@ function QueueCardItem({
   const url = (job.payload?.url as string | undefined) ?? "";
   const isFailed = job.status === "failed";
   const isStuckInFlight =
-    ["processing", "queued", "pending"].includes(job.status) &&
+    ["processing", "queued"].includes(job.status) &&
     Date.now() - new Date(job.updated_at).getTime() > STUCK_THRESHOLD_MS;
   const canRetry = isFailed || isStuckInFlight;
 
@@ -135,7 +136,7 @@ export default function LinksPage() {
   // lands (see effect below).
   const [optimisticCompleted, setOptimisticCompleted] = useState<CompletedContent[]>([]);
 
-  const { jobs: queueJobs, removeJob, upsertJob } = useJobsQueue(userId, {
+  const { jobs: queueJobs, removeJob, upsertJob } = useJobsQueue({
     type: "content-analysis",
     onJobCompleted: (job) => {
       const result = (job.result ?? {}) as ContentResult;

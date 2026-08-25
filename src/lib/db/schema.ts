@@ -32,6 +32,8 @@ import type { FunnelStats } from "@/lib/planner/funnel";
 import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { TravelMode } from "@/lib/planner/pack";
+import type { EnrichmentFailure, EnrichmentSubject } from "@/lib/planner/enrich";
+import type { PlannerDebug } from "@/lib/planner/debug";
 
 /** `itinerary_activities.travel_to_next`. `TravelLeg` plus the mode the packer
  *  chose, so a stored day renders without re-deriving it from the distance. */
@@ -158,6 +160,25 @@ export const place_enrichments = pgTable(
   ],
 );
 
+/** Durable OpenAI Batch handles. Subjects are retained because collection is
+ * separated from submission by up to 24 hours and validates every custom id
+ * and source hash against the exact payload originally sent. */
+export const enrichment_batches = pgTable(
+  "enrichment_batches",
+  {
+    provider_batch_id: text("provider_batch_id").primaryKey(),
+    status: text("status").notNull(),
+    subjects: jsonb("subjects").$type<EnrichmentSubject[]>().notNull(),
+    /** Every place this batch could not enrich, and why — including the lines
+     *  that only ever appear in the provider's error file. Written when the
+     *  batch goes terminal; the places themselves just miss the cache again. */
+    failures: jsonb("failures").$type<EnrichmentFailure[]>().notNull().default([]),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("enrichment_batches_status_idx").on(t.status, t.created_at)],
+);
+
 export const area_guides = pgTable("area_guides", {
   /** `lower(trim(area || '|' || city))`. */
   area_key: text("area_key").primaryKey(),
@@ -186,6 +207,13 @@ export const itineraries = pgTable("itineraries", {
   profile: jsonb("profile").$type<PreferenceProfile>().notNull(),
   /** Every cut, replayable: "why wasn't teamLab included?" has an answer. */
   funnel_stats: jsonb("funnel_stats").$type<FunnelStats>(),
+  /**
+   * What the model said and what we threw away — Pass B's per-stop reasoning,
+   * every id it named that we refused, and the per-stage counters. It is the
+   * only durable record of the two; both used to live and die inside one
+   * request. Diagnostics, never read by a card. See `src/lib/planner/debug.ts`.
+   */
+  planner_debug: jsonb("planner_debug").$type<PlannerDebug>(),
   created_at: timestamptz("created_at").notNull().defaultNow(),
 });
 
@@ -228,12 +256,42 @@ export const itinerary_activities = pgTable(
 
 // ─── Job queue ───────────────────────────────────────────────────────────────
 
+/**
+ * What the loading screen reads out of `jobs.progress`.
+ *
+ * The first five fields are the planner's own report: which stage is running,
+ * how far along the run is, and how many stages there are. The optional five
+ * below exist for the two hooks that animate the card between reports — a plan
+ * writes a row every stage or two, and without them the bar sits still through
+ * a twenty-second model call.
+ *
+ * `progress` is a `jsonb` column, so adding a field here changes no DDL and
+ * needs no migration.
+ */
 export interface JobProgress {
   percent: number;
   label: string;
   stage: string;
   done: number;
   total: number;
+  /**
+   * Legacy step ordinal, read by `useProgressAnimation` only when `percent` is
+   * absent. The planner leaves it unset: that hook's step→percent table
+   * describes the content-analysis pipeline, and a stage number from this one
+   * would map onto the wrong percentage.
+   */
+  step?: number;
+  /** When this report was written, ISO. `useProgressAnimation` starts its crawl
+   *  from it and `useProgressEta` counts down from it. */
+  fired_at?: string;
+  /** Seconds left in the whole run. Read by `useProgressEta`. */
+  eta_seconds?: number;
+  /** The percentage this stage ends at. `useProgressAnimation` walks the bar
+   *  toward it rather than parking on `percent`. */
+  next_percent?: number;
+  /** How long this stage is expected to take, ms. `useProgressAnimation` uses
+   *  it as the crawl's denominator. */
+  stage_ms?: number;
 }
 
 export const jobs = pgTable(

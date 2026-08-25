@@ -36,7 +36,6 @@ import { useNavbarVisibility } from "@/contexts/NavbarVisibilityContext";
 import { useNavbarFilter } from "@/contexts/NavbarFilterContext";
 import { createClient } from "@/lib/supabase/client";
 import { useRecordView } from "@/hooks/useRecordView";
-import { useItineraryRealtime } from "@/hooks/useItineraryRealtime";
 import { useItineraryDetailQuery } from "@/hooks/queries/useItineraryDetailQuery";
 import { useCollaboratorProfilesQuery } from "@/hooks/queries/useCollaboratorProfilesQuery";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
@@ -1174,17 +1173,6 @@ export default function ItineraryDetailPage() {
     setOptimizeConfirmOpen(false);
     setPendingOptimize(null);
   }, [itineraryId, pendingOptimize]);
-
-  useItineraryRealtime({
-    itineraryId,
-    itineraryRef,
-    setCalendarDays,
-    setItinerary,
-    showFlightSidebar,
-    setFlights,
-    showLodgingSidebar,
-    setLodgings,
-  });
 
   useRecordView("itinerary", itineraryId);
 

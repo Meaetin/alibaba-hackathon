@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ItineraryQueueCard } from "./ItineraryQueueCard";
 import { useProgressAnimation } from "@/hooks/useProgressAnimation";
 import { useLocationPhoto } from "@/hooks/useLocationPhoto";
-import type { QueueJob } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
 
 // Matches the server's retry gate (backend/api/src/routes/jobs.ts) — a job stuck
 // in flight this long is offered a retry even though it never formally failed.
@@ -62,7 +62,7 @@ export function ItineraryQueueCardItem({
   );
   const isFailed = job.status === "failed";
   const isStuckInFlight =
-    ["processing", "queued", "pending"].includes(job.status) &&
+    ["processing", "queued"].includes(job.status) &&
     Date.now() - new Date(job.updated_at).getTime() > STUCK_THRESHOLD_MS;
   const canRetry = isFailed || isStuckInFlight;
 
@@ -81,6 +81,10 @@ export function ItineraryQueueCardItem({
       setIsRetrying(false);
     }
   };
+
+  // Defensive only: useJobsQueue removes completed rows after its callback,
+  // but an intermediate render must never relabel a completed job as queued.
+  if (job.status === "completed") return null;
 
   return (
     <ItineraryQueueCard

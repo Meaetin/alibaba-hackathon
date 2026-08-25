@@ -25,10 +25,13 @@ import { AlreadyAnalyzedError, createJob } from "@/lib/api/client";
 import { createCollection } from "@/lib/api/collections";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
 import { motionTransitions } from "@/lib/motion/presets";
+import { PLANNING_JOB_CREATED_EVENT } from "@/lib/jobs/events";
+import type { QueueJob } from "@/lib/jobs/types";
 
 function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const prefersReducedMotion = useReducedMotion();
@@ -95,6 +98,36 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const [itineraryModalOpen, setItineraryModalOpen] = useState(false);
   const [collectionName, setCollectionName] = useState("");
   const [itineraryName, setItineraryName] = useState("");
+
+  const { upsertJob: upsertPlanningJob } = useJobsQueue({
+    type: "itinerary-planning",
+    onJobCompleted: (job) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
+      const itineraryId = job.result?.itinerary_id as string | undefined;
+      showToast({
+        title: "Itinerary ready",
+        variant: "success",
+        action: itineraryId
+          ? { label: "View", href: `/itineraries/${itineraryId}` }
+          : undefined,
+      });
+    },
+    onJobFailed: () => {
+      showToast({
+        title: "We couldn’t generate your itinerary",
+        description: "Please try again in a moment.",
+        variant: "error",
+      });
+    },
+  });
+
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertPlanningJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(PLANNING_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(PLANNING_JOB_CREATED_EVENT, track);
+  }, [upsertPlanningJob]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -208,9 +241,10 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
       setItineraryName("");
       setItineraryModalOpen(false);
 
-      // AI-only itinerary (no locations + AI on) → async job. Completion is
-      // surfaced by the per-page itinerary-planning queue (e.g. on home).
+      // AI-only itinerary (no locations + AI on) → async job. This persistent
+      // layout queue survives page navigation and surfaces completion.
       if (result.kind === "planning") {
+        upsertPlanningJob(result.job);
         showToast({ variant: "success", title: "Generating itinerary…" });
         return;
       }

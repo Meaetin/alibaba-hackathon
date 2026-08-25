@@ -126,15 +126,20 @@
   deliberately unused: code owns the clock, the geometry and the filtering, so the
   model only assigns IDs to buckets and writes two sentences. Both take
   `reasoning: { effort }` and default to `medium`, so set it explicitly or you buy
-  reasoning tokens for tag extraction. OpenAI's prompt caching is automatic and
-  prefix-hashed — no `cache_control` breakpoint, a 1024-token floor, and
-  `prompt_cache_key` to route Pass C's parallel calls to one entry.
+  reasoning tokens for tag extraction. GPT-5.6 caches only at eligible
+  breakpoints: Pass C marks the final stable developer `input_text` block,
+  uses explicit-only mode so per-stop suffixes are not written, clears the
+  1024-token floor, and shares one `prompt_cache_key` across the fan-out.
 - 2026-08-21 — A stop's `role` is `activity | lunch | dinner | cafe_break`: what it
   is, never when it happens. The old time-flavoured roles folded kind, position and
   a clock claim into one field; only the clock claim could be wrong and it
   duplicated `startMin`. Position is the array index, time is the timestamp. This
   deleted the soft-clamp-and-wait machinery that caused the bug, since an activity
   with no window has nothing to wait for.
+- 2026-08-24 — Enrichment misses enqueue OpenAI Batch work and persist the provider
+  batch id plus the exact submitted subjects in `enrichment_batches`; localhost
+  collection is the explicit `npm run enrichment:collect` command. This keeps the
+  24-hour handoff durable without adding deployment or worker infrastructure.
 - 2026-08-21 — The packer has **no cap on stops per day**, in count or in minutes.
   A count cut days the clock had room for (three temples, done by 13:28). Minutes
   don't fix it: the wall clock already caps a balanced day at ~415–465 activity
@@ -358,3 +363,34 @@
   `src/lib/planner`, `src/lib/db` and `src/lib/maps`, warns elsewhere: the
   ported UI's 27 hits are dead PostHog props, and underscoring them would
   disguise a backlog as intent. Zero errors, 81 warnings, exit 0.
+- 2026-08-24 — **Target localhost only for the demo.** `/api/plan` may continue
+  in the long-running local Node process after returning the job row;
+  production and serverless execution durability are out of scope.
+- 2026-08-25 — **`itineraries.planner_debug` (jsonb) added, plus
+  `enrichment_batches.failures`.** Pass B's per-stop `why` and every refused
+  place id were built and discarded inside a single request; both are now
+  durable and both are diagnostics only, versioned by `PLANNER_DEBUG_VERSION`
+  rather than by migration. Per-stage counters stay on `jobs.result.stats` — one
+  copy, not two. Migration `0003_flippant_maddog`, additive.
+- 2026-08-25 — **`country` reaches Google through `searchLocality`, appended
+  only when it differs from the city.** Chosen over always appending because the
+  Singapore demo sends city and country both as "Singapore": equality keeps the
+  query byte-identical and the pre-warmed `place_search_cache` rows valid. Other
+  cities gain "Kyoto, Japan" and a new cache key, which is correct and cheap.
+- 2026-08-25 — **A batch's error file is downloaded, and store failures are
+  reported rather than raised.** Requests the provider never ran appear only in
+  the error file; a rejected `place_enrichments` write now leaves the batch open
+  for the next sweep instead of throwing out of a loop that had nine more
+  batches to visit.
+- 2026-08-25 — **`/itineraries/[id]/debug` added as a server component,
+  unlinked.** Reads the planner's own storage directly through
+  `src/lib/db/diagnostics.ts` rather than through the ported `src/lib/api/**`
+  seam, because the data has no client-side existence. Not linked from the
+  itinerary page: auth is removed, and a link would expose every place id and
+  score. `diagnostics.ts` is deliberately not a port — the queries hold no
+  decisions, so the view is where the tests are.
+- 2026-08-25 — **`vitest.config.ts` gained `oxc.jsx.runtime: "automatic"` and
+  `*.test.tsx` in `include`.** Required to import any `.tsx` under Vitest while
+  `tsconfig.json` keeps `jsx: preserve` for Next. Chosen over adding
+  `@vitejs/plugin-react` for one test file; `esbuild.jsx` is ignored because
+  Vite 8 parses with oxc.

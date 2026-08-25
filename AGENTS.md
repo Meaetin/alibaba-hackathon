@@ -58,6 +58,25 @@ navbar still has a sign-out that calls `supabase.auth.signOut()` and pushes to
 `/home` — it's a stub. `useSessionUserId()` returns `null` until a session
 exists.
 
+### The job queue is client-tracked, and it does not survive a reload
+`useJobsQueue` polls `GET /api/jobs/:id` through TanStack Query at 2s per job
+and stops the moment a job reads `completed` or `failed` — a poll that never
+stops is a bug you find on the bill. The watched ids live in React state and
+enter only through `upsertJob`; with auth gone there is no user to re-query the
+list by, so a refresh mid-plan loses the queue card (the job itself keeps
+running). Restoring it means a server-side list endpoint, not a client change.
+
+`QueueJob` is the Drizzle `jobs` row verbatim. `user_id`, `detached`, and the
+`pending`/`cancelled` statuses are gone. `content_id` and `completed_at` stay on
+the type as optional, read by the links page's optimistic cards and never
+written by the local API — they belong to the old external content-analysis
+backend.
+
+Tests for this hook set jsdom with a `// @vitest-environment jsdom` docblock.
+The global environment stays `node`; the planner suite depends on it. Under fake
+timers React Query's `notifyManager` must be switched to a synchronous scheduler
+or every assertion reads the state from one poll ago.
+
 ### PostHog was fully stripped
 109 `track()` calls across 25 files removed. The domain types that outlived it
 (`Surface`, `QuotaType`, `ShareableEntity`) live in `src/lib/domain-types.ts`.
@@ -294,3 +313,132 @@ has no photos" (names empty, zero fetches). A fetch that **fails** leaves it nul
 so a replan retries. Stored URLs are the `photoUri` from a `skipHttpRedirect=true`
 response, never the `/media` URL — that one only renders with the API key
 embedded, and `GOOGLE_PLACES_API_KEY` is an unrestricted server key.
+
+### The demo runtime is localhost-only
+The 2026-08-24 demo runs in a long-lived local Node process. Do not flag
+post-response pipeline work as a serverless deployment blocker unless the
+deployment scope changes.
+
+### Never type a control character into source — it makes the file unsearchable
+`pipeline.ts` carried a literal NUL byte as the separator in the travel-leg memo
+key. It renders as a space, git diffs it as text (the binary sniff only reads
+the first 8000 bytes), TypeScript compiles it and every test passed — but grep
+and ripgrep classify the whole file as binary and skip it **silently**. The file
+simply stopped appearing in code search, with no warning to anyone. Write the
+escape — `\u0000` inside the template literal — never the byte. To sweep the
+repo, walk `src/` in Python and flag any byte below `0x09`.
+
+### `itineraries.planner_debug` is where the models' own words go
+Two things used to be built and thrown away inside one request: Pass B's
+one-sentence `why` per stop (paid for on the expensive model, read by nobody)
+and the plain-English reason for every id it named that we refused. Both now
+land on `itineraries.planner_debug`, shaped by `src/lib/planner/debug.ts`, and
+the drops are `console.warn`'d as they happen so they show up in the dev
+terminal too.
+
+It is **diagnostics, never content** — no card reads it, and it may be reshaped
+without a migration because the column is `jsonb` and `PLANNER_DEBUG_VERSION`
+says which shape a row is. Per-stage counters deliberately are **not** in it:
+they are already durable on `jobs.result.stats`, and a second copy is a second
+thing to keep true. `enrichment_batches.failures` is the same idea one table
+over — what a terminal batch lost, including the lines that only ever appear in
+the provider's error file.
+
+### The batch error file is a second download, and it is the only record of a refusal
+OpenAI puts requests it never ran in the batch's **error** file, not the output
+file. `collectEnrichmentBatch` downloads both; without the second one those
+places are invisible — they miss the cache forever and nothing says why. A batch
+where every request failed has **no output file at all**, so the absence of
+`outputFileId` must not be an early return. A failed error-file download is
+logged and shrugged off: diagnostics are not data, and holding a batch open for
+a file that may never arrive is worse than losing the reason.
+
+### Everything in `enrich.ts` degrades except the store, so the store is wrapped
+`collectEnrichmentBatch` says "nothing here throws" and means it for every
+provider and parsing failure. The database is the exception: `place_enrichments`
+has a foreign key to `locations`, and submit and collect are separated by up to
+24 hours. A rejected write comes back as `storeError` and the batch stays
+**open**, so the next sweep retries it. `collectQueuedEnrichments` wraps each
+batch as well — a sweep exists to get through the list, and one bad batch must
+not cost the other nine.
+
+### `EnrichmentSubject` is a `Pick`, which is compile-time only
+Hand the durable queue a whole `RetrievedPlace` and the whole thing gets
+persisted into `enrichment_batches.subjects` — coordinates, photo names, price
+range. `toEnrichmentSubject` projects at runtime; call it at every boundary that
+stores or sends a subject. Correctness is unaffected (`enrichmentSourceHash`
+only digests `buildEnrichmentInput`), so nothing fails — the row just quietly
+gets fat.
+
+### `searchLocality` is how `country` reaches Google, and Singapore must not move
+`PlanRequest.country` used to be validated, stored on the itinerary row and
+never used: `buildSearchPlan` takes one string and interpolates it into
+"specialty coffee {city}". The country is now appended **only when it differs
+from the city**, which is load-bearing for the demo — the create flow sends
+`city` and `country` both as "Singapore", the two compare equal, and the query
+stays the literal `"Singapore"` with the same `searchCacheKey` and the same
+pre-warmed rows. `pipeline.test.ts` pins that equality. Kyoto with a country
+becomes "Kyoto, Japan".
+
+Do **not** remove the client's `city: input.region?.trim() || input.country`
+fallback in `createItineraryRouted` — that fallback is how a city-state gets a
+city at all.
+
+### A repair must size its visit from the same rung Pass B used
+`alternatesFor` in `pipeline.ts` passed `undefined` for enrichment, so a museum
+Pass B picked was 90 minutes and the identical museum swapped in by `validate.ts`
+was whatever the type heuristic said. It takes the enrichment map now, and it is
+exported purely so that has its own test: which rung a repair lands on is not
+observable from a finished itinerary without a fixture built to force a swap.
+
+### A truncated model response is a 200 with half a JSON object
+`ResponsesResult` carries `status` and `incompleteReason` because a response cut
+off at `max_output_tokens` parses exactly like a model that wrote nonsense, and
+the two need different fixes — one is a number, the other is a prompt.
+`narrate.ts` counts them separately as `stats.truncated`. When testing this,
+slice a **real** answer in half: a made-up broken string fails to parse either
+way, so the fallback alone proves nothing about which path produced it. One of
+these tests passed with the feature removed until it also asserted the counter.
+
+### `/itineraries/[id]/debug` is the app's only server component
+It reads `itineraries.planner_debug`, `funnel_stats`, the stored days, the
+`jobs.result.stats` blob and `enrichment_batches.failures`, and renders them as
+one page: the funnel's cuts, the stage counters, the days with Pass B's sentence
+under each stop, the ids we refused, the narration fallbacks, and the enrichment
+misses. Every value is already on a row, so there is no query, no polling and no
+loading state — it ships 167 B of client JS.
+
+The read layer is `src/lib/db/diagnostics.ts`, which is **not** a port: no
+interface, no in-memory double. It is five `select`s with no decisions in them,
+so a fake would only prove the fake works. The logic that *is* worth testing
+lives in the view and is tested there.
+
+**It is not linked from anywhere.** Auth is gone, so a visible link would put
+every place id, score and model rationale one click from the itinerary page.
+Type the URL.
+
+### Pass B's sentences are keyed by day **and** place, never place alone
+The rationale arrives as one flat list for the whole trip. A traveller can visit
+the same place on two days, so a `place_id` key silently renders day one's
+sentence under day two's stop — and it reads perfectly well, which is why
+`PlannerDebugView.test.tsx` pins it with two different sentences for one id.
+
+The same file keeps a rule worth repeating: `debug: null` (an itinerary planned
+before the column existed) must render "not recorded", never "nothing was
+dropped". They are different answers and conflating them is a lie told by the
+one page whose job is the truth.
+
+### Vitest needs `oxc: { jsx: { runtime: 'automatic' } }` to import any `.tsx`
+`tsconfig.json` has to keep `jsx: preserve` because Next owns the app build, so
+without that line in `vitest.config.ts` a test importing a component dies at
+parse time with "make sure to not set jsx to preserve". `esbuild: { jsx: ... }`
+does **not** work — Vite 8 parses with oxc, not esbuild. `include` covers
+`*.test.tsx` as well now, and the environment stays `node`: rendering a server
+component with `renderToStaticMarkup` needs no DOM, and the planner suite
+depends on `node`.
+
+### `hhmm` is exported from `validate.ts`
+Minutes from midnight to a clock face. There were already three copies
+(`validate.ts`, `__tests__/harness.ts`, `utils/calendar.ts`) and the debug view
+would have been a fourth. Note that `toHHMM` in `utils/calendar.ts` takes
+fractional **hours** — a different unit, not a duplicate.
