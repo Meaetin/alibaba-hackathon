@@ -90,6 +90,65 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
         />
       )}
 
+      {/* The Themes */}
+      {debug?.themes && (
+        <Section
+          region="itinerary-debug-themes"
+          title="What each day was about"
+          note="Themed runs only. A day with no premise fell back to geography, and the reason is here rather than in a log line."
+        >
+          {debug.themes.titles.length === 0 ? (
+            <Empty>No day kept its theme — every one fell back to geography.</Empty>
+          ) : (
+            <table className="planner-debug-theme-table w-full text-left">
+              <thead>
+                <tr>
+                  <Th>Day</Th>
+                  <Th>Title</Th>
+                  <Th>Anchor</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {debug.themes.titles.map((theme) => (
+                  <tr key={theme.dayIndex}>
+                    <Td>{theme.dayIndex + 1}</Td>
+                    <Td>{theme.title}</Td>
+                    <Td mono>{theme.anchorPlaceId}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {debug.themes.fallbacks.length > 0 && (
+            <ul className="planner-debug-theme-fallbacks flex flex-col gap-1">
+              {debug.themes.fallbacks.map((fallback) => (
+                <li key={fallback.dayIndex} className="type-body-3 text-content-secondary">
+                  Day {fallback.dayIndex + 1} — {fallback.reason}
+                  {fallback.anchorPlaceId ? ` (${fallback.anchorPlaceId})` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {debug.themes.repairs.length > 0 ? (
+            <ul className="planner-debug-theme-repairs flex flex-col gap-1">
+              {debug.themes.repairs.map((repair) => (
+                <li
+                  key={`${repair.dayIndex}:${repair.rung}`}
+                  className="type-body-3 text-content-secondary"
+                >
+                  Day {repair.dayIndex + 1} — {repair.rung}: {repair.reason} (
+                  {repair.before} → {repair.after} places to eat)
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Ok>No day needed the feasibility ladder.</Ok>
+          )}
+        </Section>
+      )}
+
       {/* The Funnel */}
       <Section
         region="itinerary-debug-funnel"

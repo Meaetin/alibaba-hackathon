@@ -43,6 +43,8 @@ import {
   type PlanResult,
 } from './pipeline'
 import { buildSearchPlan, createInMemoryLocationStore, createInMemorySearchCache } from './retrieval'
+import { MODELS } from './openai'
+import { SHARED_PREFIX_BLOCK_COUNT } from './narrate'
 import { isRestaurant } from './taxonomy'
 import type { CandidatePlace, PlaceEnrichment, PreferenceProfile } from './types'
 
@@ -614,10 +616,18 @@ describe('themed mode', () => {
   it('names every day and searches around each anchor', async () => {
     const { result, google } = await plan({ request: { mode: 'themed' } })
 
-    expect(result.stats.theming).toEqual({ themed: 3, fellBack: 0 })
-    // One Nearby Search per theme, and every circle centred on a real place we
-    // already had — which is what makes an anchor cost no geocode.
-    expect(google.nearbyCalls).toHaveLength(3)
+    expect(result.stats.theming?.themed).toBe(3)
+    expect(result.stats.theming?.fellBack).toBe(0)
+    // One Nearby Search per theme, plus at most one more per day when the
+    // feasibility ladder has to widen a theme that cannot seat two meals.
+    expect(google.nearbyCalls.length).toBeGreaterThanOrEqual(3)
+    expect(google.nearbyCalls.length).toBeLessThanOrEqual(6)
+    // A widen that found nothing still bills, so the count is not derivable
+    // from the repair list — but every repair that *did* help is on the record.
+    for (const repair of result.debug.themes!.repairs) {
+      expect(repair.after).toBeGreaterThan(repair.before)
+      expect(repair.reason.length).toBeGreaterThan(0)
+    }
     const poolCoords = new Set(
       CANDIDATES.filter((p) => p.latitude !== undefined).map(
         (p) => `${p.latitude},${p.longitude}`,
@@ -682,7 +692,7 @@ describe('themed mode', () => {
 
     // The worst case for a themed run is the default run, one model call poorer.
     expect(result.days).toHaveLength(3)
-    expect(result.stats.theming).toEqual({ themed: 0, fellBack: 3 })
+    expect(result.stats.theming).toEqual({ themed: 0, fellBack: 3, repaired: 0 })
     expect(google.nearbyCalls).toHaveLength(0)
     for (const day of result.days) assertValidItinerary(day.day, day.input)
     errors.mockRestore()
@@ -697,7 +707,8 @@ describe('themed mode', () => {
 
     // Day one loses its premise and gets a geographic cluster; the other two
     // are untouched, and the reason is on the row rather than in a log line.
-    expect(result.stats.theming).toEqual({ themed: 2, fellBack: 1 })
+    expect(result.stats.theming?.themed).toBe(2)
+    expect(result.stats.theming?.fellBack).toBe(1)
     expect(result.debug.themes?.fallbacks).toContainEqual({
       dayIndex: 0,
       anchorPlaceId: 'a-glassblowing-quarter',
@@ -711,5 +722,41 @@ describe('themed mode', () => {
     const { result } = await plan({ request: { mode: 'themed' } })
     expect(result.days).toHaveLength(3)
     for (const day of result.days) assertValidItinerary(day.day, day.input)
+  })
+
+  it("tells Pass B what each day is about, and Pass C in the cached prefix", async () => {
+    const responses = createFakeResponses()
+    const google = createFakeGoogle({ places: CANDIDATES })
+    await runPlan(
+      { ...REQUEST, mode: 'themed' },
+      {
+        googleApiKey: 'test-key',
+        cache: createInMemorySearchCache(),
+        store: createInMemoryLocationStore(),
+        enrichments: createInMemoryEnrichmentStore(),
+        responses,
+        fetch: google.fetch,
+        now: NOW,
+        rng: mulberry32(1337),
+        getTravelLeg: createStraightLineTravel(),
+      },
+    )
+
+    const bodies = responses.requests.map((r) =>
+      r.input.map((block) => (typeof block.content === 'string' ? block.content : '')).join('\n'),
+    )
+    // Pass B: the premise rides in the payload, one per day.
+    const assign = bodies.find((body) => body.includes('cluster_id'))!
+    expect(assign).toMatch(/"premise"/)
+
+    // Pass C: every day's premise in the shared prefix, not the per-stop block,
+    // or fifteen cache reads become fifteen misses.
+    const narrations = responses.requests.filter((r) => r.model === MODELS.narrate)
+    expect(narrations.length).toBeGreaterThan(1)
+    const prefixes = new Set(
+      narrations.map((r) => JSON.stringify(r.input.slice(0, SHARED_PREFIX_BLOCK_COUNT))),
+    )
+    expect(prefixes.size).toBe(1)
+    expect([...prefixes][0]).toMatch(/Each day of this trip is about one thing/)
   })
 })

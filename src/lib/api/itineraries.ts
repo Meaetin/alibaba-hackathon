@@ -143,6 +143,12 @@ export interface PlanItineraryParams {
    * existed.
    */
   personaId?: string
+  /**
+   * How a day is decided. `themed` names each day and searches around a real
+   * anchor; `geographic` is k-means over coordinates. Omitted means the
+   * server's default, which is geographic.
+   */
+  mode?: 'geographic' | 'themed'
 }
 
 /**
@@ -508,6 +514,10 @@ export async function createItineraryRouted(
     // Pace is the one preference the traveller typed, so it overwrites the
     // demo default rather than sitting beside it.
     profile: { ...LOCAL_DEMO_PROFILE, pace: input.pace ?? LOCAL_DEMO_PROFILE.pace },
+    // The product default. `runPlan` still defaults to geographic — a library
+    // default that changes behaviour silently is a trap — so the choice is
+    // made here, once, where somebody can see it.
+    mode: 'themed',
     ...(personaId ? { personaId } : {}),
   })
   return { kind: 'planning', job }

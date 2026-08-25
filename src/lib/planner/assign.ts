@@ -44,6 +44,7 @@ import type { AssignmentDrop, AssignmentRationale } from "./debug";
 import { resolveVisitDuration } from "./duration";
 import type { ScoredCluster } from "./funnel";
 import { isOpenDuring, type Weekday } from "./hours";
+import { renderPersonaBrief, type PersonaBrief } from "./persona-brief";
 import {
   MODELS,
   jsonSchemaFormat,
@@ -218,6 +219,9 @@ export interface AssignInput {
   days: readonly AssignDayRequest[];
   /** Rung 2 of the duration ladder and the source of `enrichment_tags`. Misses are normal. */
   enrichments: ReadonlyMap<string, PlaceEnrichment>;
+  /** The traveller's persona as words. Absent means no persona, and the prompt
+   *  is then identical to the one this pass has always sent. */
+  brief?: PersonaBrief;
 }
 
 export interface AssignDeps {
@@ -295,6 +299,12 @@ interface DayPayload {
   day: number;
   cluster_id: string;
   area_name?: string;
+  /**
+   * What this day is about, when the theme pass named it. One sentence, and it
+   * is a *steer* — the shortlist has already been filtered and scored, and no
+   * premise may override that. Absent on every geographic plan.
+   */
+  premise?: string;
   capacity: { activity_minutes: number; meals: number; flex: number };
 }
 
@@ -359,6 +369,11 @@ const SYSTEM_PROMPT = [
   "- Set `area_name` to the neighborhood the day's places share, read from their",
   "  names. Use the name a local would use. Never say 'Cluster 1'.",
   "- `why` is one short sentence for the traveller.",
+  "- When a day has a `premise`, order and choose to serve it: it is what the day",
+  "  is about. It is a steer, not a filter — every candidate you are given has",
+  "  already passed the traveller's hard constraints, and a premise never",
+  "  overrides them or licences a place that is not in the list.",
+  "- `traveller_brief`, when present, says how to shape a day for this person.",
 ].join("\n");
 
 function candidatePayload(
@@ -397,6 +412,7 @@ function buildPayload(input: AssignInput): AssignPayload {
       day: day.dayIndex + 1,
       cluster_id: clusterId,
       area_name: day.areaName ?? cluster?.label,
+      ...(cluster?.theme ? { premise: cluster.theme.premise } : {}),
       capacity: {
         activity_minutes: day.capacity.activityMinutes,
         meals: day.capacity.meals,
@@ -441,10 +457,14 @@ function buildPayload(input: AssignInput): AssignPayload {
  * distinct prefix and zero cache reads.
  */
 export function buildAssignRequest(input: AssignInput, deps: AssignDeps): ResponsesRequest {
+  const persona = renderPersonaBrief(input.brief, "assign");
   return {
     model: deps.model ?? MODELS.assign,
     input: [
       { role: "system", content: SYSTEM_PROMPT },
+      // Before the payload, so the payload stays the last user block — the
+      // fakes and `narrate.ts` both rely on that ordering.
+      ...(persona ? [{ role: "developer" as const, content: `traveller_brief:\n${persona}` }] : []),
       { role: "user", content: JSON.stringify(buildPayload(input)) },
     ],
     reasoning: { effort: deps.effort ?? "low" },

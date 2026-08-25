@@ -452,3 +452,12 @@
   named neighbourhoods.** Nothing here geocodes and `formatted_address` would
   need a parser per country. The model names areas from the best-known places in
   them, which is evidence rather than invention.
+- 2026-08-25 — **`runPlan` keeps defaulting to `"geographic"`; the client sends
+  `"themed"`.** The plan called for flipping the default in phase 5. Flipping it
+  in the library would break the property every phase leans on — "no mode means
+  today, exactly" — so the product default lives in `createItineraryRouted`
+  instead, where it is one visible line.
+- 2026-08-25 — **"Merge" in the feasibility ladder means borrow, not fuse.**
+  Fusing two thin days would leave the trip a day short and renumber every day
+  after it. The thin day takes surplus restaurants from its nearest neighbour by
+  anchor distance, and the donor is never taken below its own feasibility.

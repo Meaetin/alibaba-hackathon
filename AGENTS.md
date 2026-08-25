@@ -448,3 +448,115 @@ The repowiki under `.qoder/` is regenerated per branch, so two branches that
 both regenerate it conflict on ~180 files with no meaningful winner. It was
 removed from the index on 2026-08-25 and added to `.gitignore`. The files stay
 on disk; regenerate freely, just don't `git add -f` them back.
+
+### The persona is stored server-side, and the browser holds only an id
+`travel_personas` keeps the raw `QuizAnswers` plus the derived `dimensions` and
+`archetype`. Answers are the source of truth — `calculatePersona` is a scoring
+function that can be retuned, and `POST /api/plan` rebuilds the result from the
+answers rather than reading the derived columns.
+
+**A retake rewrites the row in place.** One persona per person, one stable id,
+nothing for `localStorage` to migrate. The cost is that the table describes who
+the traveller is *now*, not who they were when an older trip was planned — which
+is why `itineraries.persona` snapshots the whole thing (answers and result) on
+**every** plan, and why nothing explaining an existing itinerary may join to
+`travel_personas`.
+
+`PersonaStore` is declared in `src/lib/db/personas.ts`, not `stores.ts`: the
+ports in `stores.ts` are the *planner's*, and nothing in the planner knows a
+persona has a row. It follows `PlanStore` in `itineraries.ts` instead.
+
+### `knobs.ts` is the only file that reads a `PersonaResult`
+Every other module takes the knob it needs as a parameter, the way `rng` and
+`now` are already injected. Four pairs of axes collide, and a collision resolved
+at two call sites is resolved twice, differently, eventually:
+
+- **`immersion` owns fame.** `spontaneity` may move only the serendipity
+  threshold, or a deep-and-spontaneous traveller gets fifteen places with forty
+  reviews each.
+- **`comfortTolerance` owns the price curve.** `immersion` exempts specific
+  types (`market`, `food_court`) instead of reshaping it.
+- **`pace` owns minutes, `spontaneity` owns openness.** Generalised: a thing the
+  user typed beats a thing the quiz inferred. `visitDurationBias` is the one
+  shared knob — pace sets the floor and `immersion` may raise it one step,
+  never lower it.
+
+**A missing persona returns today's constants, field for field, and so does
+every `mid` band.** `knobs.test.ts` asserts both. That is what keeps the Gate A
+snapshots still for a traveller who never took the quiz, and it is why two
+proposals from `docs/quiz-pipeline-bridge.md` lose: a 0.1 popularity weight at
+mid, and one social venue a day at mid.
+
+`getFocusScoringAdjustments` and `getSocialSchedulingRules` were **deleted**
+rather than connected — they cut at 30/60/70 where the bands cut at 33/66. The
+three fields with no mechanism to connect to are named in `profile.ts`.
+
+### `popularity` is not `quality`, and the difference is the whole persona
+`quality` asks "is this good?" and uses the review count only to decide how much
+to trust the stars. `popularity` asks "does everyone go here?" — log-scaled, so
+100 reviews is halfway to 10,000. Two travellers want opposite answers; the
+weights and `touristTrapPenalty` decide the sign. Both terms are **zero by
+default**, which is what "there is no popularity term" means once the term
+exists.
+
+`typeAffinities` is read by `scorePlace` as an offset from neutral, bounded to
+±0.5. It is the persona's precision layer: the `Interest` union has seven members
+and cannot say "here for the galleries, not the shopping malls". A type the map
+never mentions scores 0, the same as no map at all — silence is not a zero
+opinion expressed loudly.
+
+### The persona reaches a prompt as words, never as a number
+`persona-brief.ts` renders four instructions, four statements of what the
+traveller actually said, and at most three negatives. The rule the module turns
+on: **instructions to the planner, not descriptions of the person.** A model
+handed adjectives returns adjectives. `persona-brief.test.ts` asserts it.
+
+`traits` come from the bands; `signals` come from the four highest-spread
+answers (Q1, Q3, Q5, Q6 — pinned by question *label*, because a question
+inserted above one would shift every signal onto the wrong axis and still read
+perfectly well). They are allowed to disagree and are labelled apart in the
+prompt so the model can hold both.
+
+The brief and the day premises go in `buildSharedPrefix`, **never** the per-stop
+payload — the other way round is fifteen cache misses. `promptCacheKeyFor` gained
+the four bands for the same reason.
+
+### Themed planning: `PlanRequest.mode`, and every rung falls back
+`"themed"` replaces the statistical centroid with a semantic anchor. Four
+stages: `survey.ts` (deterministic city summary), `theme.ts` (one model call),
+`explore` (Nearby Search in `pipeline.ts`), `group.ts`.
+
+**`DayTheme.anchorPlaceId` must be an id already in the pool.** That one rule is
+the whole hallucination defence, and it hands us verified coordinates for free.
+An invented id drops that day to geography and is recorded, never retried — a
+model that named a place we do not have will name it again.
+
+A Nearby Search is a `SearchRequest` with a `nearby` circle, so it runs through
+`retrievePlaces` and inherits the cache, the location persistence, the dedupe and
+the rule that a cache entry is published only after its rows land. It uses
+`SEARCH_FIELD_MASK`: one Atmosphere field would bump the SKU tier on every
+nearby call.
+
+`runFunnel` gained `dayAligned` because a themed cluster carries `theme.dayIndex`
+— score-ranking would move day three's premise onto day one, and dropping an
+empty cluster would renumber every day after it.
+
+`runPlan` still defaults to `"geographic"`; the **client** sends `"themed"`. A
+library default that changes behaviour silently is a trap, so the product default
+lives in `createItineraryRouted` where somebody can see it.
+
+### Theme infeasibility is discovered after you have paid
+A thin geographic cluster is visible before a cent is spent (`shortfall`); a thin
+theme is only visible after its Nearby Search is billed. `feasibility.ts` is the
+mitigation and stays deterministic — a model call there would double the latency
+budget on the days already going badly.
+
+Three rungs, every one recorded on `planner_debug.themes.repairs`: **widen** (one
+more billed search), **merge** (borrow surplus restaurants from the nearest
+theme, never taking the donor below its own feasibility), **fall back** (take the
+geography and drop the premise). "Merge" does not fuse two days — that would
+leave the trip a day short and renumber everything after it.
+
+When testing this, note that a **themed** donor gets repaired on the next pass of
+the loop and borrows its own restaurants straight back. An assertion written
+against two themed clusters passes whatever the rule says. Use a themeless donor.

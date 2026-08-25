@@ -55,17 +55,25 @@ import {
   type EnrichmentSubject,
 } from "./enrich";
 import {
+  FUNNEL_DEFAULTS,
   pickSerendipitySlots,
   runFunnel,
   type FunnelStats,
   type ScoredCluster,
 } from "./funnel";
+import { repairFeasibility, type FeasibilityRepair } from "./feasibility";
 import { groupByTheme, type ThemedCluster } from "./group";
 import { bandsFor, resolvePlannerKnobs, type PlannerKnobs } from "./knobs";
 import { personaBriefFor, type PersonaBrief } from "./persona-brief";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
-import { narrateStops, stopsFromDays, type NarrateStats, type StopContent } from "./narrate";
+import {
+  narrateStops,
+  stopsFromDays,
+  type DayPremise,
+  type NarrateStats,
+  type StopContent,
+} from "./narrate";
 import type { ResponsesClient } from "./openai";
 import {
   type FlexPick,
@@ -450,10 +458,12 @@ export interface PlanStats {
    * cost" is a question somebody will ask. Absent on a geographic run.
    */
   explore?: RetrievalStats;
-  /** Themed runs only. How many days got a premise and how many fell back. */
+  /** Themed runs only. How many days got a premise, how many fell back, and
+   *  how many needed the feasibility ladder to be able to seat a meal. */
   theming?: {
     themed: number;
     fellBack: number;
+    repaired: number;
   };
   clustering: {
     /** Candidates with coordinates, which is all clustering can place. */
@@ -657,6 +667,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       clusters: hydratedClusters,
       days: dayRequests,
       enrichments: enrichment.enrichments,
+      brief,
     },
     { client: deps.responses, effort: "low", promptCacheKey: promptCacheKeyFor(request) },
   );
@@ -745,6 +756,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       effort: "none",
       promptCacheKey: promptCacheKeyFor(request),
       brief,
+      premises: premisesFor(hydratedClusters),
     },
   );
 
@@ -786,6 +798,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
                   : [],
               ),
               fallbacks: themed.rejected,
+              repairs: themed.repairs,
             },
           }
         : {}),
@@ -800,6 +813,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
             theming: {
               themed: themed.clusters.filter((cluster) => cluster.theme).length,
               fellBack: themed.rejected.length,
+              repaired: themed.repairs.length,
             },
           }
         : {}),
@@ -876,6 +890,28 @@ function rehydrate(
 
 // ── the themed path ──────────────────────────────────────────────────────────
 
+/**
+ * Each day's premise, for Pass C's cached prefix.
+ *
+ * `day` is 1-based to match `schedule.day` in the per-stop payload, which is
+ * how a stop finds its own premise without the premise being repeated fifteen
+ * times. Empty on a geographic run, and an empty list leaves that prefix
+ * byte-identical to the one this pass has always sent.
+ */
+function premisesFor(clusters: readonly ScoredCluster[]): DayPremise[] {
+  return clusters.flatMap((cluster) =>
+    cluster.theme
+      ? [
+          {
+            day: cluster.theme.dayIndex + 1,
+            title: cluster.theme.title,
+            premise: cluster.theme.premise,
+          },
+        ]
+      : [],
+  );
+}
+
 interface ThemedPlan {
   /** The retrieved pool plus everything the nearby searches found. */
   pool: RetrievedPlace[];
@@ -883,6 +919,8 @@ interface ThemedPlan {
   clusters: ThemedCluster[];
   /** For the diagnostic record: days that fell back, and why. */
   rejected: ThemeRejection[];
+  /** Which rung of the feasibility ladder each thin day ended on. */
+  repairs: FeasibilityRepair[];
   /** Nearby-search counters, folded into the run's retrieval stats. */
   exploreStats?: RetrievalStats;
 }
@@ -959,9 +997,34 @@ async function planThemedDays(
     rng: deps.rng,
   });
 
+  // A theme that cannot seat two meals, repaired without a second model call.
+  // Rung 1 costs one more Nearby Search on a thin day only; rungs 2 and 3 are
+  // free. Every rung is recorded — a repair that silently shrinks a list is the
+  // bug this project already knows about.
+  const repaired = await repairFeasibility(grouped.clusters, {
+    mealsPerDay: FUNNEL_DEFAULTS.mealsPerCluster,
+    widen: async (cluster) => {
+      if (!cluster.theme) return [];
+      const wider = await explorePlaces(
+        request,
+        mergedPool,
+        [{ ...cluster.theme, radiusHint: widenHint(cluster.theme.radiusHint) }],
+        knobs,
+        deps,
+      );
+      for (const place of wider.places) merged.set(place.placeId, place);
+      return wider.places;
+    },
+    // The geographic cluster for a day only exists once themes have claimed
+    // what they wanted, so it is computed from the leftovers the same way
+    // `groupByTheme` does — one k-means over what no theme is using.
+    geographicFor: (dayIndex) => geographicFallbackFor(grouped.clusters, dayIndex, deps.rng),
+  });
+
   return {
-    pool: mergedPool,
-    clusters: grouped.clusters,
+    pool: [...merged.values()],
+    clusters: repaired.clusters,
+    repairs: repaired.repairs,
     rejected: [
       ...themes.rejected,
       // A day that had a theme and lost it during grouping — an anchor Google
@@ -976,6 +1039,37 @@ async function planThemedDays(
     ],
     exploreStats: explored.stats,
   };
+}
+
+/** One step wider. `wide` is already the top of the scale. */
+function widenHint(hint: DayTheme["radiusHint"]): DayTheme["radiusHint"] {
+  return hint === "tight" ? "walkable" : "wide";
+}
+
+/**
+ * A day's plain geographic cluster, for the last rung of the ladder.
+ *
+ * Built over the places every *other* day is not using, so a day that gives up
+ * its premise does not simply take a copy of the day beside it. One cluster is
+ * asked for, because one day is being replaced.
+ */
+function geographicFallbackFor(
+  clusters: readonly ThemedCluster[],
+  dayIndex: number,
+  rng: () => number,
+): ThemedCluster | undefined {
+  const claimedElsewhere = new Set(
+    clusters
+      .filter((cluster) => cluster.theme?.dayIndex !== dayIndex)
+      .flatMap((cluster) => cluster.places.map((place) => place.placeId)),
+  );
+  const own = clusters.find((cluster) => cluster.theme?.dayIndex === dayIndex);
+  const available = clusters
+    .flatMap((cluster) => cluster.places)
+    .filter((place) => !claimedElsewhere.has(place.placeId) && place.latitude !== undefined);
+  if (available.length === 0) return undefined;
+  const [cluster] = clusterPlaces([...available], { k: 1, rng });
+  return cluster ? { ...cluster, label: own?.label } : undefined;
 }
 
 /**
@@ -1090,7 +1184,7 @@ export function alternatesFor(
     ...input.assignments.map((assignment) => assignment.place.placeId),
     ...(input.flex ?? []).map((pick) => pick.place.placeId),
   ]);
-  return cluster.places.flatMap((place, index) =>
+  const alternates = cluster.places.flatMap((place, index) =>
     used.has(place.placeId)
       ? []
       : [
@@ -1105,6 +1199,17 @@ export function alternatesFor(
           },
         ],
   );
+
+  // On the themed path this cluster *is* the theme's members, so a repair
+  // already draws from theme-mates. What it does not do by default is prefer
+  // one that keeps the day's premise — and a swap that quietly turns the food
+  // day into an aquarium is the premise breaking with nothing to show for it.
+  // Stable within each group, so the funnel's ranking still orders the queue.
+  const wanted = cluster.theme?.includedTypes;
+  if (!wanted || wanted.length === 0) return alternates;
+  const onTheme = (alternate: Alternate) =>
+    wanted.some((type) => alternate.place.types.includes(type));
+  return [...alternates.filter(onTheme), ...alternates.filter((a) => !onTheme(a))];
 }
 
 /**

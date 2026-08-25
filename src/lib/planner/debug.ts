@@ -51,6 +51,21 @@ export interface ThemeFallback {
   reason: string;
 }
 
+/**
+ * How a themed day that could not feed itself was repaired.
+ *
+ * Recorded because a repair that silently shrinks a list is the failure mode
+ * this project already knows about. `rung` says which step of the ladder ran;
+ * `after` still short of the target is a real outcome, not a missing field.
+ */
+export interface ThemeRepair {
+  dayIndex: number;
+  rung: "widened" | "merged" | "geographic";
+  before: number;
+  after: number;
+  reason: string;
+}
+
 /** One id Pass B named that never became a stop, worded for a person. */
 export interface AssignmentDrop {
   dayIndex: number;
@@ -109,6 +124,8 @@ export interface PlannerDebug {
     /** What each day ended up being about, best read next to the days. */
     titles: { dayIndex: number; title: string; anchorPlaceId: string }[];
     fallbacks: ThemeFallback[];
+    /** Days the feasibility ladder had to repair, and how far down it went. */
+    repairs: ThemeRepair[];
   };
 }
 

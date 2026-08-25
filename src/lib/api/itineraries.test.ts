@@ -51,7 +51,35 @@ describe("createItineraryRouted localhost planning", () => {
       totalDays: 4,
       name: "Kyoto week",
       profile: LOCAL_DEMO_PROFILE,
+      // The product default lives here, not in `runPlan` — a library default
+      // that changes behaviour silently is a trap.
+      mode: "themed",
     });
+  });
+
+  it("sends the pace the traveller chose, over the demo default", async () => {
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      json: async () => JOB,
+    })) as unknown as typeof globalThis.fetch;
+    vi.stubGlobal("fetch", fetch);
+
+    await createItineraryRouted({
+      source: "itineraries",
+      tripName: "Kyoto week",
+      country: "Japan",
+      region: "Kyoto",
+      startDate: "2026-09-14",
+      totalDays: 4,
+      selectedLocationIds: [],
+      aiRecommendations: true,
+      pace: "packed",
+    });
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.profile.pace).toBe("packed");
+    expect(LOCAL_DEMO_PROFILE.pace).toBe("balanced");
   });
 
   it("does not silently discard selected place ids", async () => {

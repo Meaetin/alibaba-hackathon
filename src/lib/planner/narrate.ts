@@ -244,9 +244,18 @@ export function profileSlice(profile: PreferenceProfile): {
  * building it once is what makes byte-identity a property of the code rather
  * than a thing to hope for.
  */
+/** One day's premise, as Pass C is told it. `day` is 1-based, matching
+ *  `schedule.day` in the per-stop payload — which is how a stop finds its own. */
+export interface DayPremise {
+  day: number;
+  title: string;
+  premise: string;
+}
+
 export function buildSharedPrefix(
   profile: PreferenceProfile,
   brief?: PersonaBrief,
+  premises: readonly DayPremise[] = [],
 ): ResponseInputBlock[] {
   // The brief goes HERE and nowhere else. It is per-itinerary, so it belongs in
   // the block that is byte-identical across every stop; putting it in the
@@ -255,6 +264,16 @@ export function buildSharedPrefix(
   // `renderPersonaBrief` returns "" without a persona, so this prefix stays
   // byte-for-byte what it was before personas existed.
   const persona = renderPersonaBrief(brief, "narrate");
+  // Every day's premise, not just this stop's. Per-trip and therefore
+  // byte-identical across all fifteen calls, which is the only reason it can be
+  // here at all — a stop finds its own by matching `schedule.day`. Three
+  // premises in the prefix is a rounding error; fifteen cache misses is not.
+  const themes =
+    premises.length > 0
+      ? `\n\nEach day of this trip is about one thing. Find this stop's day by its
+number in \`schedule.day\` and write to that day's premise.
+${premises.map((entry) => `- day ${entry.day} — ${entry.title}: ${entry.premise}`).join("\n")}`
+      : "";
   return [
     { role: "system", content: NARRATE_SYSTEM_PROMPT },
     {
@@ -272,7 +291,7 @@ emphasise — never to change which places are in the trip, which is already
 decided.
 ${persona}`
             : ""
-        }`,
+        }${themes}`,
         prompt_cache_breakpoint: { mode: "explicit" },
       }],
     },
@@ -449,6 +468,8 @@ export interface NarrateDeps {
   /** The traveller's persona as prompt words. Absent means no persona, and the
    *  shared prefix is then identical to the one this pass has always sent. */
   brief?: PersonaBrief;
+  /** What each day is about, on themed runs. Empty on every geographic plan. */
+  premises?: readonly DayPremise[];
   concurrency?: number;
   /** Defaults to 1. Not a backoff policy — the fallback is always available,
    *  so a job that keeps retrying is strictly worse than one that degrades. */
@@ -494,7 +515,7 @@ export async function narrateStops(
   profile: PreferenceProfile,
   deps: NarrateDeps,
 ): Promise<NarrateResult> {
-  const sharedPrefix = buildSharedPrefix(profile, deps.brief);
+  const sharedPrefix = buildSharedPrefix(profile, deps.brief, deps.premises);
   const format = jsonSchemaFormat("stop_content", StopContentSchema);
   const model = deps.model ?? MODELS.narrate;
   const effort: ReasoningEffort = deps.effort ?? "none";

@@ -271,6 +271,66 @@ describe("enrichment misses", () => {
 });
 
 describe("the funnel", () => {
+  it("says nothing about themes on a geographic plan", () => {
+    // The default path has no themes, and a section headed "what each day was
+    // about" over an empty table would read as a theme pass that produced
+    // nothing rather than one that never ran.
+    const html = render(diagnostics());
+    expect(html).not.toContain("What each day was about");
+  });
+
+  it("names each day's premise, its anchor and every fallback", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          themes: {
+            titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
+            fallbacks: [
+              {
+                dayIndex: 1,
+                anchorPlaceId: "a-glassblowing-quarter",
+                reason: "the anchor names a place that is not in the pool",
+              },
+            ],
+            repairs: [
+              {
+                dayIndex: 0,
+                rung: "widened",
+                before: 1,
+                after: 2,
+                reason: "searched wider and found 1 more place to eat",
+              },
+            ],
+          },
+        }),
+      }),
+    );
+
+    expect(html).toContain("Around Fushimi Inari");
+    expect(html).toContain("place-a");
+    // A day that lost its premise says why, on the row, rather than in a log
+    // line nobody kept.
+    expect(html).toContain("a-glassblowing-quarter");
+    expect(html).toContain("not in the pool");
+    // And a repair that shrank nothing silently is the bug this records.
+    expect(html).toContain("searched wider");
+  });
+
+  it("says the ladder never ran rather than showing nothing", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          themes: {
+            titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
+            fallbacks: [],
+            repairs: [],
+          },
+        }),
+      }),
+    );
+    expect(html).toContain("No day needed the feasibility ladder");
+  });
+
   it("spells out the size of every cut", () => {
     const html = render(diagnostics());
     expect(html).toContain("−4"); // 86 → 82

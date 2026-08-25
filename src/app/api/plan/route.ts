@@ -93,6 +93,13 @@ const PlanRequestSchema = z.object({
    * need a second seam for request headers.
    */
   personaId: z.string().uuid().optional(),
+  /**
+   * How a day is decided. The **client** chooses, not the library: `runPlan`
+   * defaults to `"geographic"` so that "no mode means today, exactly" stays
+   * true for every test and every caller, and the product default lives where
+   * the product is. `createItineraryRouted` sends `"themed"`.
+   */
+  mode: z.enum(["geographic", "themed"]).optional(),
   options: z
     .object({
       maxK: z.number().int().positive().optional(),
