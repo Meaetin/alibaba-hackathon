@@ -17,6 +17,7 @@ import {
   INTRO_ILLUSTRATION,
   QUESTION_ILLUSTRATIONS,
 } from "@/lib/persona/illustrations";
+import { savePersona } from "@/lib/persona/storage";
 import type { PersonaResult, QuizAnswers, QuizStage } from "@/lib/persona/types";
 import { cn } from "@/lib/utils";
 
@@ -68,6 +69,10 @@ function PersonaQuizDialog({ open, onOpenChange }: PersonaQuizDialogProps) {
     }
     setResult(calculatePersona(answers));
     setStage("result");
+    // Deliberately not awaited, and it never throws. The result screen is
+    // already rendered from the local calculation; the round trip only decides
+    // whether the *next* trip this browser plans knows who took the quiz.
+    void savePersona(answers);
   };
 
   const handleBack = () => {

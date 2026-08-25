@@ -17,6 +17,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { createInMemoryPlanStore, type JobRow, type PlanStore } from '@/lib/db/itineraries'
+import { createInMemoryPersonaStore } from '@/lib/db/personas'
+import { QUESTIONS, calculatePersona } from '@/lib/persona/quiz'
+import type { QuizAnswers } from '@/lib/persona/types'
 import type { JobProgress } from '@/lib/db/schema'
 import { createInMemoryEnrichmentStore, type EnrichmentStore } from '@/lib/planner/enrich'
 import { createFakeGoogle, createFakeResponses } from '@/lib/planner/__tests__/fakes'
@@ -53,6 +56,9 @@ const BODY: PlanRequest = {
 
 const NOW = new Date('2026-08-24T09:00:00.000Z')
 
+/** A complete quiz: every question answered with its first option. */
+const QUIZ_ANSWERS: QuizAnswers = Array(QUESTIONS.length).fill(0)
+
 const originalCreate = planRouteDeps.create
 
 function post(body: unknown = BODY): Promise<Response> {
@@ -67,6 +73,7 @@ function post(body: unknown = BODY): Promise<Response> {
 
 interface Harness {
   store: ReturnType<typeof createInMemoryPlanStore>
+  personas: ReturnType<typeof createInMemoryPersonaStore>
   /** Every `progress` written to the job row, in order. */
   progress: JobProgress[]
   google: ReturnType<typeof createFakeGoogle>
@@ -76,10 +83,12 @@ function install(
   overrides: {
     runPlan?: PlanRouteDeps['runPlan']
     enrichments?: EnrichmentStore
+    personas?: ReturnType<typeof createInMemoryPersonaStore>
     failPassB?: boolean
   } = {},
 ): Harness {
   const store = createInMemoryPlanStore({ itineraryId: 'itinerary-1' })
+  const personas = overrides.personas ?? createInMemoryPersonaStore()
   const progress: JobProgress[] = []
   const google = createFakeGoogle({ places: CANDIDATES })
 
@@ -93,6 +102,7 @@ function install(
 
   planRouteDeps.create = (): PlanRouteDeps => ({
     store: recording,
+    personas,
     runPlan: overrides.runPlan ?? runPlan,
     now: () => NOW,
     rng: mulberry32(1337),
@@ -104,7 +114,7 @@ function install(
     fetch: google.fetch,
   })
 
-  return { store, progress, google }
+  return { store, personas, progress, google }
 }
 
 /** The background half is fire-and-forget, so tests wait on the row. */
@@ -324,6 +334,70 @@ describe('POST /api/plan', () => {
     expect(networkFetch).not.toHaveBeenCalled()
     expect(harness.google.searchCalls.length).toBeGreaterThan(0)
     expect(harness.google.mediaCalls.length).toBeGreaterThan(0)
+  })
+
+  it('resolves personaId into the persona, and snapshots it on the row', async () => {
+    const harness = install()
+    const stored = await harness.personas.upsert({
+      answers: QUIZ_ANSWERS,
+      dimensions: calculatePersona(QUIZ_ANSWERS).dimensions,
+      archetype: calculatePersona(QUIZ_ANSWERS).archetype.id,
+      now: NOW,
+    })
+
+    const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    const [saved] = harness.store.saved
+    // The pipeline is handed the persona itself; it never learns there is a
+    // table. And the row carries the whole thing, answers included, because
+    // `travel_personas` is rewritten on a retake and a join would then
+    // re-explain this trip with a personality it was never planned from.
+    expect(saved.result.request.persona?.answers).toEqual(QUIZ_ANSWERS)
+    expect(saved.itinerary.persona?.answers).toEqual(QUIZ_ANSWERS)
+    expect(saved.itinerary.persona?.result.archetype.id).toBe(
+      calculatePersona(QUIZ_ANSWERS).archetype.id,
+    )
+  })
+
+  it('rebuilds the result from the stored answers, not from the stored scores', async () => {
+    const harness = install()
+    const stored = await harness.personas.upsert({
+      answers: QUIZ_ANSWERS,
+      // Deliberately wrong, as a scoring change would leave them. The answers
+      // are the source of truth, so these must not reach the itinerary.
+      dimensions: { structure: 0, comfort: 0, focus: 0, social: 0 },
+      archetype: 'weekend_warrior',
+      now: NOW,
+    })
+
+    const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    const snapshot = harness.store.saved[0].itinerary.persona!
+    expect(snapshot.result.dimensions).toEqual(calculatePersona(QUIZ_ANSWERS).dimensions)
+  })
+
+  it('plans without a persona when the id names no row', async () => {
+    const harness = install()
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const job = (await (
+      await post({ ...BODY, personaId: '11111111-2222-4333-8444-555555555555' })
+    ).json()) as JobRow
+    const finished = await settled(harness.store, job.id)
+
+    // A stale localStorage pointer costs personalisation, never the trip.
+    expect(finished.status).toBe('completed')
+    expect(harness.store.saved[0].itinerary.persona).toBeNull()
+    expect(warnings).toHaveBeenCalled()
+  })
+
+  it('stores null persona when the traveller never took the quiz', async () => {
+    const harness = install()
+    const job = (await (await post()).json()) as JobRow
+    await settled(harness.store, job.id)
+    expect(harness.store.saved[0].itinerary.persona).toBeNull()
   })
 
   it('still completes when Pass B is down', async () => {

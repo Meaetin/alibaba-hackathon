@@ -28,6 +28,8 @@ import { z } from "zod";
 
 import { toJobProgress, type JobRow } from "@/lib/db/itineraries";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
+import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
+import type { TravelPersona } from "@/lib/persona/types";
 import {
   completedProgress,
   stageOutlook,
@@ -71,6 +73,13 @@ const PlanRequestSchema = z.object({
     budget: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]).optional(),
     typeAffinities: z.record(z.string(), z.number()).optional(),
   }),
+  /**
+   * The row in `travel_personas`, not the persona itself. In the body rather
+   * than a cookie on purpose: `route.test.ts` drives this handler through the
+   * `planRouteDeps` seam with no database and no network, and a cookie would
+   * need a second seam for request headers.
+   */
+  personaId: z.string().uuid().optional(),
   options: z
     .object({
       maxK: z.number().int().positive().optional(),
@@ -101,8 +110,6 @@ export async function POST(request: Request): Promise<Response> {
     console.error("[POST /api/plan] rejected request body", parsed.error.issues);
     return Response.json({ error: BAD_REQUEST_MESSAGE }, { status: 400 });
   }
-  const planRequest: PlanRequest = parsed.data;
-
   let deps: PlanRouteDeps;
   try {
     deps = planRouteDeps.create();
@@ -110,6 +117,10 @@ export async function POST(request: Request): Promise<Response> {
     console.error("[POST /api/plan] the planner is not configured", error);
     return Response.json({ error: PLAN_FAILED_MESSAGE }, { status: 503 });
   }
+
+  const { personaId, ...trip } = parsed.data;
+  const persona = await resolvePersona(personaId, deps);
+  const planRequest: PlanRequest = { ...trip, ...(persona ? { persona } : {}) };
 
   // The payload is the request as accepted, so a client reading the job row
   // back can see exactly what it asked for.
@@ -120,6 +131,41 @@ export async function POST(request: Request): Promise<Response> {
   void runPlanJob(job.id, planRequest, deps);
 
   return Response.json(job, { status: 202 });
+}
+
+/**
+ * Turns the id on the wire into the thing the pipeline reads.
+ *
+ * The result is rebuilt with `calculatePersona` from the stored answers rather
+ * than assembled from the stored `dimensions` and `archetype` columns: the
+ * answers are the source of truth, and rebuilding is what makes a scoring
+ * change reach every traveller without re-asking anyone twelve questions.
+ *
+ * **An unresolvable persona plans without one.** A stale `localStorage` id, or
+ * a database that has been wiped, must not cost the traveller their trip —
+ * absent persona is a supported path with a test on it, so the fallback is the
+ * ordinary behaviour rather than a degraded one. It is logged, not surfaced.
+ */
+async function resolvePersona(
+  personaId: string | undefined,
+  deps: PlanRouteDeps,
+): Promise<TravelPersona | undefined> {
+  if (!personaId) return undefined;
+  try {
+    const row = await deps.personas.get(personaId);
+    if (!row) {
+      console.warn(`[POST /api/plan] persona ${personaId} was not found — planning without it`);
+      return undefined;
+    }
+    if (!isScorableAnswers(row.answers)) {
+      console.error(`[POST /api/plan] persona ${personaId} has answers this quiz cannot score`);
+      return undefined;
+    }
+    return { answers: row.answers, result: calculatePersona(row.answers) };
+  } catch (error) {
+    console.error(`[POST /api/plan] persona ${personaId} could not be read`, error);
+    return undefined;
+  }
 }
 
 /**

@@ -5,6 +5,7 @@ import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
 import type { ActivityLocation } from '@/lib/supabase/queries/home'
 import type { PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
+import { readPersonaId } from '@/lib/persona/storage'
 import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
 
 export interface ItineraryWithRole {
@@ -135,6 +136,13 @@ export interface PlanItineraryParams {
   profile: PreferenceProfile
   /** Scheduler/clustering knobs. Never the traveller — see `profile`. */
   options?: SchedulerOptions
+  /**
+   * The `travel_personas` row id, if this browser has taken the quiz. The
+   * persona itself stays on the server; the client only ever holds the pointer.
+   * Absent — or stale — plans exactly as this pipeline planned before personas
+   * existed.
+   */
+  personaId?: string
 }
 
 /**
@@ -480,6 +488,10 @@ export async function createItineraryRouted(
   }
 
   // Case 2a: AI-only planning goes through this app's local pipeline.
+  // The persona is read here rather than passed in by every caller: four call
+  // sites reach this function, and a traveller's persona is a property of the
+  // browser, not of the button they pressed.
+  const personaId = readPersonaId()
   const job = await planItinerary({
     city: input.region?.trim() || input.country,
     country: input.country,
@@ -487,6 +499,7 @@ export async function createItineraryRouted(
     totalDays: input.totalDays,
     name: input.tripName,
     profile: LOCAL_DEMO_PROFILE,
+    ...(personaId ? { personaId } : {}),
   })
   return { kind: 'planning', job }
 }

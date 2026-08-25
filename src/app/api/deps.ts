@@ -17,6 +17,7 @@ import OpenAI from "openai";
 import { getDb } from "@/lib/db/client";
 import { createEnrichmentBatchStore } from "@/lib/db/enrichment-batches";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
+import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
 import { createEnrichmentStore, createLocationStore, createSearchCache } from "@/lib/db/stores";
 import type { EnrichmentStore } from "@/lib/planner/enrich";
 import { enqueueEnrichmentMisses } from "@/lib/planner/enrichment-queue";
@@ -33,6 +34,8 @@ import type { LocationStore, SearchCache } from "@/lib/planner/retrieval";
 
 export interface PlanRouteDeps {
   store: PlanStore;
+  /** Resolves `personaId` on the request body into the traveller's answers. */
+  personas: PersonaStore;
   runPlan: typeof runPlan;
   /** Injected clocks and randomness. Nothing in the pipeline reads the ambient
    *  ones, and the handler must not reintroduce them. */
@@ -61,6 +64,7 @@ function defaultPlanRouteDeps(): PlanRouteDeps {
   const enrichmentBatchStore = createEnrichmentBatchStore(db);
   return {
     store: createPlanStore(db),
+    personas: createPersonaStore(db),
     runPlan,
     now: () => new Date(),
     rng: Math.random,
@@ -92,4 +96,13 @@ export const planRouteDeps: { create: () => PlanRouteDeps } = {
 /** `GET /api/jobs/[id]` needs one thing, so it asks for one thing. */
 export const jobsRouteDeps: { create: () => { store: PlanStore } } = {
   create: () => ({ store: createPlanStore(getDb()) }),
+};
+
+/** `POST /api/persona`. Same shape and the same reason: one seam, no database
+ *  in the handler test. The clock is injected here too — a stored `updated_at`
+ *  is as reproducible as the plan it later feeds. */
+export const personaRouteDeps: {
+  create: () => { personas: PersonaStore; now: () => Date };
+} = {
+  create: () => ({ personas: createPersonaStore(getDb()), now: () => new Date() }),
 };

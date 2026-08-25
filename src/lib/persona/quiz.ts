@@ -588,3 +588,22 @@ export function matchArchetype(dimensions: DimensionScores): PersonaResult {
 export function calculatePersona(answers: QuizAnswers): PersonaResult {
   return matchArchetype(scoreAnswers(answers));
 }
+
+/**
+ * Whether an answer set can be scored at all.
+ *
+ * `scoreAnswers` indexes straight into `QUESTIONS[i].options[answer]`, so an
+ * index one past the end of a three-option question throws rather than scoring
+ * badly. The rule lives here because this module owns `QUESTIONS`; a route
+ * handler checking option counts would be a second copy of the quiz's shape.
+ *
+ * `null` is valid — an unanswered question simply contributes nothing and the
+ * average is taken over the answered ones.
+ */
+export function isScorableAnswers(answers: QuizAnswers): boolean {
+  if (answers.length !== QUESTIONS.length) return false;
+  return answers.every((answer, index) => {
+    if (answer === null) return true;
+    return Number.isInteger(answer) && answer >= 0 && answer < QUESTIONS[index].options.length;
+  });
+}

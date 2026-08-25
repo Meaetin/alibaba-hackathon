@@ -88,3 +88,18 @@ export interface QuizIllustration {
 }
 
 export type QuizStage = "intro" | "questions" | "result";
+
+/**
+ * A persona as the planner receives it: the answers exactly as given, and the
+ * result derived from them.
+ *
+ * Both halves travel together because the derivation is code. `calculatePersona`
+ * is a scoring function that can be retuned; an answer set survives that, a
+ * score does not. Anything that needs to know *which option* was picked — the
+ * per-axis signals in the planner's persona brief — reads `answers`, because an
+ * averaged dimension cannot tell you that.
+ */
+export interface TravelPersona {
+  answers: QuizAnswers;
+  result: PersonaResult;
+}

@@ -82,6 +82,10 @@ export function itineraryRow(result: PlanResult): ItineraryInsert {
     start_date: request.startDate,
     total_days: request.totalDays,
     profile: request.profile,
+    // Written on every plan, including when the persona has not changed. The
+    // row it came from is rewritten on a retake, so a snapshot taken only the
+    // first time is a snapshot missing exactly when it is asked for.
+    persona: request.persona ?? null,
     funnel_stats: result.funnelStats,
     // Diagnostics, not content. Kept because both halves of it — what Pass B
     // said, and what we refused to take from it — otherwise exist only for the
@@ -278,7 +282,9 @@ export function createPlanStore(db: Database): PlanStore {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function isUuid(value: string): boolean {
+/** Exported so `personas.ts` guards its own id lookups with the same rule
+ *  rather than growing a second copy of this regex. */
+export function isUuid(value: string): boolean {
   return UUID.test(value);
 }
 

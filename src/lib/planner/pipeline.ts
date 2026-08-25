@@ -37,6 +37,8 @@
  * precisely so a real provider can replace it without touching this file.
  */
 
+import type { TravelPersona } from "@/lib/persona/types";
+
 import { assignDays, dayCapacity, type AssignDayRequest, type AssignResult } from "./assign";
 import { clusterPlaces } from "./cluster";
 import { PLANNER_DEBUG_VERSION, type PlannerDebug } from "./debug";
@@ -104,6 +106,14 @@ export interface PlanRequest {
   name?: string;
   profile: PreferenceProfile;
   options?: SchedulerOptions;
+  /**
+   * The traveller's quiz answers and the archetype derived from them, already
+   * resolved from the `personaId` on the wire — the pipeline never reads a
+   * table. **Optional, and absent must plan exactly as this pipeline planned
+   * before personas existed**; that is what lets the Gate A snapshots stay
+   * still for a traveller who never took the quiz.
+   */
+  persona?: TravelPersona;
 }
 
 // ── progress ─────────────────────────────────────────────────────────────────
