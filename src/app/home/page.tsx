@@ -836,8 +836,13 @@ export default function DashboardPage() {
                 key={featuredJob.id}
                 data-region="home-latest-viewed"
                 className="h-full md:col-start-2 md:row-start-2 lg:col-start-2 lg:row-start-2"
+                // Keyed on the job this tile renders, the way every other card
+                // here is keyed on its own id. It used to read `filteredContent[0]`,
+                // left over from when this tile held the latest content item —
+                // which by definition is *not* what it renders once a job takes
+                // it, and which is undefined outright when there is no content.
                 initial={
-                  newItemIdsRef.current.has(filteredContent[0].id) && !shouldReduceMotion
+                  newItemIdsRef.current.has(featuredJob.id) && !shouldReduceMotion
                     ? motionPresets.completionHandoff.initial
                     : false
                 }
@@ -846,7 +851,7 @@ export default function DashboardPage() {
                   shouldReduceMotion ? motionTransitions.instant : motionTransitions.spatial
                 }
                 onAnimationComplete={() => {
-                  newItemIdsRef.current.delete(filteredContent[0].id);
+                  newItemIdsRef.current.delete(featuredJob.id);
                 }}
               >
                 <ItineraryQueueCardItem
