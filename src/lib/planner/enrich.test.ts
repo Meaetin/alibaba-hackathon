@@ -3,17 +3,28 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_VISIT_MINUTES,
   MIN_VISIT_MINUTES,
+  buildEnrichmentInput,
+  buildEnrichmentRequest,
   clampVisitMinutes,
   collectEnrichmentBatch,
   createInMemoryEnrichmentStore,
+  enrichPlaces,
   enrichmentSourceHash,
   readEnrichments,
   submitEnrichmentBatch,
   toEnrichmentSubject,
+  type EnrichmentStore,
   type EnrichmentSubject,
   type StoredEnrichment,
 } from "./enrich";
-import { MODELS, PROMPT_VERSIONS, type BatchClient, type BatchHandle } from "./openai";
+import {
+  MODELS,
+  PROMPT_VERSIONS,
+  type BatchClient,
+  type BatchHandle,
+  type ResponsesClient,
+  type ResponsesResult,
+} from "./openai";
 import { resolveVisitDuration } from "./duration";
 import type { CandidatePlace } from "./types";
 
@@ -859,3 +870,210 @@ describe("toEnrichmentSubject", () => {
     expect(enrichmentSourceHash(toEnrichmentSubject(place))).toBe(enrichmentSourceHash(place));
   });
 });
+
+// ── the live path ────────────────────────────────────────────────────────────
+
+/**
+ * `enrichPlaces` is the answer to a question the batch could not answer: the
+ * batch is half price and up to 24 hours, so its results reach the *next* plan
+ * touching a place, never the one that queued them. Every first trip to a new
+ * city therefore sized its visits from the type table in `duration.ts` and
+ * looked complete doing it.
+ *
+ * Which is also why the assertions below are on the counters. Every failure
+ * here degrades to that same type table, so a broken implementation still
+ * produces a whole itinerary — `stats.failed` is the only thing that can tell
+ * a working run from a silently useless one.
+ */
+describe('enrichPlaces', () => {
+  const subject = (id: string, over: Partial<EnrichmentSubject> = {}): EnrichmentSubject => ({
+    placeId: id,
+    name: `Place ${id}`,
+    types: ['museum'],
+    city: 'Kyoto',
+    rating: 4.5,
+    userRatingCount: 100,
+    reviewSnippets: [{ rating: 5, text: 'lovely' }],
+    ...over,
+  }) as EnrichmentSubject
+
+  const answer = {
+    description: 'A fine place.',
+    tags: ['quiet'],
+    confidence: 0.8,
+    visitMinutesMin: 40,
+    visitMinutesMax: 80,
+    signatureDishes: [],
+    bestTimeOfDay: null,
+    crowdProfile: null,
+  }
+
+  /** Never really sleeps — a test that waits out a backoff is a test nobody runs. */
+  const noSleep = async () => {}
+
+  /** A Responses stand-in whose nth answer is `reply(n)`. Returning an `Error`
+   *  means that attempt throws, which is how the retry cases are written. */
+  function client(reply: (n: number) => Partial<ResponsesResult> | Error): ResponsesClient & {
+    calls: number
+  } {
+    let calls = 0
+    const fake: ResponsesClient & { calls: number } = {
+      calls: 0,
+      async create() {
+        const out = reply(calls++)
+        fake.calls = calls
+        if (out instanceof Error) throw out
+        return {
+          output_text: '',
+          usage: { input_tokens: 100, output_tokens: 20 },
+          ...out,
+        } as ResponsesResult
+      },
+    }
+    return fake
+  }
+
+  const ok = () => client(() => ({ output_text: JSON.stringify(answer) }))
+
+  it('stores what it fetched and returns it for this plan', async () => {
+    const store = createInMemoryEnrichmentStore()
+    const result = await enrichPlaces([subject('a'), subject('b')], {
+      client: ok(),
+      store,
+      now: NOW,
+      sleep: noSleep,
+    })
+
+    expect(result.stats).toMatchObject({ requested: 2, enriched: 2, failed: 0 })
+    expect(result.enrichments.get('a')?.avgVisitMinutes).toEqual([40, 80])
+    // Stored too, or the next plan pays for the same answer again.
+    expect((await store.getMany(['a', 'b'])).map((row) => row.placeId).sort()).toEqual(['a', 'b'])
+  })
+
+  it('counts the tokens of every call, including the ones that came back useless', async () => {
+    const store = createInMemoryEnrichmentStore()
+    const result = await enrichPlaces([subject('a'), subject('b')], {
+      client: client((n) =>
+        n === 0 ? { output_text: JSON.stringify(answer) } : { output_text: '{"not":"valid"}' },
+      ),
+      store,
+      now: NOW,
+      sleep: noSleep,
+    })
+
+    // Costing only the usable answers would make a batch look cheaper the worse
+    // it went — the same rule the collect path already keeps.
+    expect(result.stats.usage.calls).toBe(2)
+    expect(result.stats.usage.inputTokens).toBe(200)
+    expect(result.stats).toMatchObject({ enriched: 1, failed: 1 })
+  })
+
+  it('degrades a failed place instead of throwing, so the trip still plans', async () => {
+    const result = await enrichPlaces([subject('a')], {
+      client: client(() => new Error('boom')),
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+      retries: 0,
+    })
+    expect(result.stats).toMatchObject({ enriched: 0, failed: 1 })
+    expect(result.failures[0]).toMatchObject({ placeId: 'a', reason: 'api_error' })
+  })
+
+  it('retries a rate limit and keeps the answer when it clears', async () => {
+    const rateLimited = Object.assign(new Error('429 rate_limit_exceeded'), { status: 429 })
+    const result = await enrichPlaces([subject('a')], {
+      client: client((n) =>
+        n === 0 ? rateLimited : { output_text: JSON.stringify(answer) },
+      ),
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+    })
+    expect(result.stats).toMatchObject({ enriched: 1, failed: 0 })
+  })
+
+  it('does not retry a request that is simply wrong', async () => {
+    // A 400 is our bug. Asking again buys the same answer at twice the price.
+    const badRequest = Object.assign(new Error('400 invalid schema'), { status: 400 })
+    const fake = client(() => badRequest)
+    await enrichPlaces([subject('a')], {
+      client: fake,
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+      retries: 3,
+    })
+    expect(fake.calls).toBe(1)
+  })
+
+  it('names a truncated response rather than calling it malformed', async () => {
+    // A response cut off at the token cap parses exactly like a model writing
+    // nonsense, and the two need different fixes — one is a number.
+    const result = await enrichPlaces([subject('a')], {
+      client: client(() => ({
+        output_text: '{"description":"A fine pl',
+        status: 'incomplete',
+        incompleteReason: 'max_output_tokens',
+      })),
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+    })
+    expect(result.failures[0].message).toContain('max_output_tokens')
+  })
+
+  it('still serves this plan when the cache write is refused', async () => {
+    const refusing: EnrichmentStore = {
+      ...createInMemoryEnrichmentStore(),
+      async putMany() {
+        throw new Error('connection terminated')
+      },
+    }
+    const result = await enrichPlaces([subject('a')], {
+      client: ok(),
+      store: refusing,
+      now: NOW,
+      sleep: noSleep,
+    })
+    // The answer is in hand; what was lost is the next plan's cache hit.
+    expect(result.enrichments.get('a')).toBeDefined()
+    expect(result.stats.storeError).toContain('connection terminated')
+  })
+
+  it('sends one request per distinct place', async () => {
+    const fake = ok()
+    await enrichPlaces([subject('a'), subject('a')], {
+      client: fake,
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+    })
+    expect(fake.calls).toBe(1)
+  })
+
+  it('makes no call at all for an empty list', async () => {
+    const fake = ok()
+    const result = await enrichPlaces([], {
+      client: fake,
+      store: createInMemoryEnrichmentStore(),
+      now: NOW,
+      sleep: noSleep,
+    })
+    expect(fake.calls).toBe(0)
+    expect(result.stats.usage.calls).toBe(0)
+  })
+
+  it('sends the same request the batch would have sent', async () => {
+    // The two paths are separated by a day and a cache, and
+    // `enrichmentSourceHash` digests the payload — so a live answer and a
+    // batched one that phrased the place differently would each look stale to
+    // the other's reader.
+    const place = subject('a')
+    const request = buildEnrichmentRequest(place, MODELS.enrich)
+    expect(request.reasoning.effort).toBe('none')
+    expect(request.model).toBe(MODELS.enrich)
+    const userBlock = request.input.find((block) => block.role === 'user')!
+    expect(JSON.parse(userBlock.content as string)).toEqual(buildEnrichmentInput(place))
+  })
+})

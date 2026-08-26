@@ -30,7 +30,7 @@ export function createEnrichmentBatchStore(db: Database): EnrichmentBatchStore {
       });
     },
 
-    async updateStatus(providerBatchId, status, now, failures) {
+    async updateStatus(providerBatchId, status, now, failures, usage) {
       await db
         .update(enrichment_batches)
         .set({
@@ -38,8 +38,9 @@ export function createEnrichmentBatchStore(db: Database): EnrichmentBatchStore {
           updated_at: now,
           // Only written when the caller has an answer. Passing `undefined`
           // leaves the column alone, so a status-only patch cannot blank a
-          // record of what the batch lost.
+          // record of what the batch lost — or of what it cost.
           ...(failures ? { failures: [...failures] as EnrichmentFailure[] } : {}),
+          ...(usage ? { usage } : {}),
         })
         .where(eq(enrichment_batches.provider_batch_id, providerBatchId));
     },

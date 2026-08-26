@@ -39,9 +39,15 @@ import {
   jsonSchemaFormat,
   parseJsonl,
   withRetry,
+  withBackoff,
   type BatchClient,
   type BatchHandle,
+  type ResponsesClient,
+  type ResponsesRequest,
+  type ResponsesUsage,
 } from "./openai";
+import { mapWithConcurrency } from "./http";
+import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
 import type { RetrievedPlace } from "./retrieval";
 import type { PlaceEnrichment } from "./types";
 
@@ -559,16 +565,205 @@ function batchLine(place: EnrichmentSubject, model: string) {
     custom_id: place.placeId,
     method: "POST",
     url: ENRICH_BATCH_ENDPOINT,
-    body: {
-      model,
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: JSON.stringify(buildEnrichmentInput(place)) },
-      ],
-      reasoning: { effort: "none" },
-      text: { format: jsonSchemaFormat("place_enrichment", EnrichmentOutputSchema) },
-    },
+    body: buildEnrichmentRequest(place, model),
   };
+}
+
+/**
+ * The one request both paths send.
+ *
+ * Shared rather than written twice because the two are separated by a day and a
+ * cache: `enrichmentSourceHash` digests `buildEnrichmentInput`, so a batch and a
+ * live call that phrased the same place differently would produce two rows that
+ * each look fresh to the other's reader. One builder, one question.
+ */
+export function buildEnrichmentRequest(
+  place: EnrichmentSubject,
+  model: string,
+): ResponsesRequest {
+  return {
+    model,
+    input: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: JSON.stringify(buildEnrichmentInput(place)) },
+    ],
+    reasoning: { effort: "none" },
+    text: { format: jsonSchemaFormat("place_enrichment", EnrichmentOutputSchema) },
+  };
+}
+
+// ── the write path: live ─────────────────────────────────────────────────────
+
+/**
+ * How many enrichment calls are in flight at once.
+ *
+ * Measured against a real 58-place shortlist on this account: 8 took 19.6s, 16
+ * took 11.4s, and 24 and 32 bought nothing more than a longer tail — 32's worst
+ * call was 8.9s against 3.7s at 16. No 429 at any level, because the binding
+ * limit is not requests (58 against 500/min) but tokens: one pass burns ~48k of
+ * a 200,000/min budget, so roughly three plans a minute is the ceiling however
+ * this is set. 16 is the knee of the curve.
+ */
+export const ENRICH_CONCURRENCY = 16;
+
+export interface EnrichPlacesDeps {
+  client: ResponsesClient;
+  store: EnrichmentStore;
+  /** Injected so `expiresAt` is decidable. Never `new Date()` inside. */
+  now: Date;
+  model?: string;
+  promptVersion?: number;
+  concurrency?: number;
+  retries?: number;
+  /** Injected for the same reason as `now` — a test that really waits four
+   *  seconds for a backoff is a test nobody runs. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+export interface EnrichPlacesStats {
+  requested: number;
+  /** Places that came back with a usable answer and were stored. */
+  enriched: number;
+  /** Places that did not. Each one falls to the type heuristic in
+   *  `duration.ts`, exactly as a cache miss did before this path existed. */
+  failed: number;
+  /** The database refused the write. The answers are still returned and used
+   *  for *this* plan; what is lost is the cache for the next one. */
+  storeError?: string;
+  /** Tokens, for `stats.cost`. Attributable to this plan, unlike the batch. */
+  usage: StageUsage;
+}
+
+export interface EnrichPlacesResult {
+  enrichments: Map<string, PlaceEnrichment>;
+  failures: EnrichmentFailure[];
+  stats: EnrichPlacesStats;
+}
+
+/**
+ * Enrich a shortlist now, rather than queueing it for tomorrow.
+ *
+ * The batch path is half price and up to 24 hours, which makes it a cache
+ * *warmer*: its answers reach the next plan touching those places, never the
+ * one that paid to queue them. That is why every first trip to a new city
+ * shipped on the type table — a park was 60 minutes because `park` is 60
+ * minutes in `duration.ts`, and the itinerary looked complete.
+ *
+ * This is the same request, sent now. It costs about a cent more per trip and
+ * ~11 seconds inside a stage that already reports progress.
+ *
+ * **Nothing here throws.** A place that fails is a place that falls to the type
+ * heuristic, which is precisely what a cache miss already did — so a bad minute
+ * at the provider degrades a trip's durations and never its existence. The
+ * counters are how you tell the two apart.
+ */
+export async function enrichPlaces(
+  subjects: readonly EnrichmentSubject[],
+  deps: EnrichPlacesDeps,
+): Promise<EnrichPlacesResult> {
+  const model = deps.model ?? MODELS.enrich;
+  const promptVersion = deps.promptVersion ?? PROMPT_VERSIONS.enrich;
+  const wanted = dedupeSubjects(subjects);
+
+  const stats: EnrichPlacesStats = {
+    requested: wanted.length,
+    enriched: 0,
+    failed: 0,
+    usage: emptyStageUsage("enrich", model),
+  };
+  const enrichments = new Map<string, PlaceEnrichment>();
+  const failures: EnrichmentFailure[] = [];
+  if (wanted.length === 0) return { enrichments, failures, stats };
+
+  const expiresAt = new Date(deps.now.getTime() + DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const rows: StoredEnrichment[] = [];
+
+  await mapWithConcurrency(wanted, deps.concurrency ?? ENRICH_CONCURRENCY, async (place: EnrichmentSubject) => {
+    const outcome = await withBackoff(
+      () => deps.client.create(buildEnrichmentRequest(place, model)),
+      { retries: deps.retries ?? 2, sleep: deps.sleep },
+    );
+
+    if ("error" in outcome) {
+      failures.push({ placeId: place.placeId, reason: "api_error", message: outcome.error.message });
+      return;
+    }
+    // Counted whatever came back. A response that failed to parse was still
+    // generated and still billed; costing only the usable ones would make a bad
+    // run look cheap.
+    stats.usage = addUsage(stats.usage, outcome.value.usage);
+
+    const result = readResponseText(place.placeId, outcome.value.output_text);
+    if ("reason" in result) {
+      // A response cut off at the token cap parses exactly like a model that
+      // wrote nonsense, and the two need different fixes — so the truncation
+      // reason rides along in the message rather than being lost.
+      const truncated = outcome.value.status === "incomplete";
+      failures.push(
+        truncated
+          ? { ...result, message: `incomplete: ${outcome.value.incompleteReason ?? "unknown"}` }
+          : result,
+      );
+      return;
+    }
+
+    const enrichment = toEnrichment(result.output);
+    enrichments.set(place.placeId, enrichment);
+    rows.push({
+      ...enrichment,
+      placeId: place.placeId,
+      model,
+      promptVersion,
+      sourceHash: enrichmentSourceHash(place),
+      expiresAt,
+    });
+  });
+
+  stats.enriched = rows.length;
+  stats.failed = failures.length;
+
+  // The store is the one thing here allowed to be a problem, and it still is
+  // not fatal: these answers are already in `enrichments` and this plan will
+  // use them. A refused write costs the *next* plan a cache hit, so it is
+  // reported rather than thrown.
+  if (rows.length > 0) {
+    try {
+      await deps.store.putMany(rows);
+      await deps.store.updateStayDuration(stayDurationBackfill(rows));
+    } catch (error) {
+      stats.storeError = messageOf(error);
+      console.error("[enrich] answers could not be cached", error);
+    }
+  }
+
+  return { enrichments, failures, stats };
+}
+
+/**
+ * The scalar rung 1 of the visit-duration ladder reads. Midpoint of an
+ * already-clamped range, so it is finite, positive and inside [MIN, MAX] by
+ * construction. Shared by both write paths — a live answer and a batched one
+ * must backfill `locations.stay_duration` the same way or the same place gets
+ * two lengths depending on which path found it.
+ */
+function stayDurationBackfill(
+  rows: readonly StoredEnrichment[],
+): { placeId: string; minutes: number }[] {
+  return rows.map((row) => ({
+    placeId: row.placeId,
+    minutes: Math.round((row.avgVisitMinutes[0] + row.avgVisitMinutes[1]) / 2),
+  }));
+}
+
+function dedupeSubjects(subjects: readonly EnrichmentSubject[]): EnrichmentSubject[] {
+  const seen = new Map<string, EnrichmentSubject>();
+  // Projected on the way in, not merely typed: `EnrichmentSubject` is a `Pick`,
+  // which is compile-time only, so a whole `RetrievedPlace` handed in here would
+  // reach `enrichmentSourceHash` carrying coordinates and photo names.
+  for (const place of subjects) {
+    if (!seen.has(place.placeId)) seen.set(place.placeId, toEnrichmentSubject(place));
+  }
+  return [...seen.values()];
 }
 
 // ── the write path: collect ──────────────────────────────────────────────────
@@ -623,6 +818,16 @@ export interface EnrichmentCollectStats {
   /** Rows offered to the `stay_duration` backfill. The store applies them only
    *  where the column is null, and it doesn't report back how many took. */
   stayDurationsOffered: number;
+  /**
+   * What the batch spent, read off each output line's `response.body.usage`.
+   *
+   * Deliberately **not** folded into the submitting plan's cost. A batch is
+   * queued by one itinerary and its answers serve every later trip that touches
+   * those places — charging it to the trip that happened to queue it would
+   * overstate that one and let all the others read as free. It belongs to the
+   * batch, so it is stored on the batch row.
+   */
+  usage: StageUsage;
 }
 
 export interface CollectEnrichmentResult {
@@ -674,6 +879,7 @@ export async function collectEnrichmentBatch(
     stored: 0,
     failed: 0,
     stayDurationsOffered: 0,
+    usage: emptyStageUsage("enrich", model, true),
   };
 
   const retrieved = await withRetry(() => deps.batches.retrieve(batchId));
@@ -728,6 +934,11 @@ export async function collectEnrichmentBatch(
         continue;
       }
 
+      // Counted before the parse: a line that came back as a schema violation
+      // was still generated and still billed. Costing only the usable answers
+      // would make a batch look cheaper the worse it went.
+      stats.usage = addUsage(stats.usage, usageOf(row.response?.body));
+
       const failure = readOutput(placeId, row);
       if ("reason" in failure) {
         failures.push(failure);
@@ -760,12 +971,7 @@ export async function collectEnrichmentBatch(
     return { batch, pending: false, stored, failures, stats };
   }
 
-  // The scalar the ladder's rung 1 reads. Midpoint of an already-clamped range,
-  // so it is finite, positive and inside [MIN, MAX] by construction.
-  const backfill = stored.map((row) => ({
-    placeId: row.placeId,
-    minutes: Math.round((row.avgVisitMinutes[0] + row.avgVisitMinutes[1]) / 2),
-  }));
+  const backfill = stayDurationBackfill(stored);
 
   // The store is the one dependency here that can still throw: `putMany` writes
   // through a foreign key to `locations`, so a place whose location row was
@@ -867,6 +1073,36 @@ function readOutput(
   // would leave Pass C's fallback with a bare name and a time.
   if (!isUsable(validated.data)) return { placeId, reason: "empty_description" };
   return { output: validated.data };
+}
+
+/**
+ * The same validation, for a response that arrived over the wire rather than in
+ * a file. Shared with `readOutput` so a schema change cannot be applied to one
+ * path and forgotten on the other.
+ */
+function readResponseText(
+  placeId: string,
+  text: string,
+): { output: EnrichmentOutput } | EnrichmentFailure {
+  if (text.trim().length === 0) return { placeId, reason: "no_output_text" };
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    return { placeId, reason: "malformed_output", message: messageOf(error) };
+  }
+  const validated = EnrichmentOutputSchema.safeParse(json);
+  if (!validated.success) {
+    return { placeId, reason: "schema_violation", message: validated.error.message };
+  }
+  if (!isUsable(validated.data)) return { placeId, reason: "empty_description" };
+  return { output: validated.data };
+}
+
+/** A batch line's body is a whole Responses payload, `usage` included. */
+function usageOf(body: unknown): ResponsesUsage | undefined {
+  const response = body as { usage?: ResponsesUsage } | null | undefined;
+  return response?.usage;
 }
 
 /**

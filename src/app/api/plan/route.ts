@@ -257,6 +257,7 @@ async function runPlanJob(
       store: deps.locations,
       enrichments: deps.enrichments,
       enqueueEnrichments: deps.enqueueEnrichments,
+      enrichNow: deps.enrichNow,
       responses: deps.responses,
       fetch: deps.fetch,
       blobs: deps.blobs,

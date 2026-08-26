@@ -8,6 +8,7 @@ import {
   type EnrichmentSubject,
 } from "./enrich";
 import type { BatchClient } from "./openai";
+import type { StageUsage } from "./pricing";
 
 export interface StoredEnrichmentBatch {
   providerBatchId: string;
@@ -38,6 +39,7 @@ export interface EnrichmentBatchStore {
     status: string,
     now: Date,
     failures?: readonly EnrichmentFailure[],
+    usage?: StageUsage,
   ): Promise<void>;
 }
 
@@ -155,6 +157,7 @@ export async function collectQueuedEnrichments(deps: {
           result.batch.status,
           deps.now,
           result.failures,
+          result.stats.usage,
         );
       }
       if (result.storeError) {

@@ -216,12 +216,16 @@ interface AssignPayload {
 
 export interface FakeResponsesOptions {
   /** Throw on every call — the "Pass B is down" case. */
-  fail?: 'assign' | 'narrate' | 'theme' | 'all'
+  fail?: 'assign' | 'narrate' | 'theme' | 'enrich' | 'all'
   /** The error the failing call throws. */
   error?: Error
   /** Anchor ids the theme fake should name instead of real ones — the
    *  hallucination case, which is the whole reason anchors are verified. */
   hallucinateAnchors?: readonly string[]
+  /** Answer enrichment with something that is not an enrichment. A schema
+   *  violation is not an exception, so it is the one enrichment failure the
+   *  `fail` switch above cannot produce. */
+  enrichmentGarbage?: boolean
 }
 
 export interface FakeResponses extends ResponsesClient {
@@ -255,15 +259,51 @@ export function createFakeResponses(options: FakeResponsesOptions = {}): FakeRes
       const payload = JSON.parse(content) as Record<string, unknown>
       const isTheme = 'survey' in payload
       if (isTheme && options.fail === 'theme') throw boom
+      // Enrichment shares `MODELS.enrich` with nothing, but it shares the model
+      // *name* with narration — so this dispatches on shape like the theme case
+      // above. `buildEnrichmentInput` is the only payload with `reviewSnippets`.
+      const isEnrich = 'reviewSnippets' in payload
+      if (isEnrich && options.fail === 'enrich') throw boom
       return {
         output_text: isTheme
           ? JSON.stringify(themesFor(payload as unknown as ThemePayload, options))
           : isAssign
             ? JSON.stringify(assignmentFor(payload as unknown as AssignPayload))
-            : JSON.stringify(narrationFor(payload)),
+            : isEnrich
+              ? JSON.stringify(enrichmentFor(payload as unknown as EnrichPayload, options))
+              : JSON.stringify(narrationFor(payload)),
         usage: { input_tokens: 500, output_tokens: 100, input_tokens_details: { cached_tokens: 0 } },
       }
     },
+  }
+}
+
+interface EnrichPayload {
+  name: string
+  types: string[]
+}
+
+/**
+ * A deterministic enrichment, derived from the payload so two places never get
+ * the same answer.
+ *
+ * `visitMinutes` is the field that matters: it is rung 2 of the ladder in
+ * `duration.ts` and outranks the type table, so a test that wants to prove the
+ * live path reached the packer asserts on a duration only this can produce.
+ * Deliberately not a round number a type heuristic could also land on.
+ */
+function enrichmentFor(payload: EnrichPayload, options: FakeResponsesOptions) {
+  if (options.enrichmentGarbage) return { not: 'an enrichment' }
+  const spread = (payload.name.length % 4) * 5
+  return {
+    description: `${payload.name} is worth the detour.`,
+    tags: payload.types.slice(0, 2).map((type) => `fake-${type}`),
+    confidence: 0.5,
+    visitMinutesMin: 35 + spread,
+    visitMinutesMax: 95 + spread,
+    signatureDishes: [],
+    bestTimeOfDay: null,
+    crowdProfile: null,
   }
 }
 
