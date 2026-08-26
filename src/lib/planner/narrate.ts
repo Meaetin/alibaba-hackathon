@@ -41,6 +41,7 @@
 import { z } from "zod";
 
 import { mapWithConcurrency } from "./http";
+import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
 import {
   MODELS,
   jsonSchemaFormat,
@@ -493,6 +494,11 @@ export interface NarrateStats {
   /** Stops whose response was cut off at `max_output_tokens`. Part of
    *  `fallback`, split out because the fix is a number, not a prompt. */
   truncated: number;
+  /** What this pass spent, for `stats.cost`. Tokens rather than dollars: list
+   *  prices move and a stored figure would become a wrong number nobody can
+   *  re-measure — see `pricing.ts`. Counts every call, including the ones that
+   *  came back truncated or unparseable, because those bill too. */
+  usage: StageUsage;
 }
 
 export interface NarrateResult {
@@ -529,6 +535,7 @@ export async function narrateStops(
     cachedTokens: 0,
     rejectedDishes: 0,
     truncated: 0,
+    usage: emptyStageUsage("narrate", model),
   };
 
   await mapWithConcurrency(stops, deps.concurrency ?? DEFAULT_CONCURRENCY, async (stop) => {
@@ -555,6 +562,7 @@ export async function narrateStops(
       if ("error" in outcome) {
         message = outcome.error.message;
       } else {
+        stats.usage = addUsage(stats.usage, outcome.value.usage);
         stats.cachedTokens += outcome.value.usage?.input_tokens_details?.cached_tokens ?? 0;
         // A response cut off at `max_output_tokens` arrives with a 200 and half
         // a JSON object, so the parser below would call it malformed and the

@@ -231,6 +231,57 @@ export async function withRetry<T>(
   return { error: last };
 }
 
+/**
+ * `withRetry` with a wait between attempts, for calls that fan out.
+ *
+ * The plain version retries immediately, which is right for a one-off flake and
+ * useless against a rate limit: sixty concurrent calls that all 429 will all
+ * retry in the same millisecond and all 429 again. This backs off
+ * exponentially, and only for errors worth retrying — a 400 is a bug in the
+ * request and asking again just spends the budget twice.
+ *
+ * `sleep` is injected for the same reason `now` and `rng` are: a test that
+ * really waits four seconds is a test nobody runs.
+ */
+export async function withBackoff<T>(
+  attempt: () => Promise<T>,
+  options: {
+    retries?: number;
+    /** First wait, doubling each attempt. */
+    baseDelayMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
+): Promise<{ value: T } | { error: Error }> {
+  const retries = options.retries ?? 2;
+  const base = options.baseDelayMs ?? 500;
+  const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+
+  let last: Error = new Error("no attempt made");
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return { value: await attempt() };
+    } catch (error) {
+      last = error instanceof Error ? error : new Error(String(error));
+      if (i === retries || !isRetryable(last)) break;
+      await sleep(base * 2 ** i);
+    }
+  }
+  return { error: last };
+}
+
+/**
+ * Worth asking again: a rate limit, or the provider having a bad minute.
+ *
+ * A 4xx that is not 429 is our request being wrong, and retrying it produces
+ * the same answer at twice the price. Anything with no status at all — a socket
+ * hang-up, a DNS failure — is transport and does get another go.
+ */
+export function isRetryable(error: Error): boolean {
+  const status = (error as { status?: unknown }).status;
+  if (typeof status !== "number") return true;
+  return status === 429 || status >= 500;
+}
+
 /** JSONL in, one parsed object per non-blank line. Batch output and error
  *  files are both this shape; a malformed line is skipped, not fatal. */
 export function parseJsonl(body: string): unknown[] {
