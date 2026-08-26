@@ -65,6 +65,7 @@ export const SEARCH_FIELD_MASK = [
   "places.priceRange",
   "places.regularOpeningHours",
   "places.businessStatus",
+  "places.googleMapsUri", // Pro — the mask is already Enterprise, so this is free
   "places.photos", // resource NAMES only — resolving to an image is a separate SKU
 ].join(",");
 
@@ -305,6 +306,9 @@ export interface RetrievedPlace extends CandidatePlace {
   city: string;
   formattedAddress?: string;
   priceRange?: PriceRange;
+  /** Google's canonical link for the place. Undefined for anything retrieved
+   *  before the field joined `SEARCH_FIELD_MASK`. */
+  googleMapsUri?: string;
   /** Up to 5. Null means the shortlist hydration has not run; `[]` means it
    *  ran and Google returned no reviews. */
   reviewSnippets: ReviewSnippet[] | null;
@@ -817,6 +821,7 @@ interface RawPlace {
   priceRange?: unknown;
   regularOpeningHours?: { periods?: OpeningPeriod[] };
   businessStatus?: string;
+  googleMapsUri?: string;
   photos?: { name?: string }[];
 }
 
@@ -848,6 +853,7 @@ function normalizePlace(raw: RawPlace, city: string, now: Date): RetrievedPlace 
     priceLevel: toPriceLevelOrdinal(raw.priceLevel),
     priceRange: toPriceRange(raw.priceRange),
     businessStatus: raw.businessStatus,
+    googleMapsUri: raw.googleMapsUri,
     openingPeriods: raw.regularOpeningHours?.periods,
     reviewSnippets: null,
     shortlistHydratedAt: null,

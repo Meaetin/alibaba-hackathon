@@ -78,12 +78,12 @@ export function activityLocationToPlaceView(
     rating: loc.rating,
     userRatingCount: loc.user_rating_count,
     address: loc.formatted_address,
-    // Phone, website and the Maps link are not columns in `locations`, so a
-    // saved activity has them only when the caller passes them in.
+    // Phone and website are not columns in `locations`, so a saved activity has
+    // them only when the caller passes them in.
     phone: opts.phone ?? null,
     website: opts.website ?? null,
     openingHoursLines: weekdayDescriptions.length ? weekdayDescriptions : null,
-    googleMapsUri: null,
+    googleMapsUri: loc.google_maps_uri ?? null,
     // Google's own one-line description of the place — the Atmosphere field the
     // shortlist call already pays for, and a better blurb than the neighbourhood
     // string this used to show.

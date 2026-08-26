@@ -245,7 +245,9 @@ function activityToDetailLocation(activity: ItineraryActivityDetail) {
     primaryType: loc?.primary_type ?? "",
     latitude: loc?.latitude ?? 0,
     longitude: loc?.longitude ?? 0,
-    googleMapsUri: null,
+    googleMapsUri: loc?.google_maps_uri ?? null,
+    placeId: activity.place_id,
+    stopContent: activity.content ?? null,
   };
 }
 

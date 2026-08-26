@@ -105,7 +105,7 @@ function resolveBadge(
 
 // ─── Time Helpers ─────────────────────────────────────────────────────────────
 
-function formatTime(time: string | null, timezone?: string): string | null {
+function formatTime(time: string | null, timezone = "UTC"): string | null {
   if (!time) return null;
   if (time.includes("T")) {
     const d = new Date(time);
@@ -114,7 +114,7 @@ function formatTime(time: string | null, timezone?: string): string | null {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      ...(timezone ? { timeZone: timezone } : {}),
+      timeZone: timezone,
     });
   }
   const parts = time.split(":");
@@ -129,7 +129,7 @@ function formatTime(time: string | null, timezone?: string): string | null {
 function formatTimeRange(
   startTime: string | null,
   endTime: string | null,
-  timezone?: string,
+  timezone = "UTC",
 ): string | null {
   const start = formatTime(startTime, timezone);
   const end = formatTime(endTime, timezone);
@@ -140,33 +140,17 @@ function formatTimeRange(
 
 // ─── Duration Helper ──────────────────────────────────────────────────────────
 
-function parseTimeToMins(time: string | null): number | null {
-  if (!time) return null;
-  if (time.includes("T")) {
-    const d = new Date(time);
-    if (isNaN(d.getTime())) return null;
-    return d.getHours() * 60 + d.getMinutes();
-  }
-  const parts = time.split(":");
-  if (parts.length < 2) return null;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (isNaN(h) || isNaN(m)) return null;
-  return h * 60 + m;
-}
-
 function formatActivityDuration(
   activity: ItineraryActivityDetail,
 ): string | null {
   let mins: number | null = null;
 
   if (activity.start_time && activity.end_time) {
-    const startMins = parseTimeToMins(activity.start_time);
-    const endMins = parseTimeToMins(activity.end_time);
-    if (startMins !== null && endMins !== null) {
-      const diff = endMins - startMins;
-      if (diff > 0) mins = diff;
-    }
+    // The shared helper, not a private copy reading the browser's clock: a stop
+    // whose start and end straddle local midnight would otherwise measure as a
+    // negative day.
+    const diff = parseTimeMins(activity.end_time) - parseTimeMins(activity.start_time);
+    if (diff > 0) mins = diff;
   }
 
   if (

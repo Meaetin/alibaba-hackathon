@@ -107,6 +107,10 @@ export function createLocationStore(db: Database): LocationStore {
             shortlist_hydrated_at: sql`coalesce(excluded.shortlist_hydrated_at, ${locations.shortlist_hydrated_at})`,
             photo_names: sql`excluded.photo_names`,
             business_status: sql`excluded.business_status`,
+            // A nearby-search refetch can legitimately answer with no URI where
+            // an earlier text search had one. Keeping the stored value is the
+            // same rule the editorial fields already follow.
+            google_maps_uri: sql`coalesce(excluded.google_maps_uri, ${locations.google_maps_uri})`,
             fetched_at: sql`excluded.fetched_at`,
             // Retrieval never learns these — enrichment (Step 12) backfills
             // stay_duration and Step 11 resolves the photo media. A refetch
@@ -190,6 +194,7 @@ export function toRetrievedPlace(row: LocationRow): RetrievedPlace {
     userRatingCount: row.user_rating_count ?? undefined,
     priceLevel: (row.price_level ?? undefined) as PriceLevelOrdinal | undefined,
     businessStatus: row.business_status ?? undefined,
+    googleMapsUri: row.google_maps_uri ?? undefined,
     stayDuration: row.stay_duration ?? undefined,
     openingPeriods: row.opening_periods ?? undefined,
     city: row.city ?? "",
@@ -232,6 +237,7 @@ export function toInsert(place: RetrievedPlace): LocationInsert {
     photo_urls: place.photoUrls,
     photos_resolved_at: place.photosResolvedAt,
     business_status: place.businessStatus ?? null,
+    google_maps_uri: place.googleMapsUri ?? null,
     stay_duration: place.stayDuration ?? null,
     fetched_at: place.fetchedAt,
   };

@@ -175,9 +175,9 @@ export interface ItineraryActivityDetail {
   location: ActivityLocationDetail | null;
 }
 
-/** The subset of `locations` the side panel can actually show. Website, phone
- *  numbers and the Google Maps links are not columns here and are gone from
- *  the panel rather than rendered blank. */
+/** The subset of `locations` the side panel can actually show. Website and
+ *  phone numbers are not columns here and are gone from the panel rather than
+ *  rendered blank. */
 export interface ActivityLocationDetail {
   id: string;
   name: string;
@@ -192,6 +192,9 @@ export interface ActivityLocationDetail {
   primary_type?: string | null;
   categories?: string[] | null;
   business_status?: string | null;
+  /** Google's canonical link. Null for anything retrieved before the field
+   *  joined the search mask — `googleMapsPlaceUrl` falls back to `place_id`. */
+  google_maps_uri?: string | null;
   /** Google's own one-line description, from the shortlist Details call. */
   editorial_summary?: string | null;
   /** Built from `opening_periods`, in the shape `weekdayDescriptionsFrom` in
@@ -282,6 +285,7 @@ export async function readItineraryDetail(
             primaryType: locations.primary_type,
             types: locations.types,
             businessStatus: locations.business_status,
+            googleMapsUri: locations.google_maps_uri,
             editorialSummary: locations.editorial_summary,
             openingPeriods: locations.opening_periods,
           })
@@ -328,6 +332,7 @@ export async function readItineraryDetail(
             primary_type: row.primaryType,
             categories: row.types ?? [],
             business_status: row.businessStatus,
+            google_maps_uri: row.googleMapsUri,
             editorial_summary: row.editorialSummary,
             regular_opening_hours: (() => {
               const descriptions = weekdayDescriptionsFrom(row.openingPeriods);
