@@ -39,6 +39,7 @@ import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { TravelMode } from "@/lib/planner/pack";
 import type { EnrichmentFailure, EnrichmentSubject } from "@/lib/planner/enrich";
+import type { StageUsage } from "@/lib/planner/pricing";
 import type { PlannerDebug } from "@/lib/planner/debug";
 
 /** `itinerary_activities.travel_to_next`. `TravelLeg` plus the mode the packer
@@ -102,6 +103,11 @@ export const locations = pgTable(
     /** Null = names stored, media never fetched. */
     photos_resolved_at: timestamptz("photos_resolved_at"),
     business_status: text("business_status"),
+    /** Google's canonical link for the place. Pro tier, so it rides free on a
+     *  search mask that already asks for `rating` and `regularOpeningHours`.
+     *  Null for every place retrieved before the field was on the mask — the
+     *  page falls back to `place_id` via `googleMapsPlaceUrl`. */
+    google_maps_uri: text("google_maps_uri"),
     /** Minutes; backfilled from enrichment. */
     stay_duration: integer("stay_duration"),
     fetched_at: timestamptz("fetched_at").notNull().defaultNow(),
@@ -179,6 +185,11 @@ export const enrichment_batches = pgTable(
      *  that only ever appear in the provider's error file. Written when the
      *  batch goes terminal; the places themselves just miss the cache again. */
     failures: jsonb("failures").$type<EnrichmentFailure[]>().notNull().default([]),
+    /** What the batch spent, written when it goes terminal. It lives here and
+     *  not on the itinerary that queued it: one batch's answers serve every
+     *  later trip touching those places, so charging it to the submitter would
+     *  overstate that trip and make all the others read as free. */
+    usage: jsonb("usage").$type<StageUsage>(),
     created_at: timestamptz("created_at").notNull().defaultNow(),
     updated_at: timestamptz("updated_at").notNull().defaultNow(),
   },
