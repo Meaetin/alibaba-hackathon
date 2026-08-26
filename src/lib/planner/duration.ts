@@ -10,6 +10,14 @@
  * Pace is NOT a rung: it's a multiplier applied to `preferred` after the
  * ladder resolves, and it never pushes `preferred` outside [min, max] — the
  * packer relies on those bounds being honest.
+ *
+ * Every number that leaves here is a multiple of `VISIT_STEP_MINUTES`. Nothing
+ * upstream measures a visit to the minute — the type table is round numbers, a
+ * model answers in round numbers, and `stay_duration` is somebody's estimate —
+ * so a 43-minute visit was never a fact, only the arithmetic of a 0.85 pace
+ * multiplier and a packer growing a stop one minute at a time until the day
+ * filled. Rounding at the source is what lets the packer keep every start and
+ * end on a clock face a person would write down.
  */
 
 import type { CandidatePlace, Pace, PlaceEnrichment } from "./types";
@@ -22,6 +30,28 @@ export interface VisitDuration {
   preferred: number;
   /** Relaxed-pace ceiling. */
   max: number;
+}
+
+/**
+ * The grain of the whole schedule. Visits, travel legs and the packer's
+ * squeeze-and-grow all move in multiples of this, so every stamped time lands
+ * on :00, :05, :10 and so on.
+ *
+ * Five and not fifteen: a quarter-hour grain would round a 45-minute cafe to an
+ * hour and cost a stop a day. Five is under the precision anything here
+ * actually has, so it throws nothing away.
+ */
+export const VISIT_STEP_MINUTES = 5;
+
+/** Rounds to the nearest step, never below one whole step. */
+export function toStep(minutes: number): number {
+  return Math.max(VISIT_STEP_MINUTES, Math.round(minutes / VISIT_STEP_MINUTES) * VISIT_STEP_MINUTES);
+}
+
+/** Rounds up. For travel, where promising an earlier arrival than the route
+ *  allows is the failure that matters. */
+export function ceilToStep(minutes: number): number {
+  return Math.max(0, Math.ceil(minutes / VISIT_STEP_MINUTES) * VISIT_STEP_MINUTES);
 }
 
 export const PACE_MULTIPLIERS: Record<Pace, number> = {
@@ -61,11 +91,30 @@ export const TYPE_DURATION_MINUTES: Record<string, number> = {
 const SPREAD = { min: 2 / 3, max: 1.5 } as const;
 
 function fromScalar(preferred: number): VisitDuration {
-  return {
+  return quantizeDuration({
     min: Math.round(preferred * SPREAD.min),
     preferred,
     max: Math.round(preferred * SPREAD.max),
-  };
+  });
+}
+
+/**
+ * Snaps a duration to the step grid, keeping `min <= preferred <= max`.
+ *
+ * The ordering has to survive the rounding: a range like [42, 43, 44] must not
+ * come back with `min` above `preferred`, because the packer treats those
+ * bounds as honest and squeezes against them.
+ *
+ * Exported because `pack.ts` applies it again on the way in. Every production
+ * duration already comes from this module and is already on the grid, so that
+ * second call is a no-op — but the packer is the only thing in the pipeline
+ * that stamps a clock, and "every time is on the grid" has to be its own
+ * guarantee rather than a promise it inherits from whoever called it.
+ */
+export function quantizeDuration(duration: VisitDuration): VisitDuration {
+  const min = toStep(duration.min);
+  const preferred = Math.max(min, toStep(duration.preferred));
+  return { min, preferred, max: Math.max(preferred, toStep(duration.max)) };
 }
 
 function fromTypeHeuristic(place: CandidatePlace): number | undefined {
@@ -91,14 +140,14 @@ export function resolveVisitDuration(
     base = fromScalar(place.stayDuration);
   } else if (enrichment) {
     const [low, high] = enrichment.avgVisitMinutes;
-    base = { min: low, preferred: Math.round((low + high) / 2), max: high };
+    base = quantizeDuration({ min: low, preferred: Math.round((low + high) / 2), max: high });
   } else {
     base = fromScalar(fromTypeHeuristic(place) ?? DEFAULT_VISIT_MINUTES);
   }
 
   const preferred = Math.min(
     base.max,
-    Math.max(base.min, Math.round(base.preferred * PACE_MULTIPLIERS[pace])),
+    Math.max(base.min, toStep(base.preferred * PACE_MULTIPLIERS[pace])),
   );
   return { ...base, preferred };
 }

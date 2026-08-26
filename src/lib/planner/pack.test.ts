@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest'
 
 import type { CandidatePlace, Pace } from './types'
-import type { VisitDuration } from './duration'
+import { VISIT_STEP_MINUTES, type VisitDuration } from './duration'
 import {
   DAY_END_MIN,
   DAY_SKELETON,
@@ -77,6 +77,27 @@ const segmentFor = (day: PackedDay, name: string) =>
   activities(day).find((s) => s.placeId === `ChIJ_${name}`)
 const lengthOf = (s: { startMin: number; endMin: number }) => s.endMin - s.startMin
 const droppedIds = (day: PackedDay) => day.dropped.map((d) => d.placeId)
+
+/**
+ * Every boundary in the day sits on the step grid.
+ *
+ * This is what "9:00 AM – 9:43 AM" was: 43 minutes was never anyone's estimate
+ * of Merlion Park, it was a 40-minute floor plus the three spare minutes the
+ * wall clock had left over after the growth pass.
+ *
+ * Three things hold the grid, and mutating any one of them turns these red:
+ * quantized durations, travel legs rounded up, and a squeeze that surrenders
+ * whole steps. The growth pass stepping by five is **not** one of them — with
+ * the other three in place the room a stop can grow into is already a multiple
+ * of the step, so growing by single minutes reaches the same answer. That line
+ * is a speed win and this test deliberately does not claim otherwise.
+ */
+function expectOnStepGrid(day: PackedDay) {
+  for (const s of day.segments) {
+    expect(s.startMin % VISIT_STEP_MINUTES, `${s.kind} starts off-grid at ${s.startMin}`).toBe(0)
+    expect(s.endMin % VISIT_STEP_MINUTES, `${s.kind} ends off-grid at ${s.endMin}`).toBe(0)
+  }
+}
 
 function expectContiguous(day: PackedDay) {
   for (const s of day.segments) {
@@ -457,5 +478,48 @@ describe('pace', () => {
       const firstLeg = travels(day)[0]
       expect(lengthOf(firstLeg), `${pace} buffer`).toBe(PACE_PLANS[pace].bufferMin)
     }
+  })
+})
+
+describe('the step grid', () => {
+  // Odd travel legs and odd durations on purpose: the inputs here are exactly
+  // the shapes that used to leak a stray minute into the clock.
+  const awkward = (): PackDayInput => ({
+    assignments: [
+      assign('temple', 'activity', 0.9, dur(43, 61, 97)),
+      assign('tofu_lunch', 'lunch', 0.8, dur(37, 64, 91)),
+      assign('museum', 'activity', 0.85, dur(58, 77, 133)),
+      assign('izakaya', 'dinner', 0.75, dur(52, 73, 88)),
+    ],
+    flex: [flex('gallery', 0.55, dur(29, 43, 71))],
+  })
+
+  it.each(['relaxed', 'balanced', 'packed'] as const)(
+    'stamps every start and end on a five-minute mark at %s pace',
+    (pace) => {
+      const day = packDay(awkward(), pace, travel(13, 1035))
+      expectOnStepGrid(day)
+      expectContiguous(day)
+    },
+  )
+
+  it('rounds a travel leg up, never down', () => {
+    // Erring long is the only safe direction: a schedule that has you arriving
+    // before the route allows costs the stop it promised.
+    const day = packDay(typicalDay(), 'balanced', travel(13, 1035))
+    const leg = travels(day)[0]
+    // 13 minutes rounds to 15, plus balanced's 15-minute buffer.
+    expect(lengthOf(leg)).toBe(30)
+  })
+
+  it('keeps a leg that is already on the grid exactly as long as it was', () => {
+    const day = packDay(typicalDay(), 'balanced', travel(10, 800))
+    expect(lengthOf(travels(day)[0])).toBe(25) // 10 + 15
+  })
+
+  it('still fits and still drops on the grid when the day is over budget', () => {
+    const day = packDay(overShrinkable(), 'balanced', travel(18, 1400))
+    expectOnStepGrid(day)
+    expectContiguous(day)
   })
 })

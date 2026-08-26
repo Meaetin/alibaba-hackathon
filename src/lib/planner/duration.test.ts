@@ -5,6 +5,7 @@ import {
   resolveVisitDuration,
   DEFAULT_VISIT_MINUTES,
   PACE_MULTIPLIERS,
+  VISIT_STEP_MINUTES,
   type VisitDuration,
 } from './duration'
 
@@ -63,13 +64,34 @@ describe('type heuristics', () => {
 describe('pace multipliers', () => {
   const museum = makePlace({ types: ['museum'] })
 
+  // The products land on the step grid, not on the exact multiplier: 90 × 1.2
+  // is 108 and 90 × 0.85 is 76.5, and both are rounded to the nearest five.
+  // Nothing measured a museum to the minute in the first place — 90 is a
+  // constant in a table — so the grid throws away precision that was never
+  // there and buys a start time a person can read.
   it.each([
-    ['relaxed', Math.round(90 * 1.2)],
+    ['relaxed', 110],
     ['balanced', 90],
-    ['packed', Math.round(90 * 0.85)],
-  ] as const)('%s applies ×%f to preferred', (pace, expected) => {
+    ['packed', 75],
+  ] as const)('%s applies ×%f to preferred, rounded to the step grid', (pace, expected) => {
     const d = resolveVisitDuration(museum, undefined, pace)
     expect(d.preferred).toBe(expected)
+    expect(d.preferred % VISIT_STEP_MINUTES).toBe(0)
+  })
+
+  it('puts every bound on the step grid, whichever rung answered', () => {
+    const rungs = [
+      resolveVisitDuration(makePlace({ stayDuration: 37 }), undefined, 'balanced'),
+      resolveVisitDuration(makePlace(), { avgVisitMinutes: [23, 71] }, 'balanced'),
+      resolveVisitDuration(museum, undefined, 'packed'),
+      resolveVisitDuration(makePlace({ types: ['unknown_type'] }), undefined, 'relaxed'),
+    ]
+    for (const d of rungs) {
+      expect(d.min % VISIT_STEP_MINUTES).toBe(0)
+      expect(d.preferred % VISIT_STEP_MINUTES).toBe(0)
+      expect(d.max % VISIT_STEP_MINUTES).toBe(0)
+      expectSane(d)
+    }
   })
 
   it('multiplies preferred only — min and max are identical across paces', () => {
