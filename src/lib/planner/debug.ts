@@ -66,6 +66,24 @@ export interface ThemeRepair {
   reason: string;
 }
 
+/**
+ * What reordering one day's route cost and saved, in travel minutes.
+ *
+ * Pass B orders a day without ever seeing a coordinate, so `beforeMinutes` is
+ * the price of that blindness and `savedMinutes` is what the geometry was
+ * worth. `reordered: false` with a non-zero `beforeMinutes` is the good case —
+ * the day was already walked in its shortest order.
+ */
+export interface SequencingRecord {
+  dayIndex: number;
+  beforeMinutes: number;
+  afterMinutes: number;
+  savedMinutes: number;
+  reordered: boolean;
+  /** Straight-line metres of the returned order. What a reader recognises. */
+  meters: number;
+}
+
 /** One id Pass B named that never became a stop, worded for a person. */
 export interface AssignmentDrop {
   dayIndex: number;
@@ -112,6 +130,17 @@ export interface PlannerDebug {
     misses: string[];
   };
   /**
+   * What the route reorder bought, per day.
+   *
+   * A day that was already in its shortest order is still listed, with
+   * `savedMinutes: 0` — the question this answers is "did sequencing help", and
+   * an absent row cannot tell "it made no difference" apart from "it never
+   * ran". The whole field is optional for the same reason one rung up: a plan
+   * made before this step existed has none, and an empty array would claim it
+   * ran and saved nothing.
+   */
+  sequencing?: SequencingRecord[];
+  /**
    * Themed runs only; absent on every geographic plan, which is the default.
    *
    * `fallbacks` is the answer to "why does day three have no premise" — an
@@ -143,5 +172,6 @@ export function emptyPlannerDebug(recordedAt: string): PlannerDebug {
     assignment: { fallbackDays: [], rationale: [], dropped: [] },
     narration: { fallbacks: [], truncated: 0, rejectedDishes: 0 },
     enrichment: { misses: [] },
+    sequencing: [],
   };
 }

@@ -49,9 +49,14 @@ import {
   type AssignResult,
 } from "./assign";
 import { clusterPlaces } from "./cluster";
-import { PLANNER_DEBUG_VERSION, type PlannerDebug } from "./debug";
+import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
+import { pathMeters, sequenceDay } from "./sequence";
+import { buildTravelMatrix, type TravelMatrixStats } from "./routes";
+import { PLANNER_DEBUG_VERSION, type PlannerDebug, type SequencingRecord } from "./debug";
 import {
+  enrichPlaces,
   readEnrichments,
+  type EnrichPlacesResult,
   type EnrichmentStore,
   type EnrichmentReadStats,
   type EnrichmentSubject,
@@ -77,7 +82,7 @@ import {
   type NarrateStats,
   type StopContent,
 } from "./narrate";
-import type { ResponsesClient } from "./openai";
+import { MODELS, type ResponsesClient, type ResponsesUsage } from "./openai";
 import {
   type FlexPick,
   type PackDayInput,
@@ -360,6 +365,17 @@ export function searchLocality(city: string, country?: string): string {
 
 // ── travel legs ──────────────────────────────────────────────────────────────
 
+/**
+ * How many of a day's replacements go into the travel matrix.
+ *
+ * `alternatesFor` hands back the whole rest of the cluster — forty-odd places —
+ * and routing all of them would multiply the day's elements for pairs a repair
+ * will almost never reach. Six is well past what `MAX_REPAIR_ROUNDS` can spend.
+ * Anything beyond it that does get swapped in is served from the straight line
+ * and shows up in `stats.travel.estimated`, rather than being hidden.
+ */
+const MATRIX_ALTERNATES = 6;
+
 /** Walking pace, metres per minute. */
 const WALK_M_PER_MIN = 80;
 /** Transit: a fixed wait plus a faster metre. */
@@ -378,6 +394,24 @@ const TRANSIT_M_PER_MIN = 400;
  * A place with no coordinates yields a zero leg rather than `NaN`; clustering
  * already dropped those, so it can only be reached by a hand-built input.
  */
+/**
+ * Adds the per-day matrices into one set of counters for `jobs.result.stats`.
+ *
+ * `errors` is deduplicated because a key without the Routes API enabled fails
+ * identically on every request, and twelve copies of one sentence reads like
+ * twelve faults.
+ */
+function sumTravelStats(perDay: readonly TravelMatrixStats[]): NonNullable<PlanStats["travel"]> {
+  return {
+    requests: perDay.reduce((total, day) => total + day.requests, 0),
+    walkLegs: perDay.reduce((total, day) => total + day.walkLegs, 0),
+    transitLegs: perDay.reduce((total, day) => total + day.transitLegs, 0),
+    chosenTransit: perDay.reduce((total, day) => total + day.chosenTransit, 0),
+    estimated: perDay.reduce((total, day) => total + day.estimated, 0),
+    errors: [...new Set(perDay.flatMap((day) => day.errors))],
+  };
+}
+
 export function createStraightLineTravel(): TravelLegProvider {
   const cache = new Map<string, TravelLeg>();
   return (from, to) => {
@@ -480,6 +514,21 @@ export interface PlanStats {
   funnel: FunnelStats;
   hydration: ShortlistHydrationStats;
   enrichment: EnrichmentReadStats;
+  /**
+   * The live fetch for what the cache missed. Absent when nothing missed, or
+   * when `enrichNow` is off and the misses went to a batch instead.
+   *
+   * `failed` is the one to read: each one is a place that shipped on the type
+   * heuristic, which is a complete-looking itinerary built on a table of round
+   * numbers — the exact failure this stage exists to prevent.
+   */
+  enrichedNow?: {
+    requested: number;
+    enriched: number;
+    failed: number;
+    /** Answers used by this plan but not cached for the next one. */
+    storeError?: string;
+  };
   assignment: {
     days: number;
     /** Days Pass B could not fill, served by the ranked fallback instead. */
@@ -493,8 +542,41 @@ export interface PlanStats {
     /** Days that came back `ok: false` — a meal nothing could replace. */
     failedDays: number;
   };
+  /**
+   * Route Matrix, summed over the days. Absent when a caller injected its own
+   * `getTravelLeg`, which is every test and the offline harness.
+   *
+   * `estimated` is the one to read. Every leg degrades to the straight line
+   * rather than failing, so a run where routing never worked produces exactly
+   * the itinerary it produced before and says nothing — unless this counter is
+   * looked at. `errors` carries the reason, once per distinct message.
+   */
+  travel?: {
+    requests: number;
+    walkLegs: number;
+    transitLegs: number;
+    /** Legs served as transit because it genuinely beat walking. */
+    chosenTransit: number;
+    /** Lookups answered by crow-flight instead of by Google. */
+    estimated: number;
+    errors: string[];
+  };
   photos: PhotoStats;
   narration: NarrateStats;
+  /**
+   * Model spend for this plan, per stage, in **tokens**.
+   *
+   * Not dollars: list prices move, and a stored figure quietly becomes a wrong
+   * number about a run nobody can re-measure. `summarizeCost` in `pricing.ts`
+   * turns these into money at render time, so correcting a rate re-prices every
+   * historical run.
+   *
+   * Enrichment is deliberately absent. Its batch is queued by one plan and its
+   * answers serve every later trip touching those places, so it is billed to
+   * `enrichment_batches.usage` instead — charging it here would overstate this
+   * trip and let every trip that reuses the cache read as free.
+   */
+  cost: StageUsage[];
 }
 
 export interface PlanResult {
@@ -542,6 +624,16 @@ export interface PipelineDeps {
   rng: () => number;
   /** Defaults to memoized crow-flight. There is no Routes module in this repo. */
   getTravelLeg?: TravelLegProvider;
+  /**
+   * Fetch cache misses before Pass B rather than queueing them for tomorrow.
+   *
+   * Defaults to **off**, and the default is not the recommendation — it is the
+   * same rule `mode` follows: a library default that changes behaviour and
+   * spends money silently is a trap, so the product default lives in
+   * `defaultPlanRouteDeps` where somebody reading the route can see it. Off,
+   * misses go to the batch: half price, and the answers arrive tomorrow.
+   */
+  enrichNow?: boolean;
   onProgress?: (progress: PlanProgress) => void | Promise<void>;
 }
 
@@ -568,6 +660,33 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     walkMaxMeters: knobs.walkMaxMeters,
   };
   const getTravelLeg = deps.getTravelLeg ?? createStraightLineTravel();
+
+  /**
+   * One day's travel provider.
+   *
+   * An injected `getTravelLeg` wins outright and no matrix is fetched — that is
+   * every test, the Gate A harness, and any caller that wants the old
+   * arithmetic. Otherwise the day's places are routed for real, with the
+   * straight line kept underneath for pairs Google cannot answer.
+   *
+   * `departureDate` is the day's own date, so a Sunday leg is not priced on a
+   * Tuesday service. `departureTimeFor` turns it into mid-morning local, with
+   * the offset estimated from the places' longitude because the planner has no
+   * timezone. That estimate is the one real guess in here.
+   */
+  const travelFor = async (
+    places: readonly CandidatePlace[],
+    date: string,
+  ): Promise<{ getTravelLeg: TravelLegProvider; stats?: TravelMatrixStats }> => {
+    if (deps.getTravelLeg) return { getTravelLeg: deps.getTravelLeg };
+    const matrix = await buildTravelMatrix(places, getTravelLeg, {
+      apiKey: deps.googleApiKey,
+      fetch: deps.fetch,
+      departureDate: date,
+      now: deps.now,
+    });
+    return matrix;
+  };
   const report = async (stage: Exclude<PlanStage, "done">) => {
     await deps.onProgress?.(progressFor(stage));
   };
@@ -653,11 +772,32 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     pool: [...rows.values()],
     now: deps.now,
   });
-  if (enrichment.misses.length > 0 && deps.enqueueEnrichments) {
-    const missing = enrichment.misses.flatMap((placeId) => {
-      const place = rows.get(placeId);
-      return place ? [place] : [];
+  const missing = enrichment.misses.flatMap((placeId) => {
+    const place = rows.get(placeId);
+    return place ? [place] : [];
+  });
+
+  /**
+   * A cache miss used to mean "queue a batch and plan without it". The batch is
+   * half price and up to 24 hours, so its answers reach the *next* plan touching
+   * these places — which meant every first trip to a city sized its visits from
+   * the type table in `duration.ts` and looked complete doing it.
+   *
+   * So the misses are fetched here, before Pass B, which is where the
+   * enrichment stage always claimed to be. The batch stays available for
+   * pre-warming a city ahead of time; it is no longer how a plan gets its data.
+   */
+  let liveEnrichment: EnrichPlacesResult | undefined;
+  if (missing.length > 0 && deps.enrichNow) {
+    liveEnrichment = await enrichPlaces(missing, {
+      client: deps.responses,
+      store: deps.enrichments,
+      now: deps.now,
     });
+    for (const [placeId, value] of liveEnrichment.enrichments) {
+      enrichment.enrichments.set(placeId, value);
+    }
+  } else if (missing.length > 0 && deps.enqueueEnrichments) {
     await deps.enqueueEnrichments(missing, deps.now);
   }
 
@@ -695,33 +835,71 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     profile,
     enrichment.enrichments,
   );
-  const days: PlannedDay[] = assignment.days.map((assigned, index) => {
-    const cluster = hydratedClusters[index];
-    const wildcards = serendipity.get(assigned.dayIndex) ?? [];
-    const withFlex: PackDayInput =
-      wildcards.length === 0
-        ? assigned.input
-        : { ...assigned.input, flex: [...(assigned.input.flex ?? []), ...wildcards] };
-    const validation = validateDay(withFlex, {
-      pace: profile.pace,
-      weekday: dayRequests[index].weekday,
-      profile,
-      getTravelLeg,
-      packKnobs,
-      alternates: alternatesFor(cluster, withFlex, profile, enrichment.enrichments),
-    });
-    return {
-      dayIndex: assigned.dayIndex,
-      date: addDays(request.startDate, assigned.dayIndex),
-      areaName: assigned.areaName,
-      weekday: dayRequests[index].weekday,
-      day: validation.day,
-      input: validation.input,
-      repairs: validation.repairs,
-      failures: validation.failures,
-      travelToNext: legsOf(validation, getTravelLeg),
-    };
-  });
+  const sequencing: SequencingRecord[] = [];
+  const travelStats: TravelMatrixStats[] = [];
+  const days: PlannedDay[] = await Promise.all(
+    assignment.days.map(async (assigned, index): Promise<PlannedDay> => {
+      const cluster = hydratedClusters[index];
+      const wildcards = serendipity.get(assigned.dayIndex) ?? [];
+      const withFlex: PackDayInput =
+        wildcards.length === 0
+          ? assigned.input
+          : { ...assigned.input, flex: [...(assigned.input.flex ?? []), ...wildcards] };
+
+      // Computed before the matrix rather than after, because the validator's
+      // replacements have to be *in* the matrix. A swap whose legs are the only
+      // crow-flight ones in an otherwise routed day is worse than either.
+      const alternates = alternatesFor(cluster, withFlex, profile, enrichment.enrichments);
+
+      // Real travel times for this day's stops, its spares and the handful of
+      // replacements a repair might reach for. One pair of matrices, then every
+      // lookup below is a map hit — which is what lets `sequenceDay` enumerate
+      // orders and `packDay` hunt for a fit without touching the network.
+      const dayTravel = await travelFor(
+        [
+          ...withFlex.assignments.map((assignment) => assignment.place),
+          ...(withFlex.flex ?? []).map((pick) => pick.place),
+          ...alternates.slice(0, MATRIX_ALTERNATES).map((alternate) => alternate.place),
+        ],
+        addDays(request.startDate, assigned.dayIndex),
+      );
+      if (dayTravel.stats) travelStats.push(dayTravel.stats);
+
+      // Route order, before the clock is stamped. Pass B chose these stops
+      // without ever seeing a coordinate; this is the only step that has them.
+      const sequenced = sequenceDay(withFlex, dayTravel.getTravelLeg);
+
+      const validation = validateDay(sequenced.input, {
+        pace: profile.pace,
+        weekday: dayRequests[index].weekday,
+        profile,
+        getTravelLeg: dayTravel.getTravelLeg,
+        packKnobs,
+        alternates,
+      });
+
+      sequencing[index] = {
+        dayIndex: assigned.dayIndex,
+        beforeMinutes: sequenced.beforeMinutes,
+        afterMinutes: sequenced.afterMinutes,
+        savedMinutes: sequenced.savedMinutes,
+        reordered: sequenced.reordered,
+        meters: Math.round(pathMeters(sequenced.input.assignments)),
+      };
+
+      return {
+        dayIndex: assigned.dayIndex,
+        date: addDays(request.startDate, assigned.dayIndex),
+        areaName: assigned.areaName,
+        weekday: dayRequests[index].weekday,
+        day: validation.day,
+        input: validation.input,
+        repairs: validation.repairs,
+        failures: validation.failures,
+        travelToNext: legsOf(validation, dayTravel.getTravelLeg),
+      };
+    }),
+  );
 
   // 7 — photos, for the survivors of scheduling only. The signature makes
   //     "resolve everything retrieval found" inexpressible; this call must not
@@ -791,6 +969,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
         rejectedDishes: narration.stats.rejectedDishes,
       },
       enrichment: { misses: enrichment.misses },
+      sequencing,
       ...(themed
         ? {
             themes: {
@@ -825,6 +1004,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
             },
           }
         : {}),
+      ...(travelStats.length > 0 ? { travel: sumTravelStats(travelStats) } : {}),
       clustering: {
         located: located.length,
         unlocated: unlocated.length,
@@ -835,6 +1015,18 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       funnel: funnel.stats,
       hydration: hydration.stats,
       enrichment: enrichment.stats,
+      ...(liveEnrichment
+        ? {
+            enrichedNow: {
+              requested: liveEnrichment.stats.requested,
+              enriched: liveEnrichment.stats.enriched,
+              failed: liveEnrichment.stats.failed,
+              ...(liveEnrichment.stats.storeError
+                ? { storeError: liveEnrichment.stats.storeError }
+                : {}),
+            },
+          }
+        : {}),
       assignment: {
         days: assignment.days.length,
         fallbackDays: assignment.days.filter((day) => day.fallback).length,
@@ -848,6 +1040,24 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       },
       photos: photos.stats,
       narration: narration.stats,
+      cost: [
+        // One entry per stage that actually ran. A stage with no calls is
+        // omitted rather than shown as a zero: "Pass B was never reached" and
+        // "Pass B was free" are different things.
+        ...(assignment.usage
+          ? [addUsage(emptyStageUsage("assign", MODELS.assign), assignment.usage)]
+          : []),
+        ...(themed?.usage
+          ? [addUsage(emptyStageUsage("theme", MODELS.assign), themed.usage)]
+          : []),
+        ...(narration.stats.usage.calls > 0 ? [narration.stats.usage] : []),
+        // Unlike the batch, a live enrichment belongs to the plan that made it:
+        // it was spent to build *this* trip. The batch's tokens still go on
+        // `enrichment_batches.usage`, because its answers serve every later one.
+        ...(liveEnrichment && liveEnrichment.stats.usage.calls > 0
+          ? [liveEnrichment.stats.usage]
+          : []),
+      ],
     },
   };
 }
@@ -957,6 +1167,9 @@ interface ThemedPlan {
   repairs: FeasibilityRepair[];
   /** Nearby-search counters, folded into the run's retrieval stats. */
   exploreStats?: RetrievalStats;
+  /** The theme call's token usage. It runs on `MODELS.assign`, the expensive
+   *  model, so a themed plan costs two calls on it rather than one. */
+  usage?: ResponsesUsage;
 }
 
 interface ThemedContext {
@@ -1085,6 +1298,7 @@ async function planThemedDays(
         })),
     ],
     exploreStats: explored.stats,
+    usage: themes.usage,
   };
 }
 

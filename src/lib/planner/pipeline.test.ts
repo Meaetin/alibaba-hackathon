@@ -78,6 +78,9 @@ interface RunOptions {
   enrichments?: readonly StoredEnrichment[]
   failPassB?: boolean
   failTheme?: boolean
+  failEnrich?: boolean
+  /** The product default lives in the route, so the pipeline tests choose. */
+  enrichNow?: boolean
   hallucinateAnchors?: readonly string[]
   onProgress?: (progress: PlanProgress) => void
   enqueueEnrichments?: (subjects: readonly EnrichmentSubject[], now: Date) => Promise<void>
@@ -102,9 +105,11 @@ async function plan(options: RunOptions = {}): Promise<{
       store: createInMemoryLocationStore(),
       enrichments: createInMemoryEnrichmentStore(options.enrichments),
       enqueueEnrichments: options.enqueueEnrichments,
+      ...(options.enrichNow ? { enrichNow: true } : {}),
       responses: createFakeResponses({
         ...(options.failPassB ? { fail: 'assign' as const } : {}),
         ...(options.failTheme ? { fail: 'theme' as const } : {}),
+        ...(options.failEnrich ? { fail: 'enrich' as const } : {}),
         ...(options.hallucinateAnchors
           ? { hallucinateAnchors: options.hallucinateAnchors }
           : {}),
@@ -492,10 +497,127 @@ describe('the diagnostic record', () => {
     expect(result.debug.assignment.rationale).toEqual([])
   })
 
+  it('fetches what the cache missed before Pass B, and the sizes reach the day', async () => {
+    // The whole point of the live path. With `enrichNow` off the shortlist is
+    // sized from the type table in `duration.ts`; with it on, every visit is an
+    // estimate of the place. The fake answers with lengths no type heuristic
+    // produces, so a duration only it can yield is proof the answer travelled
+    // all the way from the call into the stamped day.
+    const { result } = await plan({ enrichNow: true })
+
+    expect(result.stats.enrichedNow).toMatchObject({ failed: 0 })
+    expect(result.stats.enrichedNow!.enriched).toBeGreaterThan(0)
+    expect(result.stats.enrichedNow!.enriched).toBe(result.stats.enrichment.misses)
+
+    // The counter alone would pass with the answers fetched and thrown away, so
+    // the assertion that matters compares the stamped days against a run that
+    // never fetched. Same fixture, same seed, same everything else — if the
+    // visit lengths are identical, the enrichment never reached the packer.
+    const { result: heuristic } = await plan()
+    const lengths = (r: PlanResult) =>
+      r.days
+        .flatMap((day) => day.day.segments)
+        .flatMap((segment) =>
+          segment.kind === 'activity' ? [segment.endMin - segment.startMin] : [],
+        )
+        .sort((a, b) => a - b)
+
+    expect(lengths(result)).not.toEqual(lengths(heuristic))
+
+    // `enrich` is in the cost breakdown, unlike the batch: a live call is spent
+    // on *this* trip, so it is attributable to it.
+    const enrichCost = result.stats.cost.find((entry) => entry.stage === 'enrich')
+    expect(enrichCost?.calls).toBe(result.stats.enrichedNow!.requested)
+    expect(enrichCost?.batch).toBeUndefined()
+  })
+
+  it('queues a batch instead when the live fetch is off', async () => {
+    const queued: string[] = []
+    const { result } = await plan({
+      enqueueEnrichments: async (subjects) => {
+        for (const subject of subjects) queued.push(subject.placeId)
+      },
+    })
+
+    expect(result.stats.enrichedNow).toBeUndefined()
+    expect(queued.length).toBe(result.stats.enrichment.misses)
+    expect(result.stats.cost.some((entry) => entry.stage === 'enrich')).toBe(false)
+  })
+
+  it('plans a whole trip anyway when every enrichment call fails', async () => {
+    // Each failure falls back to the type heuristic, which is exactly what a
+    // cache miss did before this path existed — so the trip must still be a
+    // trip, and the counter must be the only thing that says otherwise.
+    const { result } = await plan({ enrichNow: true, failEnrich: true })
+
+    expect(result.stats.enrichedNow!.enriched).toBe(0)
+    expect(result.stats.enrichedNow!.failed).toBe(result.stats.enrichedNow!.requested)
+    expect(result.days.length).toBe(REQUEST.totalDays)
+    expect(result.days.every((day) => day.day.segments.length > 0)).toBe(true)
+  })
+
   it('stamps itself from the injected clock, never the wall clock', async () => {
     const { result } = await plan()
     expect(result.debug.recordedAt).toBe(NOW.toISOString())
     expect(result.debug.version).toBe(1)
+  })
+
+  // The reorder is a step nothing else in this suite can see: `sequence.ts` has
+  // its own tests, but whether `runPlan` actually calls it is only observable
+  // here. A day left out of this list is a day that shipped unsequenced.
+  it('records one route-order row per day, with the meals still in place', async () => {
+    const { result } = await plan()
+
+    const rows = result.debug.sequencing ?? []
+    expect(rows.map((row) => row.dayIndex)).toEqual(result.days.map((day) => day.dayIndex))
+
+    // Zeroes everywhere would satisfy every arithmetic assertion below while
+    // proving `sequenceDay` was never called — the Kyoto fixture has real
+    // coordinates, so a real day costs real minutes and covers real ground.
+    expect(rows.some((row) => row.beforeMinutes > 0)).toBe(true)
+    expect(rows.some((row) => row.meters > 0)).toBe(true)
+    // And it must actually shorten at least one day. Pass B here is a fake that
+    // orders by score, so the geometry is genuinely unsorted going in.
+    expect(rows.some((row) => row.reordered && row.savedMinutes > 0)).toBe(true)
+
+    for (const row of rows) {
+      expect(row.afterMinutes).toBeLessThanOrEqual(row.beforeMinutes)
+      expect(row.savedMinutes).toBe(row.beforeMinutes - row.afterMinutes)
+    }
+
+    // The saving has to reach the trip, not just the debug record. Calling
+    // `sequenceDay`, logging what it found and then packing the original order
+    // is a passing run that quietly lies on the diagnostics page — so re-walk
+    // each finished day and check it costs what the row claims. Only days the
+    // validator left alone are comparable; a swap changes the geometry.
+    const travel = createStraightLineTravel()
+    const walked = (stops: readonly { place: CandidatePlace }[]) =>
+      stops
+        .slice(1)
+        .reduce((total, stop, i) => total + travel(stops[i].place, stop.place).minutes, 0)
+
+    // Aggregate rather than per-day, because `validate.ts` swaps places into
+    // slots without looking at the map and so can leave one repaired day
+    // improvable again. The trip as a whole must still walk less than the order
+    // Pass B handed over, or the reorder was recorded and thrown away.
+    // Aggregate, and deliberately weaker than it looks. What this catches is
+    // `sequenceDay` not being called at all. What it cannot catch on this
+    // fixture is "called, recorded, then packed from the original order
+    // anyway": every Kyoto day draws repairs on every weekday, and a repair
+    // both swaps places and drops them, so the shipped path is shorter than
+    // Pass B's either way. Closing that would need a fixture that validates
+    // clean, and `sequence.test.ts` already owns the reordering itself.
+    const shipped = result.days.reduce((total, day) => total + walked(day.input.assignments), 0)
+    const asAssigned = rows.reduce((total, row) => total + row.beforeMinutes, 0)
+    expect(shipped).toBeLessThan(asAssigned)
+
+    // A meal that moved index would be `sequence.ts` failing open, and the
+    // resulting day would still pack — just with dinner in the morning.
+    for (const day of result.days) {
+      const roles = day.input.assignments.map((a) => a.role)
+      const meals = roles.filter((role) => role === 'lunch' || role === 'dinner')
+      expect(meals).toEqual(meals.slice().sort((a, b) => roles.indexOf(a) - roles.indexOf(b)))
+    }
   })
 })
 
