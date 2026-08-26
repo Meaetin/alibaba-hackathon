@@ -522,3 +522,13 @@
 - **`enrichNow` defaults off in `runPlan`, on in `defaultPlanRouteDeps`.** Why: same rule as `mode` — a library default that silently spends money is a trap.
 - **Rejected a batch-completion webhook.** Why: it automates collection but does not make data arrive before the plan that needs it, and it needs a public URL the localhost demo does not have.
 - **`withBackoff` added beside `withRetry`.** Why: instant retry is useless against a 429 when 58 calls fan out together. Retries only 429/5xx/transport — a 400 is our bug.
+
+## 2026-08-26 — The OpenAI Batch enrichment path is removed
+
+- **Deleted submit, collect, the durable queue and the `enrichment_batches` table.** Why: `enrichPlaces` made every one of them dead code — the batch branch was an `else` on a flag that production always set. Supersedes the 2026-08-24 durable-queue decision and the `POST /api/enrichments/collect` decision above.
+- **Also deleted: `POST /api/enrichments/collect`, `enrichment-queue.ts`, `scripts/collect-enrichment-batches.ts`, and the Batch port (`BatchClient`/`createBatchClient`/`parseJsonl`) in `openai.ts`.** Why: nothing else used them, and a queue nothing sweeps is worse than no queue.
+- **Swept the three open batches before dropping the table.** Why: 85 already-billed subjects were sitting in OpenAI's output files, and the batch ids only existed in that table. Recovered 63 enrichments; `place_enrichments` went 100 → 163.
+- **`enrichNow` is gone; enrichment is unconditional.** Why: with no batch fallback, `false` would mean "no enrichment at all". Reverses the 2026-08-26 "defaults off in `runPlan`" decision above — the reason for that default was that the other branch existed.
+- **The debug page's per-place enrichment failure reason is gone, not moved.** Why: `enrichment_batches.failures` was its only source. The misses are still listed by id; the reason was judged not worth a new column.
+- **Migration `0007_robust_blob` drops the table. Applied 2026-08-26.**
+

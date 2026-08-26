@@ -677,16 +677,12 @@ Client injected. No test in this file asserts anything about tag *quality*.
 - read-through cache: hit requires **all four** of fresh `expires_at`, same `model`,
   same `prompt_version`, same `source_hash`. Four tests, each flipping one field and
   asserting a miss — a cache that ignores `prompt_version` is the doc's named bug.
-- **batch results are keyed by `custom_id`, not position.** Hand the fake client a
-  *shuffled* response array and assert every enrichment landed on the right
-  `place_id`. This test exists because the failure mode is silent and catastrophic:
-  every place gets someone else's description.
 - an empty `description` is treated as a **failure and retried**, not stored
 - a miss serves the heuristic fallback **without blocking** — assert
   `generateItinerary` completes with an unenriched place present
-- a miss not already present in an open durable batch is submitted and the provider
-  batch id plus exact subjects are persisted; `npm run enrichment:collect` checks
-  every open batch once and writes completed rows
+- a miss is fetched live by `enrichPlaces` inside the enrich stage, stored, and
+  used by the same plan that paid for it. The OpenAI Batch path this step
+  originally described was removed on 2026-08-26 — see `docs/decisions.md`.
 - on success, `locations.stay_duration` is backfilled where null, and **not**
   overwritten where already set
 - `effort: 'none'` is on the request (cost, and it's the kind of thing that silently

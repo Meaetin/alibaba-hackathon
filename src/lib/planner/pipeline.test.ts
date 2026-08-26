@@ -22,7 +22,6 @@ import { mulberry32 } from './__tests__/rng'
 import { resolveVisitDuration } from './duration'
 import {
   createInMemoryEnrichmentStore,
-  type EnrichmentSubject,
   type StoredEnrichment,
 } from './enrich'
 import { dayCapacity, type AssignResult } from './assign'
@@ -80,10 +79,8 @@ interface RunOptions {
   failTheme?: boolean
   failEnrich?: boolean
   /** The product default lives in the route, so the pipeline tests choose. */
-  enrichNow?: boolean
   hallucinateAnchors?: readonly string[]
   onProgress?: (progress: PlanProgress) => void
-  enqueueEnrichments?: (subjects: readonly EnrichmentSubject[], now: Date) => Promise<void>
   /** Places only a Nearby Search can reach. See `FakeGoogleOptions.nearbyOnly`. */
   nearbyOnly?: readonly CandidatePlace[]
 }
@@ -104,8 +101,6 @@ async function plan(options: RunOptions = {}): Promise<{
       cache: createInMemorySearchCache(),
       store: createInMemoryLocationStore(),
       enrichments: createInMemoryEnrichmentStore(options.enrichments),
-      enqueueEnrichments: options.enqueueEnrichments,
-      ...(options.enrichNow ? { enrichNow: true } : {}),
       responses: createFakeResponses({
         ...(options.failPassB ? { fail: 'assign' as const } : {}),
         ...(options.failTheme ? { fail: 'theme' as const } : {}),
@@ -233,7 +228,9 @@ describe('a full run', () => {
 
 describe('enrichment misses do not block the run', () => {
   it('ships a full itinerary and sizes visits from the type heuristic', async () => {
-    const { result } = await plan()
+    // `failEnrich` is what makes rung 3 reachable now that the live fetch is
+    // unconditional: every call fails, so nothing has an estimate of its own.
+    const { result } = await plan({ failEnrich: true })
 
     expect(result.stats.enrichment.hits).toBe(0)
     expect(result.stats.enrichment.misses).toBe(result.funnelStats.afterGlobalCap)
@@ -248,19 +245,6 @@ describe('enrichment misses do not block the run', () => {
         resolveVisitDuration(assignment.place, undefined, PROFILE.pace),
       )
     }
-  })
-
-  it('hands every cold shortlist row to the durable batch seam', async () => {
-    const queued: EnrichmentSubject[] = []
-    const { result } = await plan({
-      enqueueEnrichments: async (subjects, now) => {
-        expect(now).toBe(NOW)
-        queued.push(...subjects)
-      },
-    })
-
-    expect(queued).toHaveLength(result.stats.enrichment.misses)
-    expect(new Set(queued.map((place) => place.placeId)).size).toBe(queued.length)
   })
 })
 
@@ -498,22 +482,22 @@ describe('the diagnostic record', () => {
   })
 
   it('fetches what the cache missed before Pass B, and the sizes reach the day', async () => {
-    // The whole point of the live path. With `enrichNow` off the shortlist is
-    // sized from the type table in `duration.ts`; with it on, every visit is an
-    // estimate of the place. The fake answers with lengths no type heuristic
-    // produces, so a duration only it can yield is proof the answer travelled
-    // all the way from the call into the stamped day.
-    const { result } = await plan({ enrichNow: true })
+    // The whole point of the live path. Without it a shortlist is sized from
+    // the type table in `duration.ts`; with it, every visit is an estimate of
+    // the place. The fake answers with lengths no type heuristic produces, so a
+    // duration only it can yield is proof the answer travelled all the way from
+    // the call into the stamped day.
+    const { result } = await plan()
 
     expect(result.stats.enrichedNow).toMatchObject({ failed: 0 })
     expect(result.stats.enrichedNow!.enriched).toBeGreaterThan(0)
     expect(result.stats.enrichedNow!.enriched).toBe(result.stats.enrichment.misses)
 
     // The counter alone would pass with the answers fetched and thrown away, so
-    // the assertion that matters compares the stamped days against a run that
-    // never fetched. Same fixture, same seed, same everything else — if the
+    // the assertion that matters compares the stamped days against a run whose
+    // every call failed. Same fixture, same seed, same everything else — if the
     // visit lengths are identical, the enrichment never reached the packer.
-    const { result: heuristic } = await plan()
+    const { result: heuristic } = await plan({ failEnrich: true })
     const lengths = (r: PlanResult) =>
       r.days
         .flatMap((day) => day.day.segments)
@@ -524,31 +508,18 @@ describe('the diagnostic record', () => {
 
     expect(lengths(result)).not.toEqual(lengths(heuristic))
 
-    // `enrich` is in the cost breakdown, unlike the batch: a live call is spent
-    // on *this* trip, so it is attributable to it.
+    // `enrich` is in the cost breakdown: the call was spent building *this*
+    // trip, even though its cached answer goes on to serve later ones.
     const enrichCost = result.stats.cost.find((entry) => entry.stage === 'enrich')
     expect(enrichCost?.calls).toBe(result.stats.enrichedNow!.requested)
     expect(enrichCost?.batch).toBeUndefined()
-  })
-
-  it('queues a batch instead when the live fetch is off', async () => {
-    const queued: string[] = []
-    const { result } = await plan({
-      enqueueEnrichments: async (subjects) => {
-        for (const subject of subjects) queued.push(subject.placeId)
-      },
-    })
-
-    expect(result.stats.enrichedNow).toBeUndefined()
-    expect(queued.length).toBe(result.stats.enrichment.misses)
-    expect(result.stats.cost.some((entry) => entry.stage === 'enrich')).toBe(false)
   })
 
   it('plans a whole trip anyway when every enrichment call fails', async () => {
     // Each failure falls back to the type heuristic, which is exactly what a
     // cache miss did before this path existed — so the trip must still be a
     // trip, and the counter must be the only thing that says otherwise.
-    const { result } = await plan({ enrichNow: true, failEnrich: true })
+    const { result } = await plan({ failEnrich: true })
 
     expect(result.stats.enrichedNow!.enriched).toBe(0)
     expect(result.stats.enrichedNow!.failed).toBe(result.stats.enrichedNow!.requested)
@@ -991,7 +962,13 @@ describe('themed mode', () => {
 
     // Pass C: every day's premise in the shared prefix, not the per-stop block,
     // or fifteen cache reads become fifteen misses.
-    const narrations = responses.requests.filter((r) => r.model === MODELS.narrate)
+    // Narration and enrichment run on the same model id, and enrichment now
+    // runs in every plan — so the model alone no longer picks out Pass C. The
+    // block count does: an enrichment request is a system prompt and one place,
+    // a narration is the shared prefix plus a per-stop block on top.
+    const narrations = responses.requests.filter(
+      (r) => r.model === MODELS.narrate && r.input.length > SHARED_PREFIX_BLOCK_COUNT,
+    )
     expect(narrations.length).toBeGreaterThan(1)
     const prefixes = new Set(
       narrations.map((r) => JSON.stringify(r.input.slice(0, SHARED_PREFIX_BLOCK_COUNT))),

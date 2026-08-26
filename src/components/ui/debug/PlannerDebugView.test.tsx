@@ -85,7 +85,6 @@ function diagnostics(overrides: Partial<PlanDiagnostics> = {}): PlanDiagnostics 
       afterGlobalCap: 42,
     },
     job: { id: "job-1", status: "completed", error: null, stats: null },
-    enrichmentFailures: {},
     ...overrides,
   };
 }
@@ -328,24 +327,22 @@ describe("narration", () => {
 });
 
 describe("enrichment misses", () => {
-  it("separates a place that was simply never asked from one that was refused", () => {
+  it("names every place the live fetch could not enrich", () => {
+    // A miss is the reason a stop's visit length came off the type table
+    // instead of an estimate of the place, so the ids have to be readable.
     const html = render(
       diagnostics({
         debug: debugRecord({ enrichment: { misses: ["place-a", "place-b"] } }),
-        enrichmentFailures: {
-          "place-b": {
-            placeId: "place-b",
-            reason: "api_error",
-            message: "rate_limit_exceeded: too many requests",
-            providerBatchId: "batch_9",
-            batchStatus: "completed",
-          },
-        },
       }),
     );
-    expect(html).toContain("no recorded failure");
-    expect(html).toContain("rate_limit_exceeded");
-    expect(html).toContain("batch_9");
+    expect(html).toContain("2 shortlisted places had no usable enrichment");
+    expect(html).toContain("place-a");
+    expect(html).toContain("place-b");
+  });
+
+  it("says so plainly when nothing missed", () => {
+    const html = render(diagnostics({ debug: debugRecord({ enrichment: { misses: [] } }) }));
+    expect(html).toContain("Every shortlisted place had a fresh cached enrichment.");
   });
 });
 

@@ -4,7 +4,7 @@
  * has to be testable with zero network.
  *
  * What lives here is only what all three share — the model table, the effort
- * ladder, and two narrow ports. Prompts, schemas, retry semantics and failure
+ * ladder, and one narrow port. Prompts, schemas, retry semantics and failure
  * handling belong to the module that owns the call, because those are the parts
  * worth reading in a diff.
  *
@@ -32,7 +32,7 @@ export const MODELS = {
   assign: "gpt-5.6-terra",
   /** Pass C. ~15 short prose calls per itinerary, no reasoning. */
   narrate: "gpt-5.6-luna",
-  /** Enrichment. ~60 batched tag extractions. Explicitly not a reasoning task. */
+  /** Enrichment. ~60 concurrent tag extractions. Explicitly not a reasoning task. */
   enrich: "gpt-5.6-luna",
 } as const;
 
@@ -147,68 +147,6 @@ export function jsonSchemaFormat(name: string, schema: z.ZodType): unknown {
   return zodTextFormat(schema, name);
 }
 
-// ── the Batch port (enrichment) ──────────────────────────────────────────────
-
-/** Terminal statuses are `completed`, `failed`, `expired` and `cancelled`. */
-export interface BatchHandle {
-  id: string;
-  status: string;
-  outputFileId?: string;
-  errorFileId?: string;
-}
-
-/**
- * The Batch API, reduced to four verbs over JSONL strings. The SDK's file
- * upload wants an `Uploadable`; keeping that out of the port means the fake is
- * a `Map<string, string>` and the tests never build a `File`.
- */
-export interface BatchClient {
-  uploadJsonl(body: string, filename: string): Promise<string>;
-  create(input: {
-    inputFileId: string;
-    endpoint: string;
-    completionWindow: string;
-  }): Promise<BatchHandle>;
-  retrieve(batchId: string): Promise<BatchHandle>;
-  downloadJsonl(fileId: string): Promise<string>;
-}
-
-export function createBatchClient(client: OpenAI): BatchClient {
-  const toHandle = (batch: {
-    id: string;
-    status: string;
-    output_file_id?: string | null;
-    error_file_id?: string | null;
-  }): BatchHandle => ({
-    id: batch.id,
-    status: batch.status,
-    outputFileId: batch.output_file_id ?? undefined,
-    errorFileId: batch.error_file_id ?? undefined,
-  });
-
-  return {
-    async uploadJsonl(body, filename) {
-      const file = new File([body], filename, { type: "application/jsonl" });
-      const uploaded = await client.files.create({ file, purpose: "batch" });
-      return uploaded.id;
-    },
-    async create({ inputFileId, endpoint, completionWindow }) {
-      const batch = await client.batches.create({
-        input_file_id: inputFileId,
-        endpoint: endpoint as "/v1/responses",
-        completion_window: completionWindow as "24h",
-      });
-      return toHandle(batch);
-    },
-    async retrieve(batchId) {
-      return toHandle(await client.batches.retrieve(batchId));
-    },
-    async downloadJsonl(fileId) {
-      return await (await client.files.content(fileId)).text();
-    },
-  };
-}
-
 // ── shared helpers ───────────────────────────────────────────────────────────
 
 /**
@@ -280,20 +218,4 @@ export function isRetryable(error: Error): boolean {
   const status = (error as { status?: unknown }).status;
   if (typeof status !== "number") return true;
   return status === 429 || status >= 500;
-}
-
-/** JSONL in, one parsed object per non-blank line. Batch output and error
- *  files are both this shape; a malformed line is skipped, not fatal. */
-export function parseJsonl(body: string): unknown[] {
-  return body
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as unknown];
-      } catch {
-        return [];
-      }
-    });
 }

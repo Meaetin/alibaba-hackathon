@@ -38,7 +38,7 @@ interface PlannerDebugViewProps {
 }
 
 export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
-  const { itinerary, days, debug, funnelStats, job, enrichmentFailures } = diagnostics;
+  const { itinerary, days, debug, funnelStats, job } = diagnostics;
 
   // Pass B's sentences arrive as a flat list; every day section wants only its
   // own, and every stop wants only its own line. Indexed once, here.
@@ -425,7 +425,7 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
       <Section
         region="itinerary-debug-enrichment"
         title="Enrichment misses"
-        note="A miss is normal — the place ships on the type heuristic and goes to the durable batch. A miss with a recorded failure is not."
+        note="A miss means the live fetch before Pass B had no answer for that place, so it ships on the type heuristic in `duration.ts` rather than an estimate of the place itself."
       >
         {debug === null ? (
           <Empty>Not recorded for this itinerary.</Empty>
@@ -438,24 +438,11 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
               this ran.
             </p>
             <ul className="flex flex-col gap-1">
-              {debug.enrichment.misses.map((placeId) => {
-                const failure = enrichmentFailures[placeId];
-                return (
-                  <li key={placeId} className="type-body-3 flex flex-wrap items-baseline gap-2">
-                    <span className="font-mono text-content-tertiary">{placeId}</span>
-                    {failure ? (
-                      <span className="text-content-error">
-                        {failure.reason} — {failure.message ?? "no message"} (batch{" "}
-                        {failure.providerBatchId}, {failure.batchStatus})
-                      </span>
-                    ) : (
-                      <span className="text-content-tertiary">
-                        no recorded failure — queued, or never asked for
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
+              {debug.enrichment.misses.map((placeId) => (
+                <li key={placeId} className="type-body-3">
+                  <span className="font-mono text-content-tertiary">{placeId}</span>
+                </li>
+              ))}
             </ul>
           </div>
         )}

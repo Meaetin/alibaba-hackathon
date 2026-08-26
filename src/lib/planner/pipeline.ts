@@ -59,7 +59,6 @@ import {
   type EnrichPlacesResult,
   type EnrichmentStore,
   type EnrichmentReadStats,
-  type EnrichmentSubject,
 } from "./enrich";
 import {
   FUNNEL_DEFAULTS,
@@ -515,8 +514,7 @@ export interface PlanStats {
   hydration: ShortlistHydrationStats;
   enrichment: EnrichmentReadStats;
   /**
-   * The live fetch for what the cache missed. Absent when nothing missed, or
-   * when `enrichNow` is off and the misses went to a batch instead.
+   * The live fetch for what the cache missed. Absent when nothing missed.
    *
    * `failed` is the one to read: each one is a place that shipped on the type
    * heuristic, which is a complete-looking itinerary built on a table of round
@@ -571,10 +569,10 @@ export interface PlanStats {
    * turns these into money at render time, so correcting a rate re-prices every
    * historical run.
    *
-   * Enrichment is deliberately absent. Its batch is queued by one plan and its
-   * answers serve every later trip touching those places, so it is billed to
-   * `enrichment_batches.usage` instead — charging it here would overstate this
-   * trip and let every trip that reuses the cache read as free.
+   * Enrichment is here, because it is fetched inside the run that pays for it.
+   * Its answers do outlive the trip — the next plan touching those places reads
+   * them from `place_enrichments` for nothing — but the tokens were spent
+   * building this one.
    */
   cost: StageUsage[];
 }
@@ -610,12 +608,6 @@ export interface PipelineDeps {
   cache: SearchCache;
   store: LocationStore;
   enrichments: EnrichmentStore;
-  /** Durable Batch submission for cold enrichment rows. This waits for the
-   * handle, never for the model's up-to-24-hour completion. */
-  enqueueEnrichments?: (
-    subjects: readonly EnrichmentSubject[],
-    now: Date,
-  ) => Promise<void>;
   responses: ResponsesClient;
   fetch?: FetchLike;
   blobs?: PhotoBlobStore;
@@ -624,16 +616,6 @@ export interface PipelineDeps {
   rng: () => number;
   /** Defaults to memoized crow-flight. There is no Routes module in this repo. */
   getTravelLeg?: TravelLegProvider;
-  /**
-   * Fetch cache misses before Pass B rather than queueing them for tomorrow.
-   *
-   * Defaults to **off**, and the default is not the recommendation — it is the
-   * same rule `mode` follows: a library default that changes behaviour and
-   * spends money silently is a trap, so the product default lives in
-   * `defaultPlanRouteDeps` where somebody reading the route can see it. Off,
-   * misses go to the batch: half price, and the answers arrive tomorrow.
-   */
-  enrichNow?: boolean;
   onProgress?: (progress: PlanProgress) => void | Promise<void>;
 }
 
@@ -778,17 +760,19 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   });
 
   /**
-   * A cache miss used to mean "queue a batch and plan without it". The batch is
-   * half price and up to 24 hours, so its answers reach the *next* plan touching
-   * these places — which meant every first trip to a city sized its visits from
-   * the type table in `duration.ts` and looked complete doing it.
+   * A cache miss used to mean "queue an OpenAI batch and plan without it". That
+   * batch was half price and up to 24 hours, so its answers reached the *next*
+   * plan touching these places — which meant every first trip to a city sized
+   * its visits from the type table in `duration.ts` and looked complete doing
+   * it.
    *
    * So the misses are fetched here, before Pass B, which is where the
-   * enrichment stage always claimed to be. The batch stays available for
-   * pre-warming a city ahead of time; it is no longer how a plan gets its data.
+   * enrichment stage always claimed to be. It costs about a cent and ~11
+   * seconds, and nothing here throws: a place that fails falls to the type
+   * heuristic, exactly as a cache miss already did.
    */
   let liveEnrichment: EnrichPlacesResult | undefined;
-  if (missing.length > 0 && deps.enrichNow) {
+  if (missing.length > 0) {
     liveEnrichment = await enrichPlaces(missing, {
       client: deps.responses,
       store: deps.enrichments,
@@ -797,8 +781,6 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     for (const [placeId, value] of liveEnrichment.enrichments) {
       enrichment.enrichments.set(placeId, value);
     }
-  } else if (missing.length > 0 && deps.enqueueEnrichments) {
-    await deps.enqueueEnrichments(missing, deps.now);
   }
 
   // 5 — Pass B. One call for the trip; never throws, degrades to the ranked list.
@@ -1052,8 +1034,8 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
           : []),
         ...(narration.stats.usage.calls > 0 ? [narration.stats.usage] : []),
         // Unlike the batch, a live enrichment belongs to the plan that made it:
-        // it was spent to build *this* trip. The batch's tokens still go on
-        // `enrichment_batches.usage`, because its answers serve every later one.
+        // it was spent to build *this* trip, even though the cached answers go
+        // on to serve every later trip that touches the same places.
         ...(liveEnrichment && liveEnrichment.stats.usage.calls > 0
           ? [liveEnrichment.stats.usage]
           : []),

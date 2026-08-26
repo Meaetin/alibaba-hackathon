@@ -385,35 +385,21 @@ It is **diagnostics, never content** — no card reads it, and it may be reshape
 without a migration because the column is `jsonb` and `PLANNER_DEBUG_VERSION`
 says which shape a row is. Per-stage counters deliberately are **not** in it:
 they are already durable on `jobs.result.stats`, and a second copy is a second
-thing to keep true. `enrichment_batches.failures` is the same idea one table
-over — what a terminal batch lost, including the lines that only ever appear in
-the provider's error file.
-
-### The batch error file is a second download, and it is the only record of a refusal
-OpenAI puts requests it never ran in the batch's **error** file, not the output
-file. `collectEnrichmentBatch` downloads both; without the second one those
-places are invisible — they miss the cache forever and nothing says why. A batch
-where every request failed has **no output file at all**, so the absence of
-`outputFileId` must not be an early return. A failed error-file download is
-logged and shrugged off: diagnostics are not data, and holding a batch open for
-a file that may never arrive is worse than losing the reason.
-
-### Everything in `enrich.ts` degrades except the store, so the store is wrapped
-`collectEnrichmentBatch` says "nothing here throws" and means it for every
-provider and parsing failure. The database is the exception: `place_enrichments`
-has a foreign key to `locations`, and submit and collect are separated by up to
-24 hours. A rejected write comes back as `storeError` and the batch stays
-**open**, so the next sweep retries it. `collectQueuedEnrichments` wraps each
-batch as well — a sweep exists to get through the list, and one bad batch must
-not cost the other nine.
+thing to keep true.
 
 ### `EnrichmentSubject` is a `Pick`, which is compile-time only
-Hand the durable queue a whole `RetrievedPlace` and the whole thing gets
-persisted into `enrichment_batches.subjects` — coordinates, photo names, price
-range. `toEnrichmentSubject` projects at runtime; call it at every boundary that
-stores or sends a subject. Correctness is unaffected (`enrichmentSourceHash`
-only digests `buildEnrichmentInput`), so nothing fails — the row just quietly
-gets fat.
+Hand the enricher a whole `RetrievedPlace` and the whole thing reaches the
+prompt — coordinates, photo names, price range. `toEnrichmentSubject` projects
+at runtime; call it at every boundary that sends a subject. Correctness is
+unaffected (`enrichmentSourceHash` only digests `buildEnrichmentInput`), so
+nothing fails — the payload just quietly gets fat.
+
+**Everything in `enrich.ts` degrades except the store.** `enrichPlaces` says
+"nothing here throws" and means it for every provider and parsing failure: a
+place that fails falls to the type heuristic in `duration.ts`, exactly as a
+cache miss already did. A refused **store** write is reported as `storeError`
+rather than raised — the answers are already in hand and serve this plan; what
+is lost is the next plan's cache hit.
 
 ### `searchLocality` is how `country` reaches Google, and Singapore must not move
 `PlanRequest.country` used to be validated, stored on the itinerary row and
@@ -447,8 +433,7 @@ these tests passed with the feature removed until it also asserted the counter.
 
 ### `/itineraries/[id]/debug` is the app's only server component
 It reads `itineraries.planner_debug`, `funnel_stats`, the stored days, the
-`jobs.result.stats` blob and `enrichment_batches.failures`, and renders them as
-one page: the funnel's cuts, the stage counters, the days with Pass B's sentence
+`jobs.result.stats` blob, and renders them as one page: the funnel's cuts, the stage counters, the days with Pass B's sentence
 under each stop, the ids we refused, the narration fallbacks, and the enrichment
 misses. Every value is already on a row, so there is no query, no polling and no
 loading state — it ships 167 B of client JS.
@@ -710,15 +695,15 @@ repairs closures afterwards. Measured on the three real days, reordering caused
 per day, and it is optional on the type so a plan made before it existed reads
 as "not recorded" rather than "saved nothing".
 
-**Nothing was sweeping the enrichment queue.** `collectQueuedEnrichments` was
-written, tested and called by no one, so every batch sat at `validating` forever
-and `place_enrichments` had **zero rows** — meaning every visit duration in
-every trip came off the type table in `duration.ts`. Merlion Park was 60 minutes
-because `park` is 60 minutes, and the trip looked complete. `POST
-/api/enrichments/collect` is the sweep; the first run stored 64 enrichments and
-Merlion Park became 30–60 while the Peranakan Museum became 120–180. This is the
-"a fallback is also a way for a failure to look like success" rule again, and it
-is why the route's test asserts on the counters rather than the status code.
+**Nothing was sweeping the enrichment queue.** Enrichment ran on OpenAI's Batch
+API, and the collector that downloads a finished batch was written, tested and
+called by no one — so every batch sat at `validating` forever, `place_enrichments`
+had **zero rows**, and every visit duration in every trip came off the type table
+in `duration.ts`. Merlion Park was 60 minutes because `park` is 60 minutes, and
+the trip looked complete. Collecting once stored 64 enrichments and Merlion Park
+became 30–60 while the Peranakan Museum became 120–180. The batch path is gone
+now (see below), but the rule it taught is the one this file keeps repeating: a
+fallback is also a way for a failure to look like success.
 
 **`places.googleMapsUri` is Pro tier and rides free.** `SEARCH_FIELD_MASK`
 already asks for `rating` and `regularOpeningHours`, which are Enterprise, so
@@ -831,49 +816,33 @@ would double-charge the cached half and still look plausible. `addUsage` clamps.
 spent it. A stage that made no calls is **omitted**, not shown as a zero row:
 "Pass B was never reached" and "Pass B was free" are different answers.
 
-**Enrichment is not in a plan's cost, on purpose.** Its batch is queued by one
-plan and its answers serve every later trip touching those places, so charging
-it to the submitter would overstate that trip and let all the reusers read as
-free. It goes on `enrichment_batches.usage`, written at collect time, and the
-tokens are counted **before** the parse — a line that came back as a schema
-violation was still generated and still billed, so costing only the usable
-answers would make a batch look cheaper the worse it went.
+**Enrichment is in a plan's cost, and its tokens are counted before the parse.**
+The call is spent building this trip, so it is billed to it — even though the
+cached answer goes on to serve every later trip touching the same places. A line
+that came back as a schema violation was still generated and still billed, so
+costing only the usable answers would make a run look cheaper the worse it went.
 
-### Why enrichment needs a collect step at all
-It runs on OpenAI's **Batch API** — half price, up to 24 hours, and the answers
-sit in an output file until something downloads them. `runPlan` submits and does
-not wait; the trip ships on the type table in `duration.ts`. There is no webhook
-and no cron, so `POST /api/enrichments/collect` is the download. That is also
-why enrichment is a *cache warmer*: the real durations reach the **next** plan
-touching those places, never the one that paid to queue them.
+### Enrichment is fetched before Pass B, and the batch path is gone
+Enrichment used to run on OpenAI's Batch API — half price, up to 24 hours — which
+made it a cache *warmer*: its answers reached the next plan touching a place,
+never the one that queued them. So every first trip to a new city sized its
+visits from the type table in `duration.ts` (a park was 60 minutes because `park`
+is 60 minutes) and the itinerary looked complete doing it. Worse, the batch only
+paid off if something downloaded it, and for weeks nothing did.
 
-There is no synchronous path in `enrich.ts` — only submit and collect. Adding
-one would give real durations on the first plan at roughly double the price of a
-very cheap call.
+`enrichPlaces` sends the same request inside the run, in the stage that always
+claimed to be there. Measured on a real 58-place shortlist: 8 took 19.6s, **16
+took 11.4s**, 24 and 32 bought only a longer tail (32's worst call 8.9s against
+3.7s at 16). No 429 at any level — requests are not the binding limit (58 against
+500/min); **tokens are**, at ~48k of a 200,000/min budget per pass, so roughly
+three plans a minute however concurrency is set. `ENRICH_CONCURRENCY` is 16.
 
-### Enrichment is fetched before Pass B now, not queued for tomorrow
-The batch is half price and up to 24 hours, which made it a cache *warmer*: its
-answers reached the next plan touching a place, never the one that queued them.
-So every first trip to a new city sized its visits from the type table in
-`duration.ts` — a park was 60 minutes because `park` is 60 minutes — and the
-itinerary looked complete doing it.
-
-`enrichPlaces` sends the same request now, in the stage that always claimed to
-be there. Measured on a real 58-place shortlist: 8 took 19.6s, **16 took 11.4s**,
-24 and 32 bought only a longer tail (32's worst call 8.9s against 3.7s at 16).
-No 429 at any level — requests are not the binding limit (58 against 500/min);
-**tokens are**, at ~48k of a 200,000/min budget per pass, so roughly three plans
-a minute however concurrency is set. `ENRICH_CONCURRENCY` is 16.
-
-**`enrichNow` defaults to `false` in `runPlan` and is switched on in
-`defaultPlanRouteDeps`.** Same rule as `mode`: a library default that changes
-behaviour and spends money silently is a trap, so the product default lives
-where a reader of the route can see it.
-
-`buildEnrichmentRequest` is shared by both paths deliberately —
-`enrichmentSourceHash` digests `buildEnrichmentInput`, so a live answer and a
-batched one that phrased the same place differently would each read as stale to
-the other's reader.
+**There is no longer a way to defer enrichment.** Submit, collect, the durable
+`enrichment_batches` queue, `POST /api/enrichments/collect` and the Batch port in
+`openai.ts` were all removed on 2026-08-26 — the live path made every one of them
+dead weight, and a queue nothing sweeps is worse than no queue. The call is
+unconditional: there is no `enrichNow` flag to turn it off, because "off" would
+now mean "no enrichment at all", which nobody wants.
 
 Nothing throws: a failed place falls to the type heuristic, which is exactly
 what a cache miss already did. That is also why the tests assert on
@@ -881,8 +850,11 @@ what a cache miss already did. That is also why the tests assert on
 itinerary. A refused **store** write is reported, not raised: the answers are
 already in hand and serve this plan; what is lost is the next plan's cache hit.
 
-Live enrichment **is** in `stats.cost`, unlike the batch. A live call was spent
-building this trip; a batch's answers serve every later one.
+One thing to know when testing this: `MODELS.enrich` and `MODELS.narrate` are the
+**same model id**, and enrichment now runs in every plan. Filtering a fake
+client's requests by model no longer picks out Pass C — `pipeline.test.ts` uses
+the block count as well, because a narration carries the shared prefix plus a
+per-stop block while an enrichment call is a system prompt and one place.
 
 ### `withBackoff` exists because `withRetry` retries instantly
 Immediate retry is right for a one-off flake and useless against a rate limit —

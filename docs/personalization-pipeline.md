@@ -849,11 +849,10 @@ the cache first, and why the demo plan is:
 > time. A live demo then hits the warm path: one Pass B call plus fifteen short
 > narration calls. Do not discover the cold-start latency on stage.
 
-For the localhost demo: generate the target city once to populate Places caches and
-submit the durable enrichment batch. After OpenAI completes it, run
-`npm run enrichment:collect`, then generate the city again to verify the warm path.
-The batch id and exact submitted subjects live in `enrichment_batches`, so collection
-does not depend on the original Node process staying alive.
+For the localhost demo: generate the target city once. That single run populates the
+Places caches *and* `place_enrichments`, because enrichment is fetched live in the
+enrich stage rather than queued — see "Enrichment is fetched before Pass B" in
+`AGENTS.md`. Generate the city a second time to verify the warm path.
 
 An earlier draft claimed "marginal cost is the assignment call alone." That is true
 of the *second* trip to a city and badly misleading for the first.
