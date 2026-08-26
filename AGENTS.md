@@ -680,3 +680,214 @@ both rules.
 The lesson generalises: every degradation ladder in this pipeline is also a way
 for a real failure to reach production looking like success. When a stage has a
 fallback, its test must assert on the counter, not on the output.
+
+### Five findings from the first itinerary anyone actually read, 2026-08-26
+
+**`parseTimeMins` reads UTC, and the default is load-bearing.** It used to fall
+back to `d.getHours()` — the *browser's* clock — when no timezone was passed,
+and twelve of its call sites pass none. `minutesToISO` builds every stored
+timestamp by adding minutes-past-midnight to a UTC midnight, so UTC is that
+function's exact inverse and anything else is wrong. The page renders its labels
+in `ITINERARY_TIMEZONE` (UTC), so the times looked right while the **sort** was
+rotated by the reader's offset: at UTC+8 a 17:15 stop became 01:15 and jumped to
+the top, and day one rendered starting at 5:15 PM. Invisible at UTC+0, which is
+where CI runs. `activity-utils.test.ts` pins it with a real stored day.
+`CompactActivityCard` had a private third copy of the same parser; it is gone.
+
+**`sequence.ts` is step 7a — the day's route order, between Pass B and the
+packer.** Two correct rules left a gap: `assign.ts` sends the model no
+coordinates (hallucination surface), and `pack.ts` refuses to reorder because
+the sequence is Pass B's. So nothing in the pipeline ever looked at the map, and
+day one of the first Singapore trip walked 9.0 km to visit 4.6 km of city.
+Reordering between the meals cuts the trip from 40.4 km to 33.4 km.
+
+Meals are the fixed points and never change index — `stampDay` seats them in
+hard windows, and their position is what puts the morning before lunch. Opening
+hours are deliberately **not** consulted: predicting a stop's clock time needs
+the packer, which needs the order, and `validate.ts` already packs, inspects and
+repairs closures afterwards. Measured on the three real days, reordering caused
+**zero** extra repairs. `planner_debug.sequencing` reports before/after minutes
+per day, and it is optional on the type so a plan made before it existed reads
+as "not recorded" rather than "saved nothing".
+
+**Nothing was sweeping the enrichment queue.** `collectQueuedEnrichments` was
+written, tested and called by no one, so every batch sat at `validating` forever
+and `place_enrichments` had **zero rows** — meaning every visit duration in
+every trip came off the type table in `duration.ts`. Merlion Park was 60 minutes
+because `park` is 60 minutes, and the trip looked complete. `POST
+/api/enrichments/collect` is the sweep; the first run stored 64 enrichments and
+Merlion Park became 30–60 while the Peranakan Museum became 120–180. This is the
+"a fallback is also a way for a failure to look like success" rule again, and it
+is why the route's test asserts on the counters rather than the status code.
+
+**`places.googleMapsUri` is Pro tier and rides free.** `SEARCH_FIELD_MASK`
+already asks for `rating` and `regularOpeningHours`, which are Enterprise, so
+the SKU cannot go up — the same asymmetry `SHORTLIST_FIELD_MASK` documents, one
+tier down. `locations.google_maps_uri` is the column. Every place stored before
+that has none, so `googleMapsPlaceUrl` (`src/lib/maps/google-maps-url.ts`) falls
+back to `?api=1&query={name}&query_place_id={place_id}`, which opens the real
+place; a coordinate query only drops an unlabelled pin and is the last rung.
+
+**Pass C writes four things per stop and three of them rendered nowhere.**
+`highlights`, `foodRecommendations` and `tips` were paid for on a model, stored,
+and read by no component; `whyForYou` was only ever visible clamped to two lines
+on a card. All four now render in the detail views (`LocationDetailView` in view
+mode, `LocationDetailPanel` in edit mode), above Google's `editorial_summary` —
+one is written for this traveller, the other is Google's blurb for everyone.
+
+### A repair can undo the route order, and no fixture catches it
+`validate.ts` swaps a replacement into the failing stop's **index**, which is
+correct for the clock and blind to the map — so a day that left `sequence.ts` in
+its shortest order can ship improvable again. Measured on the Kyoto fixture: one
+of three days re-sequences 4 minutes shorter after its two swaps. Left alone
+deliberately; re-sequencing after validation means re-packing, and a re-pack can
+fail a day that had already validated.
+
+It also means `pipeline.test.ts` cannot see the difference between "sequenced"
+and "sequenced, recorded, then packed unsequenced". Every Kyoto day repairs on
+every weekday, and a repair drops stops, so the shipped path is shorter than
+Pass B's either way. The wiring test asserts what it can and says so in a
+comment. A fixture that validates clean would close it.
+
+### Travel is measured now, not guessed — `routes.ts`
+`createStraightLineTravel` divided great-circle metres by 80 m/min and called
+anything under 1200 m a walk. That one threshold decided the **mode** as well as
+the minutes, so a 1035 m leg was a walk and a 1208 m leg was a bus, 173 metres
+apart and neither looked up. Measured against Google on day one of the Singapore
+trip: the straight line understated distance by 30–100% every leg (1.0 km real
+1.3, 1.1 real 1.9, 2.2 real 3.0), and 28 of 72 pairs are genuinely faster by
+transit.
+
+**A matrix, never per-leg directions.** `TravelLegProvider` forbids a network
+call behind its signature because `packDay` calls it hundreds of times per day
+and `sequenceDay` thousands. So the whole N×N is fetched once and the provider
+is a map lookup — the seam is unchanged. Two matrices per day, walk and transit,
+and the faster wins by `TRANSIT_MIN_SAVING_MINUTES`; Google's transit duration
+already includes the walk to the stop and the wait, so they compare directly.
+
+`TravelLeg.mode` is new and optional. Present, it is authoritative and
+`travelModeForMeters` is not consulted — a measurement must beat a threshold.
+
+Caps are per request and transit's is six times tighter: 625 elements walking,
+**100** on transit. `chunkPairs` slices origins and keeps destinations whole. A
+16-place day is one walking request and three transit ones. Only
+`MATRIX_ALTERNATES` of a day's replacements go in — the rest fall back and are
+counted rather than hidden.
+
+**Everything degrades to the straight line**, which is how this could fail
+invisibly: a trip built entirely on fallbacks is indistinguishable from a routed
+one. `stats.travel.estimated` and `stats.travel.errors` are the only way to
+tell, so the tests assert on counters, not on "a leg came back".
+
+Transit needs a departure time and the planner has no timezone. `departureTimeFor`
+estimates one hour per 15° of longitude from the day's own places and asks for
+10:00 local — midnight UTC would be a night timetable for half the world. It
+also clamps into Google's roughly -7/+100 day window, because a trip in the past
+still has to route.
+
+### Every stamped time is a multiple of `VISIT_STEP_MINUTES`
+"9:00 AM – 9:43 AM" was not an estimate of anything. Merlion Park was a
+60-minute constant in a type table, packed pace built it at its 40-minute floor,
+and the growth pass handed it the three spare minutes the day had left. Nothing
+upstream measures a visit to the minute, so the precision was never real.
+
+Three things hold the grid: `quantizeDuration` in `duration.ts`, travel legs
+rounded **up** (`ceilToStep` — promising an earlier arrival than the route
+allows is the error that costs a stop), and a squeeze that surrenders whole
+steps rather than proportional minutes. `growDay` stepping by five is *not* one
+of them — with the other three in place the room to grow into is already a
+multiple of the step, so it is a speed win only. `pack.test.ts` says so, and a
+mutation confirms it.
+
+`packDay` re-applies `quantizeDuration` on the way in rather than trusting its
+caller: it is the only module that stamps a clock, so the guarantee is its own.
+
+Accepting the Gate A snapshots for this: both cities kept the **identical set of
+stops** (Kyoto 33, Singapore 20) and only the clock moved. Kyoto's repair path
+changed — five-minute boundaries cross opening hours differently, so Kodai-ji is
+now dropped directly instead of being swapped for Walden Woods and dropped a
+round later. Same outcome, one fewer wasted swap. Compare the stop *sets*, not
+the diff line count, when accepting these.
+
+### Model spend: tokens are stored, dollars are computed at render
+`jobs.result.stats.cost` is a `StageUsage[]` — stage, model, calls, input,
+cached input, output. No dollar figure is ever persisted. List prices move, and
+a stored dollar amount silently becomes a wrong claim about a run nobody can
+re-measure; `pricing.ts` prices the tokens whenever the debug page is opened, so
+correcting a rate re-prices every historical run for free. `PRICES_AS_OF` ships
+next to the figure on the page rather than hiding in a comment.
+
+**A model with no rate on file costs `null`, never `0`.** The page then says "no
+price on file" and calls the total a floor. A stage reporting $0.00 is worse
+than one reporting nothing, because somebody will believe the first.
+`RATES` deliberately lists only the models actually in `MODELS`.
+
+**`cached_tokens` is a subset of `input_tokens`, not an addition.** Billing is
+the uncached remainder at full rate plus the cached part at 10%. Adding them
+would double-charge the cached half and still look plausible. `addUsage` clamps.
+
+`StageUsage.stage` exists because Pass B and the theme call both run on
+`MODELS.assign` — "the expensive model cost $0.04" cannot say which of them
+spent it. A stage that made no calls is **omitted**, not shown as a zero row:
+"Pass B was never reached" and "Pass B was free" are different answers.
+
+**Enrichment is not in a plan's cost, on purpose.** Its batch is queued by one
+plan and its answers serve every later trip touching those places, so charging
+it to the submitter would overstate that trip and let all the reusers read as
+free. It goes on `enrichment_batches.usage`, written at collect time, and the
+tokens are counted **before** the parse — a line that came back as a schema
+violation was still generated and still billed, so costing only the usable
+answers would make a batch look cheaper the worse it went.
+
+### Why enrichment needs a collect step at all
+It runs on OpenAI's **Batch API** — half price, up to 24 hours, and the answers
+sit in an output file until something downloads them. `runPlan` submits and does
+not wait; the trip ships on the type table in `duration.ts`. There is no webhook
+and no cron, so `POST /api/enrichments/collect` is the download. That is also
+why enrichment is a *cache warmer*: the real durations reach the **next** plan
+touching those places, never the one that paid to queue them.
+
+There is no synchronous path in `enrich.ts` — only submit and collect. Adding
+one would give real durations on the first plan at roughly double the price of a
+very cheap call.
+
+### Enrichment is fetched before Pass B now, not queued for tomorrow
+The batch is half price and up to 24 hours, which made it a cache *warmer*: its
+answers reached the next plan touching a place, never the one that queued them.
+So every first trip to a new city sized its visits from the type table in
+`duration.ts` — a park was 60 minutes because `park` is 60 minutes — and the
+itinerary looked complete doing it.
+
+`enrichPlaces` sends the same request now, in the stage that always claimed to
+be there. Measured on a real 58-place shortlist: 8 took 19.6s, **16 took 11.4s**,
+24 and 32 bought only a longer tail (32's worst call 8.9s against 3.7s at 16).
+No 429 at any level — requests are not the binding limit (58 against 500/min);
+**tokens are**, at ~48k of a 200,000/min budget per pass, so roughly three plans
+a minute however concurrency is set. `ENRICH_CONCURRENCY` is 16.
+
+**`enrichNow` defaults to `false` in `runPlan` and is switched on in
+`defaultPlanRouteDeps`.** Same rule as `mode`: a library default that changes
+behaviour and spends money silently is a trap, so the product default lives
+where a reader of the route can see it.
+
+`buildEnrichmentRequest` is shared by both paths deliberately —
+`enrichmentSourceHash` digests `buildEnrichmentInput`, so a live answer and a
+batched one that phrased the same place differently would each read as stale to
+the other's reader.
+
+Nothing throws: a failed place falls to the type heuristic, which is exactly
+what a cache miss already did. That is also why the tests assert on
+`stats.enrichedNow.failed` — a completely broken run still produces a whole
+itinerary. A refused **store** write is reported, not raised: the answers are
+already in hand and serve this plan; what is lost is the next plan's cache hit.
+
+Live enrichment **is** in `stats.cost`, unlike the batch. A live call was spent
+building this trip; a batch's answers serve every later one.
+
+### `withBackoff` exists because `withRetry` retries instantly
+Immediate retry is right for a one-off flake and useless against a rate limit —
+sixty concurrent calls that all 429 will all retry in the same millisecond.
+`withBackoff` waits exponentially and only for `isRetryable` errors: 429 and
+5xx, plus anything with no status at all (transport). A 400 is our request being
+wrong, and asking again buys the same answer at twice the price. `sleep` is
+injected for the same reason `now` and `rng` are.

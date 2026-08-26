@@ -488,3 +488,37 @@
 - **`overview` from the theme premises; card description prefers Pass C's `whyForYou`.** Why: both were paid for on a model and only the debug page showed them.
 - **Absent features removed, not blanked** (user's call): sharing/invite, collaborators, companion collection, flights, lodging, attachments, realtime notes channel, `travel_polyline`, `timezone`, and the panel's website/phone/Maps link.
 - **Kept opening hours** by building `weekdayDescriptions` from the stored `opening_periods` rather than deleting the panel section — the data was already there.
+
+## 2026-08-26 — Itinerary page: order, route, durations, links, prose
+
+- **`parseTimeMins` defaults to UTC, not the browser's timezone.** Why: `minutesToISO` writes UTC-built timestamps, so UTC is its inverse. Browser-local rotated the day's order by the reader's offset while the labels stayed correct.
+- **Route order is its own step (`sequence.ts`), between Pass B and the packer.** Why: the model gets no coordinates and the packer must not reorder, so nothing looked at the map. Rejected reordering inside `pack.ts` — it would break the rule that the sequence is the caller's.
+- **Meals are pinned; opening hours are not consulted during reordering.** Why: a meal's index is the day's shape, and predicting a stop's clock time needs the packer, which needs the order. `validate.ts` repairs closures afterwards, and on the three real days it caused zero extra repairs.
+- **`POST /api/enrichments/collect` sweeps the durable batch queue.** Why: `collectQueuedEnrichments` had no caller, so `place_enrichments` was empty and every duration came off the type heuristic. Rejected a cron for now — the demo runtime is a local process.
+- **`places.googleMapsUri` added to `SEARCH_FIELD_MASK`.** Why: it is Pro and the mask is already Enterprise, so it is free. `googleMapsPlaceUrl` falls back to `query_place_id` for rows stored before the column existed.
+- **Pass C's `highlights`/`foodRecommendations`/`tips` render in the detail views.** Why: they were generated, stored, and shown by nothing.
+
+## 2026-08-26 — Real travel times and a five-minute clock
+
+- **Compute Route Matrix replaces crow-flight legs (`routes.ts`).** Why: the straight line understated every real distance by 30–100% and a 1200 m threshold decided the mode without ever asking. Rejected per-leg Directions: `TravelLegProvider` is called thousands of times per day, so it must be a prefetched matrix.
+- **Two matrices per day, walk and transit; faster wins by 5 minutes.** Why: the mode should be a measurement. The margin stops the planner boarding a bus to save ninety seconds.
+- **`TravelLeg.mode` is authoritative when present.** Why: a measured mode must beat `travelModeForMeters`, which is a guess from distance.
+- **Departure time is 10:00 local, estimated at one hour per 15° of longitude.** Why: the planner has no timezone and midnight UTC is a night timetable outside Europe. Clamped into Google's -7/+100 day window so a past trip still routes.
+- **Everything degrades to the straight line, counted in `stats.travel.estimated`.** Why: a fully-degraded trip looks identical to a routed one.
+- **All schedule arithmetic moves in 5-minute steps.** Why: nothing upstream measures a visit to the minute, so "9:43" was arithmetic, not an estimate. Gate A snapshots accepted after confirming both cities keep the identical set of stops.
+
+## 2026-08-26 — Model cost tracking
+
+- **Store tokens, price at render (`pricing.ts`).** Why: list prices move; a persisted dollar figure becomes a wrong claim about an unmeasurable run. Correcting a rate now re-prices history.
+- **An unpriced model returns `null`, not `0`.** Why: a confident $0.00 is worse than a blank. The page calls the total a floor and names the model.
+- **`StageUsage.stage` is separate from `model`.** Why: Pass B and the theme call share `MODELS.assign`, so the model name cannot attribute the spend.
+- **Enrichment cost lives on `enrichment_batches.usage`, not on the plan.** Why: one batch serves every later trip touching those places; billing the submitter overstates it and makes reusers look free. Counted before parsing, because a rejected line was still billed.
+- **Rejected: switching enrich/narrate to a cheaper model.** Why: they are already on `gpt-5.6-luna` with reasoning off, and the single `assign` call on terra is ~80% of a trip's LLM cost. The saving is about a cent per trip and the quality risk lands on `avgVisitMinutes`, which now drives every visit length.
+
+## 2026-08-26 — Enrichment moves before Pass B
+
+- **`enrichPlaces` fetches cache misses live, in the enrich stage.** Why: the batch's answers arrive up to 24h later, so every first trip to a city sized visits from the type table and looked complete. Costs ~1 cent and ~11s.
+- **Concurrency 16.** Why: measured on a real 58-place shortlist — 8 was 19.6s, 16 was 11.4s, 24 and 32 added only tail latency. No 429s; the binding limit is tokens (~48k of 200k/min), not requests.
+- **`enrichNow` defaults off in `runPlan`, on in `defaultPlanRouteDeps`.** Why: same rule as `mode` — a library default that silently spends money is a trap.
+- **Rejected a batch-completion webhook.** Why: it automates collection but does not make data arrive before the plan that needs it, and it needs a public URL the localhost demo does not have.
+- **`withBackoff` added beside `withRetry`.** Why: instant retry is useless against a 429 when 58 calls fan out together. Retries only 429/5xx/transport — a 400 is our bug.
