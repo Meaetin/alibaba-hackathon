@@ -1,1 +1,0 @@
-Next.js App Router home page that renders the user's dashboard: a bento grid of recent links, collections, itineraries and locations with creation flows, job queues, map clustering, and infinite scroll.

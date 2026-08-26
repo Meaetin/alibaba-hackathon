@@ -10,8 +10,10 @@ import {
   widenBudget,
   FUNNEL_DEFAULTS,
   SERENDIPITY_MAX_REVIEWS,
+  pickSerendipitySlots,
   type FunnelStats,
 } from './funnel'
+import { resolvePlannerKnobs } from './knobs'
 
 function makePlace(placeId: string, overrides: Partial<CandidatePlace> = {}): CandidatePlace {
   return {
@@ -572,5 +574,63 @@ describe('budget degradation ladder', () => {
     const result = widenBudget(bucket, makeProfile())
     expect(result.widenedBy).toBe(0)
     expect(result.places).toHaveLength(2)
+  })
+})
+
+describe('persona knobs in the funnel', () => {
+  const profile = makeProfile({ budget: 1 })
+
+  const base = resolvePlannerKnobs(profile, undefined, 'balanced')
+
+  it('stops widening the budget where a polished traveller would', () => {
+    const bucket = [makePlace('lux', { priceLevel: 4 })]
+    // Unbounded, this walks up the scale until the ¥¥¥¥ place is within two
+    // steps of the widened budget and admits it — for someone who said ¥.
+    // Bounded at one step it finds nothing, and the ladder hands the whole
+    // bucket back rather than failing the day.
+    expect(widenBudget(bucket, profile).widenedBy).toBe(2)
+    const stingy = widenBudget(bucket, profile, { ...base, budgetWidenSteps: 1 })
+    expect(stingy.widenedBy).toBe(0)
+    expect(stingy.places).toHaveLength(1)
+  })
+
+  it('picks no wildcards without a persona, which is what this planner always did', () => {
+    const candidates = [
+      makePlace('gem-a', { types: ['cafe'], rating: 4.6, userRatingCount: 120 }),
+      makePlace('gem-b', { types: ['cafe'], rating: 4.4, userRatingCount: 90 }),
+    ]
+    expect(base.serendipityPerTrip).toBe(0)
+    expect(pickSerendipitySlots(candidates, profile, base)).toEqual([])
+  })
+
+  it('never returns the same wildcard twice', () => {
+    const candidates = [
+      makePlace('gem-a', { types: ['cafe'], rating: 4.6, userRatingCount: 120 }),
+      makePlace('gem-b', { types: ['cafe'], rating: 4.4, userRatingCount: 90 }),
+    ]
+    const twoPicks = { ...base, serendipityPerTrip: 2 }
+    const picks = pickSerendipitySlots(candidates, profile, twoPicks)
+    expect(picks.map((p) => p.placeId)).toEqual(['gem-a', 'gem-b'])
+  })
+
+  it('returns fewer wildcards than asked when the pool runs out', () => {
+    const one = [makePlace('gem-a', { types: ['cafe'], rating: 4.6, userRatingCount: 120 })]
+    const threePicks = { ...base, serendipityPerTrip: 3 }
+    expect(pickSerendipitySlots(one, profile, threePicks)).toHaveLength(1)
+  })
+
+  it('lets a raised threshold admit a place the default rejects', () => {
+    const borderline = makePlace('borderline', {
+      types: ['cafe'],
+      rating: 4.5,
+      userRatingCount: 900,
+    })
+    expect(pickSerendipitySlots([borderline], profile, { ...base, serendipityPerTrip: 1 })).toEqual(
+      [],
+    )
+    const improvised = { ...base, serendipityPerTrip: 1, serendipityMaxReviews: 1500 }
+    expect(
+      pickSerendipitySlots([borderline], profile, improvised).map((p) => p.placeId),
+    ).toEqual(['borderline'])
   })
 })

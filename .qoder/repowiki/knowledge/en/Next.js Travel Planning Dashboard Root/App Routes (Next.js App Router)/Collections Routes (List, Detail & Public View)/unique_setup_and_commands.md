@@ -1,1 +1,0 @@
-None beyond standard Next.js routing; the `public/[token]` route requires a valid share token passed as a URL segment to fetch a read-only collection via `getPublicCollection`.

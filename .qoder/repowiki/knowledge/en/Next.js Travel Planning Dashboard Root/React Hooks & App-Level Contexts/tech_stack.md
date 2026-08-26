@@ -1,1 +1,0 @@
-React hooks on Next.js (Client Components via `'use client'`), TanStack Query (`@tanstack/react-query`) for cached reads, Supabase client for realtime `postgres_changes` channels and RPC, and Tailwind v4 breakpoint values mirrored in `useBreakpoint`.

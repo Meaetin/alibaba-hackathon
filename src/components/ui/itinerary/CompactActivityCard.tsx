@@ -13,7 +13,6 @@ import {
   Trash2,
   UtensilsCrossed,
   PlaneTakeoff,
-  House,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -79,18 +78,8 @@ export function getActivityCardLayout(
   activity: ItineraryActivityDetail,
   opts?: { editable?: boolean },
 ): ActivityCardLayout {
-  const cat = activity.category?.toLowerCase() ?? "";
-  if (
-    activity.category === "accommodation" ||
-    cat === "lodging" ||
-    cat.startsWith("lodging") ||
-    activity.source_lodging_id
-  ) {
-    return "compact";
-  }
-  if (cat === "flight" || cat === "flights" || activity.id.startsWith("flight-")) {
-    return opts?.editable ? "edit" : "full";
-  }
+  // Lodging and flights are gone with the backend that supplied them, so every
+  // stop takes the same layout and the choice is edit-mode only.
   return opts?.editable ? "edit" : "full";
 }
 
@@ -101,13 +90,6 @@ function resolveBadge(
 ): { category: NonNullable<CategoryBadgeProps["category"]>; icon: LucideIcon } {
   const cat = activity.category?.toLowerCase() ?? "";
 
-  if (
-    activity.source_lodging_id ||
-    activity.category === "accommodation" ||
-    cat.startsWith("lodging")
-  ) {
-    return { category: "accommodation", icon: House };
-  }
 
   if (activity.id.startsWith("flight-") || cat === "flight" || cat === "flights") {
     return { category: "flight", icon: PlaneTakeoff };
@@ -123,7 +105,7 @@ function resolveBadge(
 
 // ─── Time Helpers ─────────────────────────────────────────────────────────────
 
-function formatTime(time: string | null, timezone?: string): string | null {
+function formatTime(time: string | null, timezone = "UTC"): string | null {
   if (!time) return null;
   if (time.includes("T")) {
     const d = new Date(time);
@@ -132,7 +114,7 @@ function formatTime(time: string | null, timezone?: string): string | null {
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
-      ...(timezone ? { timeZone: timezone } : {}),
+      timeZone: timezone,
     });
   }
   const parts = time.split(":");
@@ -147,7 +129,7 @@ function formatTime(time: string | null, timezone?: string): string | null {
 function formatTimeRange(
   startTime: string | null,
   endTime: string | null,
-  timezone?: string,
+  timezone = "UTC",
 ): string | null {
   const start = formatTime(startTime, timezone);
   const end = formatTime(endTime, timezone);
@@ -158,33 +140,17 @@ function formatTimeRange(
 
 // ─── Duration Helper ──────────────────────────────────────────────────────────
 
-function parseTimeToMins(time: string | null): number | null {
-  if (!time) return null;
-  if (time.includes("T")) {
-    const d = new Date(time);
-    if (isNaN(d.getTime())) return null;
-    return d.getHours() * 60 + d.getMinutes();
-  }
-  const parts = time.split(":");
-  if (parts.length < 2) return null;
-  const h = parseInt(parts[0], 10);
-  const m = parseInt(parts[1], 10);
-  if (isNaN(h) || isNaN(m)) return null;
-  return h * 60 + m;
-}
-
 function formatActivityDuration(
   activity: ItineraryActivityDetail,
 ): string | null {
   let mins: number | null = null;
 
   if (activity.start_time && activity.end_time) {
-    const startMins = parseTimeToMins(activity.start_time);
-    const endMins = parseTimeToMins(activity.end_time);
-    if (startMins !== null && endMins !== null) {
-      const diff = endMins - startMins;
-      if (diff > 0) mins = diff;
-    }
+    // The shared helper, not a private copy reading the browser's clock: a stop
+    // whose start and end straddle local midnight would otherwise measure as a
+    // negative day.
+    const diff = parseTimeMins(activity.end_time) - parseTimeMins(activity.start_time);
+    if (diff > 0) mins = diff;
   }
 
   if (
@@ -233,8 +199,6 @@ function CompactActivityCard({
   const layout = layoutProp ?? getActivityCardLayout(activity);
   const badge = resolveBadge(activity);
   const cat = activity.category?.toLowerCase() ?? "";
-  const isFlight =
-    cat === "flight" || cat === "flights" || activity.id.startsWith("flight-");
 
   const timeRange = formatTimeRange(activity.start_time, activity.end_time, timezone);
   const durationLabel = formatActivityDuration(activity);
@@ -423,14 +387,15 @@ function CompactActivityCard({
 
   // Description: prefer location_context, fallback to the humanized primary type
   const primaryType = activity.location?.primary_type;
+  // Pass C's sentence first: it is written for this traveller and this day,
+  // where the editorial summary is Google's description of the place for
+  // everyone. The type name is the last resort.
   const description =
-    activity.location?.location_context ??
+    activity.content?.whyForYou ??
+    activity.location?.editorial_summary ??
     (primaryType ? humanizePlaceType(primaryType) : null);
 
-  // Lodging label for compact layout subtitle
-  const isLodgingBookend =
-    !!activity.source_lodging_id &&
-    activity.source_lodging_id === "lodging-bookend";
+  const isLodgingBookend = false;
 
   const lodgingLabel = (() => {
     if (!activity.start_time) return null;
@@ -741,17 +706,6 @@ function CompactActivityCard({
                   </span>
                 )}
 
-                {/* Flight Times */}
-                {isFlight && activity.flight_arrive_time && (
-                  <span className="compact-card-flight-arrives type-body-3 text-content font-semibold">
-                    Lands {activity.flight_arrive_time.slice(0, 5)}
-                  </span>
-                )}
-                {isFlight && activity.flight_depart_time && (
-                  <span className="compact-card-flight-departs type-body-3 text-content font-semibold">
-                    Departs {activity.flight_depart_time.slice(0, 5)}
-                  </span>
-                )}
               </div>
 
               {/* Thumbnail */}

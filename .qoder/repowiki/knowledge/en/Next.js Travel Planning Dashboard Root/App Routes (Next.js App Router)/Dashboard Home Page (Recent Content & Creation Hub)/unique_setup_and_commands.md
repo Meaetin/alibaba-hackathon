@@ -1,1 +1,0 @@
-None beyond standard Next.js dev/build; the page relies on a running backend exposing the `/api/jobs` endpoints consumed by `createJob`/`retryJob`/`detachJob` and a Supabase project configured via `@/lib/supabase/client`.

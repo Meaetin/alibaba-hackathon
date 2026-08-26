@@ -16,6 +16,7 @@ const avatarVariants = cva(
         sm: "size-8 type-body-4", // 32px — Body 4 (12/14)
         md: "size-9 type-body-3", // 36px — Body 3 (13/16)
         lg: "size-10 type-body-2", // 40px — Body 2 (14/20)
+        xl: "size-[148px] type-h2 font-semibold", // 148px — profile page hero avatar
       },
       type: {
         initial: "border-2 border-surface",
@@ -31,10 +32,11 @@ const avatarVariants = cva(
 );
 
 /** Lucide icon px per avatar size (Figma: lg→20, md→16, sm→16) */
-const ICON_SIZE_CLASS: Record<"sm" | "md" | "lg", string> = {
+const ICON_SIZE_CLASS: Record<"sm" | "md" | "lg" | "xl", string> = {
   sm: "size-4",
   md: "size-4",
   lg: "size-5",
+  xl: "size-12",
 };
 
 interface AvatarProps
@@ -66,9 +68,10 @@ function getInitials(name: string): string {
 /**
  * Avatar component for displaying user identity via initials, image, or icon.
  *
- * Three sizes (sm 32px, md 36px, lg 40px) and three types (initial, image, icon),
- * matching the Figma Avatar component set. Hover/active states are driven by CSS
- * pseudo-classes (opacity), so they only apply when the avatar is interactive.
+ * Three sizes (sm 32px, md 36px, lg 40px) plus an xl 148px hero size for the
+ * profile page, and three types (initial, image, icon), matching the Figma
+ * Avatar component set. Hover/active states are driven by CSS pseudo-classes
+ * (opacity), so they only apply when the avatar is interactive.
  *
  * @example
  * // Initial avatar

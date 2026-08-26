@@ -18,7 +18,6 @@ import { useToast } from "@/contexts/ToastContext";
 import { createClient } from "@/lib/supabase/client";
 import { getContentDetail } from "@/lib/supabase/queries";
 import { useRubberBandSelection } from "@/hooks/useRubberBandSelection";
-import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
 import { useLinkDetailsDial } from "@/hooks/useLinkDetailsDial";
 import { useCollectionLocationBatchOperations } from "@/hooks/useCollectionLocationBatchOperations";
@@ -141,13 +140,12 @@ export default function LinkDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const userId = useSessionUserId();
   const { isPhone } = useBreakpoint();
 
   useRecordView("link", contentId);
   useHighlightLocation();
 
-  const { jobs: planningJobs } = useJobsQueue(userId, {
+  const { jobs: planningJobs } = useJobsQueue({
     type: "itinerary-planning",
     onJobCompleted: (job) => {
       const itineraryId = (job.result as Record<string, unknown> | undefined)

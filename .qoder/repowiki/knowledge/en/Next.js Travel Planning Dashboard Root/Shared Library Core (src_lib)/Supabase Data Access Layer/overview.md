@@ -1,1 +1,0 @@
-Provides typed Supabase client access and domain-scoped query/mutation functions for itineraries, collections, locations, search, and user activity tracking.

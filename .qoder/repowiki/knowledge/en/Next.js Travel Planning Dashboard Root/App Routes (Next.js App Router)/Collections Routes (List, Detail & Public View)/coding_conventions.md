@@ -1,6 +1,0 @@
-- Each route file is a client component declared with the `"use client"` directive at the top of the file.
-- Data fetching uses React Query hooks (e.g. `useCollectionsQuery`, `useLinkUsageQuery`) and mutations trigger cache refreshes by calling `queryClient.invalidateQueries({ queryKey: queryKeys.collections() })` rather than manual refetches.
-- User-facing errors are surfaced through `showToast` from `useToast()` with explicit `variant` values (`success`, `error`, `default`) instead of `alert` or console-only logging.
-- UI regions are annotated with semantic `data-region="..."` attributes on container divs (e.g. `collections-page`, `collections-bento-grid`, `collection-detail-hero`) for testing and styling hooks.
-- Asynchronous mutations wrap their body in try/catch blocks that call `getFriendlyApiError(err, ...)` to produce user-friendly toast messages on failure.
-- Heavy or browser-only dependencies (e.g. `StaticMap`) are loaded lazily via `next/dynamic` with `ssr: false` to avoid server-side execution.

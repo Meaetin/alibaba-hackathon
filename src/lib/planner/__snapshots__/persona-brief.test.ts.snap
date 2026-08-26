@@ -1,0 +1,150 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the twelve archetypes, rendered > matches the golden briefs 1`] = `
+{
+  "bucket_list_chaser": {
+    "archetype": "The Bucket List Chaser",
+    "avoid": [
+      "No unnamed slots and no 'explore the area' time.",
+      "Do not build a day around one obscure thing.",
+    ],
+    "signals": [],
+    "traits": [
+      "Fill every slot with a named place. No open time.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "The things this city is known for, in an efficient order. Say why each is famous.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "comfort_cruiser": {
+    "archetype": "The Comfort Cruiser",
+    "avoid": [
+      "No unnamed slots and no 'explore the area' time.",
+      "No hostels, no long bus rides, no street-stall-only meals.",
+      "Do not build a day around one obscure thing.",
+    ],
+    "signals": [],
+    "traits": [
+      "Fill every slot with a named place. No open time.",
+      "Indoors and seated where there is a choice. Short transfers. Skip the queue-in-the-sun option.",
+      "The things this city is known for, in an efficient order. Say why each is famous.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "culinary_nomad": {
+    "archetype": "The Culinary Nomad",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "One subject per day, followed properly. Prefer places locals use over places that are famous.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "cultural_diver": {
+    "archetype": "The Cultural Diver",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "One subject per day, followed properly. Prefer places locals use over places that are famous.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "master_planner": {
+    "archetype": "The Master Planner",
+    "avoid": [
+      "No unnamed slots and no 'explore the area' time.",
+      "No hostels, no long bus rides, no street-stall-only meals.",
+    ],
+    "signals": [],
+    "traits": [
+      "Fill every slot with a named place. No open time.",
+      "Indoors and seated where there is a choice. Short transfers. Skip the queue-in-the-sun option.",
+      "Two well-known anchors a day; everything else local.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "nature_pilgrim": {
+    "archetype": "The Nature Pilgrim",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Street stalls, long walks and local transport are the point, not a compromise.",
+      "Two well-known anchors a day; everything else local.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "slow_immersionist": {
+    "archetype": "The Slow Immersionist",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Anchor two or three fixed points a day; leave the rest as a direction to walk in.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "One subject per day, followed properly. Prefer places locals use over places that are famous.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "social_explorer": {
+    "archetype": "The Social Explorer",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "Two well-known anchors a day; everything else local.",
+      "Shared tables, markets, things worth doing together. Meals run long.",
+    ],
+  },
+  "soulful_soloist": {
+    "archetype": "The Soulful Soloist",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "One subject per day, followed properly. Prefer places locals use over places that are famous.",
+      "Places that are good alone: counters, gardens, viewpoints, galleries. No group-format activities.",
+    ],
+  },
+  "spontaneous_wanderer": {
+    "archetype": "The Spontaneous Wanderer",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Anchor two or three fixed points a day; leave the rest as a direction to walk in.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "Two well-known anchors a day; everything else local.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "thrill_seeker": {
+    "archetype": "The Thrill Seeker",
+    "avoid": [],
+    "signals": [],
+    "traits": [
+      "Fill the day, but leave one slot as a named area rather than a named place.",
+      "Street stalls, long walks and local transport are the point, not a compromise.",
+      "Two well-known anchors a day; everything else local.",
+      "No social preference — choose on quality alone.",
+    ],
+  },
+  "weekend_warrior": {
+    "archetype": "The Weekend Warrior",
+    "avoid": [
+      "No unnamed slots and no 'explore the area' time.",
+    ],
+    "signals": [],
+    "traits": [
+      "Fill every slot with a named place. No open time.",
+      "Mix comfortable and basic — a hawker lunch is fine if dinner is sit-down.",
+      "Two well-known anchors a day; everything else local.",
+      "Shared tables, markets, things worth doing together. Meals run long.",
+    ],
+  },
+}
+`;

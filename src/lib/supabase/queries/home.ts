@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import tzlookup from "tz-lookup";
 import { getCollectionPreviewImages } from "../queries";
-import type { TransportMode } from "@/components/ui/itinerary/ItineraryDayColumn/constants";
-import type { PriceRange } from "@/lib/maps/price-range";
 
 // ───── Types ─────────────────────────────────────────────────────────────────
 
@@ -44,264 +41,23 @@ async function attachCollectionPreviewImages(
 
 // ───── Single Itinerary Detail ─────────────────────────────────────────────
 
-export type ItineraryDetail = {
-  id: string;
-  name: string;
-  country: string;
-  region?: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  start_date: string;
-  end_date: string;
-  total_days: number;
-  total_activities: number;
-  overview?: string | null;
-  owner_id: string;
-  collection_id: string;
-  is_public: boolean;
-  public_token?: string | null;
-  invite_token?: string | null;
-  invite_token_expires_at?: string | null;
-  thumbnail_url?: string | null;
-  updated_at?: string | null;
-  collaborators: Array<{ user_id: string; role: string }>;
-  days: ItineraryDayDetail[];
-  timezone?: string | null;
-};
-
-export type ItineraryDayDetail = {
-  id: string;
-  date: string;
-  day_index: number;
-  area_name?: string | null;
-  timezone?: string | null;
-  activities: ItineraryActivityDetail[];
-};
-
-export type ItineraryActivityDetail = {
-  id: string;
-  day_id: string;
-  day_index: number;
-  name: string;
-  start_time: string | null;
-  end_time: string | null;
-  category: string;
-  meal_type?: string | null;
-  place_id?: string | null;
-  /** Client-generated token set on an optimistic add and echoed back on the
-   *  realtime INSERT, so a temp card can be matched to its server row even when
-   *  name/start_time changed (custom adds have no place_id/location_id to match on). */
-  correlation_id?: string | null;
-  /** FK to `locations`. Kept on the type so the side panel can lazy-hydrate
-   *  when the eager join returns null (e.g. realtime INSERT echo). */
-  location_id?: string | null;
-  photo_url?: string | null;
-  source_flight_id?: string | null;
-  source_lodging_id?: string | null;
-  /** Flight-card subtitle source on departure cards (title "Check in - …").
-   *  Persisted on the activity row at insert time; mutually exclusive with
-   *  `flight_arrive_time` per card. */
-  flight_depart_time?: string | null;
-  /** Flight-card subtitle source on arrival cards (title "Landing in - …").
-   *  Persisted on the activity row at insert time; mutually exclusive with
-   *  `flight_depart_time` per card. */
-  flight_arrive_time?: string | null;
-  travel_polyline?: string | null;
-  travel_distance_meters?: number | null;
-  travel_duration_seconds?: number | null;
-  /** Transport mode the three `travel_*` values above were computed in. The leg
-   *  departs THIS activity, so this row owns the mode for the leg to the next stop. */
-  travel_mode?: TransportMode | null;
-  /** Dense 0-based ordinal within the day, authoritative for display order
-   *  (migration 122, ADR 0007). Render order is derived from this, never from
-   *  array position — arrays here are rebuilt constantly by refetches, realtime
-   *  row echoes, and the `itinerary.days` → `editLocalDays` sync, and any of
-   *  those silently loses an order that only exists as array identity. */
-  position?: number | null;
-  location?: ActivityLocation | null;
-};
-
-/** Shape of the embedded `locations` row when joined onto an itinerary activity.
- *  Kept in sync with the `locations(...)` projection in `getItineraryDetail()`
- *  below and with the realtime hydration in `useItineraryRealtime`. */
-export type ActivityLocation = {
-  id: string;
-  name: string;
-  latitude: number | null;
-  longitude: number | null;
-  photo_urls?: string[] | null;
-  formatted_address?: string | null;
-  google_maps_uri?: string | null;
-  google_maps_links?: Record<string, unknown> | null;
-  location_context?: string | null;
-  regular_opening_hours?: Record<string, unknown> | null;
-  stay_duration?: number | null;
-  rating?: number | null;
-  user_rating_count?: number | null;
-  /** Parsed Google Places price range (per-person), e.g. { startPrice: 1, endPrice: 100000, currency: "VND" }. */
-  price_range?: PriceRange | null;
-  primary_type?: string | null;
-  categories?: string[] | null;
-  business_status?: string | null;
-  website_uri?: string | null;
-  international_phone_number?: string | null;
-  national_phone_number?: string | null;
-  photos?: Array<{
-    name?: string;
-    widthPx?: number;
-    heightPx?: number;
-    authorAttributions?: Array<{ displayName?: string; uri?: string; photoUri?: string }>;
-  }> | null;
-};
-
 /**
- * Get full itinerary detail including days, activities, and locations.
+ * The itinerary page's types now live with the data they describe, in
+ * `src/lib/db/itinerary-detail.ts`, and are re-exported here so the twenty-odd
+ * components that import them from this module keep working.
+ *
+ * The Supabase `getItineraryDetail` that used to sit here is gone. It queried a
+ * schema this build does not have, against a project that was never configured,
+ * and its only symptom was a "Failed to fetch" in the console while the page
+ * rendered empty. The read is `GET /api/itineraries/[id]` over Neon.
  */
-export async function getItineraryDetail(
-  supabase: SupabaseClient,
-  itineraryId: string,
-): Promise<ItineraryDetail | null> {
-  // Fetch itinerary base data
-  const { data: itinerary, error: itError } = await supabase
-    .from("itineraries")
-    .select("id, name, country, region, latitude, longitude, start_date, end_date, total_days, total_activities, overview, owner_id, collection_id, is_public, public_token, invite_token, invite_token_expires_at, thumbnail_url, updated_at")
-    .eq("id", itineraryId)
-    .maybeSingle();
-
-  if (itError) {
-    console.error("Error fetching itinerary:", itError.code, itError.message, itError.details);
-    return null;
-  }
-  if (!itinerary) return null;
-
-  // Fetch collaborators (exclude owner — rendered separately)
-  const { data: collabData } = await supabase
-    .from("user_itinerary")
-    .select("user_id, role")
-    .eq("itinerary_id", itineraryId)
-    .eq("role", "collaborator");
-
-  // Fetch days (constrained to itinerary date range to exclude any orphaned rows)
-  const { data: daysData } = await supabase
-    .from("itinerary_days")
-    .select("id, date, day_index, area_name, timezone")
-    .eq("itinerary_id", itineraryId)
-    .gte("date", itinerary.start_date)
-    .lte("date", itinerary.end_date)
-    .order("day_index", { ascending: true });
-
-  // Fetch activities with locations
-  const { data: activitiesData } = await supabase
-    .from("itinerary_activities")
-    .select(`
-      id, day_id, name, start_time, end_time, category, meal_type,
-      place_id, location_id, photo_url, source_flight_id, source_lodging_id,
-      flight_depart_time, flight_arrive_time,
-      travel_polyline, travel_distance_meters, travel_duration_seconds, travel_mode, position,
-      locations(
-        id, name, latitude, longitude, photo_urls, formatted_address,
-        google_maps_uri, google_maps_links, location_context, regular_opening_hours,
-        stay_duration, rating, user_rating_count, price_range, primary_type,
-        categories, business_status, website_uri,
-        international_phone_number, national_phone_number, photos
-      )
-    `)
-    .eq("itinerary_id", itineraryId)
-    // `position` is authoritative for order within a day (migration 122).
-    // start_time only breaks ties for rows predating the backfill.
-    .order("position", { ascending: true, nullsFirst: false })
-    .order("start_time", { ascending: true });
-
-  const days: ItineraryDayDetail[] = (daysData ?? []).map((day: { id: string; date: string; day_index: number; area_name: string | null; timezone: string | null }) => {
-    const activities = ((activitiesData ?? []) as unknown as Array<{
-      id: string;
-      day_id: string;
-      name: string;
-      start_time: string | null;
-      end_time: string | null;
-      category: string;
-      meal_type: string | null;
-      place_id: string | null;
-      location_id: string | null;
-      photo_url: string | null;
-      source_flight_id: string | null;
-      source_lodging_id: string | null;
-      flight_depart_time: string | null;
-      flight_arrive_time: string | null;
-      travel_polyline: string | null;
-      travel_mode: TransportMode | null;
-      position: number | null;
-      travel_distance_meters: number | null;
-      travel_duration_seconds: number | null;
-      locations: ActivityLocation | ActivityLocation[] | null;
-    }>)
-      .filter((a) => a.day_id === day.id)
-      .map((a) => {
-        const loc = Array.isArray(a.locations) ? a.locations[0] ?? null : a.locations;
-        return {
-          id: a.id,
-          day_id: a.day_id,
-          day_index: day.day_index,
-          name: a.name,
-          start_time: a.start_time,
-          end_time: a.end_time,
-          category: a.category,
-          meal_type: a.meal_type,
-          place_id: a.place_id,
-          location_id: a.location_id,
-          photo_url: a.photo_url,
-          source_flight_id: a.source_flight_id,
-          source_lodging_id: a.source_lodging_id,
-          flight_depart_time: a.flight_depart_time,
-          flight_arrive_time: a.flight_arrive_time,
-          travel_polyline: a.travel_polyline,
-          travel_distance_meters: a.travel_distance_meters,
-          travel_duration_seconds: a.travel_duration_seconds,
-          travel_mode: a.travel_mode,
-          position: a.position,
-          location: loc,
-        };
-      });
-
-    return {
-      id: day.id,
-      date: day.date,
-      day_index: day.day_index,
-      area_name: day.area_name,
-      timezone: day.timezone,
-      activities,
-    };
-  });
-
-  return {
-    id: itinerary.id,
-    name: itinerary.name,
-    country: itinerary.country,
-    region: itinerary.region ?? null,
-    latitude: itinerary.latitude ?? null,
-    longitude: itinerary.longitude ?? null,
-    start_date: itinerary.start_date,
-    end_date: itinerary.end_date,
-    total_days: itinerary.total_days,
-    total_activities: itinerary.total_activities,
-    overview: itinerary.overview,
-    owner_id: itinerary.owner_id,
-    collection_id: itinerary.collection_id as string,
-    is_public: (itinerary as { is_public?: boolean }).is_public ?? false,
-    public_token: (itinerary as { public_token?: string | null }).public_token ?? null,
-    invite_token: (itinerary as { invite_token?: string | null }).invite_token ?? null,
-    invite_token_expires_at: (itinerary as { invite_token_expires_at?: string | null }).invite_token_expires_at ?? null,
-    thumbnail_url: (itinerary as { thumbnail_url?: string | null }).thumbnail_url ?? null,
-    updated_at: (itinerary as { updated_at?: string | null }).updated_at ?? null,
-    collaborators: (collabData ?? []) as Array<{ user_id: string; role: string }>,
-    days,
-    timezone: days[0]?.timezone ?? (
-      itinerary.latitude != null && itinerary.longitude != null
-        ? tzlookup(itinerary.latitude, itinerary.longitude)
-        : null
-    ),
-  };
-}
+export type {
+  ItineraryDetail,
+  ItineraryDayDetail,
+  ItineraryActivityDetail,
+  ActivityCategory,
+  ActivityLocationDetail as ActivityLocation,
+} from "@/lib/db/itinerary-detail";
 
 // ───── Recent Content ────────────────────────────────────────────────────────
 

@@ -39,6 +39,7 @@ import type { CandidatePlace, OpeningPeriod, PreferenceProfile } from "./types";
 // ── the wire ─────────────────────────────────────────────────────────────────
 
 const PLACES_SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText";
+const PLACES_SEARCH_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
 const PLACES_DETAILS_BASE_URL = "https://places.googleapis.com/v1/places";
 
 /**
@@ -64,6 +65,7 @@ export const SEARCH_FIELD_MASK = [
   "places.priceRange",
   "places.regularOpeningHours",
   "places.businessStatus",
+  "places.googleMapsUri", // Pro — the mask is already Enterprise, so this is free
   "places.photos", // resource NAMES only — resolving to an image is a separate SKU
 ].join(",");
 
@@ -95,17 +97,116 @@ export type { FetchLike } from "./http";
 
 // ── what a search is ─────────────────────────────────────────────────────────
 
+/** Google's hard ceiling on a Nearby Search circle. */
+export const NEARBY_MAX_RADIUS_METERS = 50_000;
+
+/**
+ * Places types Google **returns** but will not **filter** on.
+ *
+ * The API splits its types into two tables: Table A is searchable, Table B is
+ * only ever descriptive. Both arrive in `places.types`, which makes this trap
+ * invisible from the data — a live Singapore run saw `food` and
+ * `place_of_worship` on real places, proposed them as `includedTypes`, and
+ * Google answered **400 for the whole request**. Not "ignored that type": the
+ * entire circle was lost, twice out of three searches.
+ *
+ * So "this city has places of that type" is necessary and not sufficient, and
+ * this list is the rest of it. Google owns the list, so it can grow; anything
+ * missed still costs only its own circle, which the feasibility ladder can
+ * widen around.
+ */
+export const NON_SEARCHABLE_TYPES: ReadonlySet<string> = new Set([
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "country",
+  "establishment",
+  "finance",
+  "floor",
+  "food",
+  "general_contractor",
+  "geocode",
+  "health",
+  "intersection",
+  "landmark",
+  "natural_feature",
+  "neighborhood",
+  "place_of_worship",
+  "plus_code",
+  "point_of_interest",
+  "political",
+  "post_box",
+  "postal_code",
+  "premise",
+  "room",
+  "route",
+  "street_address",
+  "street_number",
+  "sublocality",
+  "sublocality_level_1",
+  "subpremise",
+  "town_square",
+]);
+
+/**
+ * A circle to search inside, for `places:searchNearby`.
+ *
+ * The coordinates come from a place that is already in the pool, never from a
+ * model and never from a geocoder — which is what makes an anchor cost nothing
+ * and be impossible to hallucinate.
+ */
+export interface NearbySearch {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  /** Places types to return. Empty means "whatever is there". */
+  includedTypes: readonly string[];
+}
+
 /**
  * One billable search. Cache identity also includes the page size supplied to
  * `searchCacheKey`; a five-result pre-warm must not satisfy a twenty-result run.
+ *
+ * Two endpoints, one type, on purpose. A nearby search wants exactly the same
+ * cache, the same location persistence, the same dedupe and the same stats as a
+ * text search, and a second copy of `retrievePlaces` to get them would be a
+ * second place for the "publish the cache entry only after the rows land" rule
+ * to be forgotten.
  */
 export interface SearchRequest {
   city: string;
-  /** Text query with `{city}` already interpolated. */
+  /** Text query with `{city}` already interpolated. Ignored when `nearby` is set. */
   query: string;
   /** Optional single Places type filter. Narrows the long tail Text Search
    *  catches; most plan rows leave it unset. */
   includedType?: string;
+  /** Present ⇒ this is a Nearby Search around a circle, not a Text Search. */
+  nearby?: NearbySearch;
+}
+
+/**
+ * A nearby search as a `SearchRequest`. The radius is clamped to Google's
+ * ceiling here rather than at the call site, because the call site is deriving
+ * it from a persona knob and a model's word for "wide".
+ */
+export function nearbyRequest(
+  city: string,
+  /** A place already in the pool. Its coordinates are the circle's centre. */
+  centre: { latitude: number; longitude: number },
+  radiusMeters: number,
+  includedTypes: readonly string[],
+): SearchRequest {
+  return {
+    city,
+    // Not a query, and deliberately not empty: this string is what a failure in
+    // `stats.failures` is identified by, and "" tells nobody anything.
+    query: `nearby:${includedTypes.join("+") || "any"}`,
+    nearby: {
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
+      includedTypes: [...includedTypes].sort(),
+    },
+  };
 }
 
 /**
@@ -124,6 +225,16 @@ export function searchCacheKey(
     normalizeKeyPart(request.query),
     request.includedType ?? "",
     String(pageSize),
+    // A circle is part of what was asked. Two themes anchored on different
+    // places produce different searches and must not share one cache entry.
+    request.nearby
+      ? [
+          request.nearby.latitude.toFixed(5),
+          request.nearby.longitude.toFixed(5),
+          String(request.nearby.radiusMeters),
+          [...request.nearby.includedTypes].sort().join("+"),
+        ].join(",")
+      : "",
   ];
   return createHash("sha256").update(parts.join("|")).digest("hex");
 }
@@ -195,6 +306,9 @@ export interface RetrievedPlace extends CandidatePlace {
   city: string;
   formattedAddress?: string;
   priceRange?: PriceRange;
+  /** Google's canonical link for the place. Undefined for anything retrieved
+   *  before the field joined `SEARCH_FIELD_MASK`. */
+  googleMapsUri?: string;
   /** Up to 5. Null means the shortlist hydration has not run; `[]` means it
    *  ran and Google returned no reviews. */
   reviewSnippets: ReviewSnippet[] | null;
@@ -434,7 +548,7 @@ export async function retrievePlaces(
     deps.concurrency ?? DEFAULT_CONCURRENCY,
     async ({ request }): Promise<{ places?: RetrievedPlace[]; failure?: SearchFailure }> => {
       try {
-        const raw = await searchText(request, { doFetch, apiKey: deps.apiKey, pageSize });
+        const raw = await runSearch(request, { doFetch, apiKey: deps.apiKey, pageSize });
         return { places: raw.map((place) => normalizePlace(place, request.city, now)) };
       } catch (error) {
         return { failure: { request, message: messageOf(error) } };
@@ -639,14 +753,41 @@ async function fetchShortlistDetails(
   };
 }
 
-async function searchText(
+/**
+ * One search, either endpoint.
+ *
+ * **`SEARCH_FIELD_MASK` for both, and that is the cost argument.** Google sets
+ * the SKU tier from the highest-tier field in the mask, per call — so a single
+ * Atmosphere field added for a nearby search would bump the tier on every
+ * nearby call in every plan. The Atmosphere tier is bought once, later, on the
+ * ~60-place shortlist. Never here.
+ */
+async function runSearch(
   request: SearchRequest,
   ctx: { doFetch: FetchLike; apiKey: string; pageSize: number },
 ): Promise<RawPlace[]> {
-  const body: Record<string, unknown> = { textQuery: request.query, pageSize: ctx.pageSize };
-  if (request.includedType) body.includedType = request.includedType;
+  const nearby = request.nearby;
+  const url = nearby ? PLACES_SEARCH_NEARBY_URL : PLACES_SEARCH_TEXT_URL;
+  const body: Record<string, unknown> = nearby
+    ? {
+        maxResultCount: ctx.pageSize,
+        ...(nearby.includedTypes.length > 0
+          ? { includedTypes: [...nearby.includedTypes] }
+          : {}),
+        locationRestriction: {
+          circle: {
+            center: { latitude: nearby.latitude, longitude: nearby.longitude },
+            radius: nearby.radiusMeters,
+          },
+        },
+      }
+    : {
+        textQuery: request.query,
+        pageSize: ctx.pageSize,
+        ...(request.includedType ? { includedType: request.includedType } : {}),
+      };
 
-  const response = await ctx.doFetch(PLACES_SEARCH_TEXT_URL, {
+  const response = await ctx.doFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -680,6 +821,7 @@ interface RawPlace {
   priceRange?: unknown;
   regularOpeningHours?: { periods?: OpeningPeriod[] };
   businessStatus?: string;
+  googleMapsUri?: string;
   photos?: { name?: string }[];
 }
 
@@ -711,6 +853,7 @@ function normalizePlace(raw: RawPlace, city: string, now: Date): RetrievedPlace 
     priceLevel: toPriceLevelOrdinal(raw.priceLevel),
     priceRange: toPriceRange(raw.priceRange),
     businessStatus: raw.businessStatus,
+    googleMapsUri: raw.googleMapsUri,
     openingPeriods: raw.regularOpeningHours?.periods,
     reviewSnippets: null,
     shortlistHydratedAt: null,

@@ -1,1 +1,0 @@
-React client components that render the itinerary detail page, including header/controls, edit-mode three-column layout, day timeline columns, tabbed sub-views (flights, lodging, bookings, expenses, notes), and shared drag/time/overlap utilities.

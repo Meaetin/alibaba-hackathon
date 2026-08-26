@@ -1,1 +1,0 @@
-Reusable React modal, dialog, and lightbox components for creating, confirming, deleting, and browsing content within the application's UI layer.

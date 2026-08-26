@@ -10,6 +10,7 @@ import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { NewCollectionModal } from "@/components/ui/modals/NewCollectionModal";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { CreateCard } from "@/components/ui/dashboard/CreateCard";
 import { type ListingCardType } from "@/components/ui/dashboard/ListingContextMenu";
 import { AddToDestinationModal } from "@/components/ui/modals/AddToDestinationModal";
@@ -20,7 +21,9 @@ import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } 
 import { createCollection } from "@/lib/api/collections";
 import { createClient } from "@/lib/supabase/client";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
-import { useJobsQueue, type QueueJob } from "@/hooks/useJobsQueue";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
+import { announcePlanningJob } from "@/lib/jobs/events";
 import { ItineraryQueueCardItem } from "@/components/ui/itinerary/ItineraryQueueCardItem";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useMapClusters } from "@/hooks/useMapClusters";
@@ -189,7 +192,7 @@ export default function DashboardPage() {
     return () => window.removeEventListener("argo:content-prepended", handler);
   }, [prependItem]);
 
-  useJobsQueue(userId, {
+  useJobsQueue({
     type: "content-analysis",
     onJobCompleted: (job) => {
       refresh();
@@ -220,10 +223,10 @@ export default function DashboardPage() {
     jobs: planningJobs,
     removeJob: removePlanningJob,
     upsertJob: upsertPlanningJob,
-  } = useJobsQueue(userId, {
+  } = useJobsQueue({
     type: "itinerary-planning",
-    // No "Itinerary ready" toast here — the global ItineraryJobNotifier owns it,
-    // and raising it in both places showed it twice.
+    // No "Itinerary ready" toast here — MainLayout's persistent local queue
+    // owns it, and raising it in both places shows it twice.
     onJobCompleted: (job) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
       if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.upcomingItineraries(userId) });
@@ -236,7 +239,7 @@ export default function DashboardPage() {
       refresh();
     },
     // Failure is surfaced by the queue card (error copy + Try Again) and the
-    // global notifier's toast — a third announcement here made it fire twice.
+    // layout queue's toast — a third announcement here shows it twice.
   });
 
   // Hand off to the canonical row once the refresh lands (same key → no remount).
@@ -483,7 +486,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleItinerarySubmit = async (data: { tripName: string; country?: string; region?: string; latitude?: number; longitude?: number; startDate?: string; endDate?: string; totalDays?: number; aiRecommendations: boolean; selectedLocationIds: string[] }) => {
+  const handleItinerarySubmit = async (data: NewItinerarySubmission) => {
     if (!data.tripName || !data.country || !data.startDate || !data.totalDays) return;
     try {
       const result = await createItineraryRouted({
@@ -498,6 +501,7 @@ export default function DashboardPage() {
         totalDays: data.totalDays,
         selectedLocationIds: data.selectedLocationIds,
         aiRecommendations: data.aiRecommendations,
+        pace: data.pace,
       });
       setNewItineraryModalOpen(false);
       setTripNameValue("");
@@ -505,6 +509,8 @@ export default function DashboardPage() {
       // AI-only itinerary (no locations + AI on) → async job; the
       // itinerary-planning queue below surfaces a "View" toast on completion.
       if (result.kind === "planning") {
+        upsertPlanningJob(result.job);
+        announcePlanningJob(result.job);
         showToast({ title: "Generating itinerary…", variant: "success" });
         return;
       }
@@ -830,8 +836,13 @@ export default function DashboardPage() {
                 key={featuredJob.id}
                 data-region="home-latest-viewed"
                 className="h-full md:col-start-2 md:row-start-2 lg:col-start-2 lg:row-start-2"
+                // Keyed on the job this tile renders, the way every other card
+                // here is keyed on its own id. It used to read `filteredContent[0]`,
+                // left over from when this tile held the latest content item —
+                // which by definition is *not* what it renders once a job takes
+                // it, and which is undefined outright when there is no content.
                 initial={
-                  newItemIdsRef.current.has(filteredContent[0].id) && !shouldReduceMotion
+                  newItemIdsRef.current.has(featuredJob.id) && !shouldReduceMotion
                     ? motionPresets.completionHandoff.initial
                     : false
                 }
@@ -840,7 +851,7 @@ export default function DashboardPage() {
                   shouldReduceMotion ? motionTransitions.instant : motionTransitions.spatial
                 }
                 onAnimationComplete={() => {
-                  newItemIdsRef.current.delete(filteredContent[0].id);
+                  newItemIdsRef.current.delete(featuredJob.id);
                 }}
               >
                 <ItineraryQueueCardItem

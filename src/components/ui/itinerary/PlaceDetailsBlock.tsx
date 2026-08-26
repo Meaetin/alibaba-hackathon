@@ -67,23 +67,27 @@ export function activityLocationToPlaceView(
 ): PlaceView {
   const typeSlug = loc.primary_type ?? loc.categories?.[0] ?? null;
   const weekdayDescriptions = weekdayDescriptionsFrom(loc.regular_opening_hours);
-  const photoAttributions = loc.photos?.[0]?.authorAttributions
-    ?.map((a) => a.displayName)
-    .filter((n): n is string => Boolean(n));
   return {
     id: loc.id,
     name: loc.name,
     photoUrl: opts.primaryPhotoUrl ?? loc.photo_urls?.[0] ?? null,
-    photoAttributions: photoAttributions?.length ? photoAttributions : undefined,
+    // Photo attributions come with Google's raw `photos` objects. Retrieval
+    // stores resource names and resolved URLs, not those, so a stored location
+    // has none — the live map-search path still supplies its own.
     typeLabel: typeSlug ? humanizePlaceType(typeSlug) : null,
     rating: loc.rating,
     userRatingCount: loc.user_rating_count,
     address: loc.formatted_address,
-    phone: opts.phone ?? loc.national_phone_number ?? loc.international_phone_number,
-    website: opts.website ?? loc.website_uri,
+    // Phone and website are not columns in `locations`, so a saved activity has
+    // them only when the caller passes them in.
+    phone: opts.phone ?? null,
+    website: opts.website ?? null,
     openingHoursLines: weekdayDescriptions.length ? weekdayDescriptions : null,
-    googleMapsUri: loc.google_maps_uri,
-    description: loc.location_context,
+    googleMapsUri: loc.google_maps_uri ?? null,
+    // Google's own one-line description of the place — the Atmosphere field the
+    // shortlist call already pays for, and a better blurb than the neighbourhood
+    // string this used to show.
+    description: loc.editorial_summary,
   };
 }
 

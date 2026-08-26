@@ -69,6 +69,7 @@ import type {
   DaySlot,
   DroppedPlace,
   PackDayInput,
+  PackKnobs,
   PackedDay,
   SlotAssignment,
   SlotRole,
@@ -144,6 +145,13 @@ export interface ValidateDeps {
   getTravelLeg: TravelLegProvider;
   /** The ranked fallback queue, best-first. Empty means no repair is possible. */
   alternates: readonly Alternate[];
+  /**
+   * Passed straight through to `packDay`. Absent means the packer reads the
+   * pace, exactly as it did before personas existed — and it must be the *same*
+   * object the pipeline packed with, or a repaired day would be sized by
+   * different rules than the day it repaired.
+   */
+  packKnobs?: PackKnobs;
   /** Never called. See `AssignClient`. */
   assign?: AssignClient;
 }
@@ -199,7 +207,7 @@ export function validateDay(input: PackDayInput, deps: ValidateDeps): DayValidat
     cut.length === 0 ? day : { ...day, dropped: [...day.dropped, ...cut] };
 
   for (let round = 0; ; round++) {
-    const day = packDay(current, deps.pace, deps.getTravelLeg);
+    const day = packDay(current, deps.pace, deps.getTravelLeg, deps.packKnobs);
     const failures = inspect(current, day, deps);
     const assumed = assumedStops(current, day);
 
@@ -438,7 +446,12 @@ function windowLabel(role: DaySlot["role"]): string {
   return `${hhmm(opens)}–${hhmm(latest)}`;
 }
 
-function hhmm(minutes: number): string {
+/**
+ * Minutes from midnight as a 24-hour clock face. Exported because the debug
+ * view renders the same unit, and a fourth copy of this three-line function is
+ * a fourth place for it to drift.
+ */
+export function hhmm(minutes: number): string {
   const clamped = ((minutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { QueueJob } from "./useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
 
 // Maps step number to a target visual percentage.
 // Front-loaded: quick jumps early, slow creep toward the end.
@@ -17,7 +17,7 @@ const STEP_TO_PERCENT: Record<number, number> = {
 
 function getTargetPercent(job: QueueJob): number {
   if (job.status === "completed") return 100;
-  if (job.status === "queued" || job.status === "pending") return 0;
+  if (job.status === "queued") return 0;
 
   // Itinerary-planning reports a real percentage derived from measured stage
   // weights — trust it rather than re-deriving one from the step ordinal.
@@ -46,7 +46,7 @@ export function useProgressAnimation(job: QueueJob): number {
   useEffect(() => {
     setDisplay((prev) => {
       if (job.status === "completed" || job.status === "failed") return target;
-      if (job.status === "queued" || job.status === "pending") return target;
+      if (job.status === "queued") return target;
       return Math.max(prev, target);
     });
   }, [target, job.updated_at, job.status]);

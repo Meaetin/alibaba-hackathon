@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/primitives/Avatar";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { NewCollectionModal } from "@/components/ui/modals/NewCollectionModal";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { Sheet } from "@/components/ui/primitives/Sheet";
 import { RightSidebarProvider } from "@/contexts/RightSidebarContext";
 import { useRightSidebar } from "@/contexts/RightSidebarContext";
@@ -25,10 +26,13 @@ import { AlreadyAnalyzedError, createJob } from "@/lib/api/client";
 import { createCollection } from "@/lib/api/collections";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
 import { motionTransitions } from "@/lib/motion/presets";
+import { PLANNING_JOB_CREATED_EVENT } from "@/lib/jobs/events";
+import type { QueueJob } from "@/lib/jobs/types";
 
 function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const prefersReducedMotion = useReducedMotion();
@@ -95,6 +99,36 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
   const [itineraryModalOpen, setItineraryModalOpen] = useState(false);
   const [collectionName, setCollectionName] = useState("");
   const [itineraryName, setItineraryName] = useState("");
+
+  const { upsertJob: upsertPlanningJob } = useJobsQueue({
+    type: "itinerary-planning",
+    onJobCompleted: (job) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
+      const itineraryId = job.result?.itinerary_id as string | undefined;
+      showToast({
+        title: "Itinerary ready",
+        variant: "success",
+        action: itineraryId
+          ? { label: "View", href: `/itineraries/${itineraryId}` }
+          : undefined,
+      });
+    },
+    onJobFailed: () => {
+      showToast({
+        title: "We couldn’t generate your itinerary",
+        description: "Please try again in a moment.",
+        variant: "error",
+      });
+    },
+  });
+
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertPlanningJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(PLANNING_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(PLANNING_JOB_CREATED_EVENT, track);
+  }, [upsertPlanningJob]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -178,18 +212,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleItinerarySubmit = async (data: {
-    tripName: string;
-    country?: string;
-    region?: string;
-    latitude?: number;
-    longitude?: number;
-    startDate?: string;
-    endDate?: string;
-    totalDays?: number;
-    aiRecommendations: boolean;
-    selectedLocationIds: string[];
-  }) => {
+  const handleItinerarySubmit = async (data: NewItinerarySubmission) => {
     if (!data.tripName || !data.country || !data.startDate || !data.totalDays) return;
     try {
       const result = await createItineraryRouted({
@@ -204,13 +227,15 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
         totalDays: data.totalDays,
         selectedLocationIds: data.selectedLocationIds,
         aiRecommendations: data.aiRecommendations,
+        pace: data.pace,
       });
       setItineraryName("");
       setItineraryModalOpen(false);
 
-      // AI-only itinerary (no locations + AI on) → async job. Completion is
-      // surfaced by the per-page itinerary-planning queue (e.g. on home).
+      // AI-only itinerary (no locations + AI on) → async job. This persistent
+      // layout queue survives page navigation and surfaces completion.
       if (result.kind === "planning") {
+        upsertPlanningJob(result.job);
         showToast({ variant: "success", title: "Generating itinerary…" });
         return;
       }

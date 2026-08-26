@@ -1,1 +1,0 @@
-Layered React component library that composes theme-driven primitives into feature-specific cards, detail views, itinerary, map, modals, navbar, and layout surfaces, with root providers for data fetching and theming.

@@ -41,6 +41,13 @@ function NavbarProfileMenu({ avatar }: NavbarProfileMenuProps) {
       <MenuContent align="end" sideOffset={8} positionerClassName="z-50">
         <MenuItem
           icon="leading"
+          leadingIcon={<User className="size-4" />}
+          onClick={() => router.push("/profile")}
+        >
+          Profile
+        </MenuItem>
+        <MenuItem
+          icon="leading"
           leadingIcon={<Settings className="size-4" />}
           onClick={() => router.push("/settings")}
         >

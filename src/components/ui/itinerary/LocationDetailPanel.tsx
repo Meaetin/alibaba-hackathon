@@ -5,13 +5,17 @@ import {
   Globe,
   Hourglass,
   Images,
+  Lightbulb,
   MapPin,
   Phone,
+  Sparkles,
+  UtensilsCrossed,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { googleMapsPlaceUrl } from "@/lib/maps/google-maps-url";
 import { humanizePlaceType } from "@/lib/utils/formatters";
 import {
   formatDisplayUrl,
@@ -163,9 +167,9 @@ export function LocationDetailPanel({
   }
   const extraImageCount = photoUrls.length - 3;
 
-  const photoAttributions = activity.location?.photos?.[0]?.authorAttributions
-    ?.map((a) => a.displayName)
-    .filter((n): n is string => Boolean(n));
+  // Retrieval stores photo resource names and resolved URLs, not Google's raw
+  // `photos` objects, so a saved activity carries no attributions.
+  const photoAttributions: string[] | undefined = undefined;
 
   const placeView = activity.location
     ? activityLocationToPlaceView(activity.location, {
@@ -176,6 +180,15 @@ export function LocationDetailPanel({
     : null;
 
   const primaryType = activity.location?.primary_type ?? "";
+
+  // Pass C writes four things per stop and, until now, the itinerary card
+  // rendered one of them clamped to two lines and nothing rendered the rest.
+  // This panel is where a traveller comes for detail, so it is where they go.
+  const stopContent = activity.content ?? null;
+  const whyForYou = stopContent?.whyForYou?.trim() || null;
+  const highlights = stopContent?.highlights?.filter((h) => h.trim()) ?? [];
+  const foodRecommendations = stopContent?.foodRecommendations?.filter((f) => f.dish.trim()) ?? [];
+  const tips = stopContent?.tips?.filter((t) => t.trim()) ?? [];
 
   const openingHoursLines = placeView?.openingHoursLines ?? [];
 
@@ -191,11 +204,13 @@ export function LocationDetailPanel({
   };
 
   const handleOpenGoogleMaps = () => {
-    const uri =
-      placeView?.googleMapsUri ??
-      (activity.location?.latitude != null && activity.location?.longitude != null
-        ? `https://www.google.com/maps/search/?api=1&query=${activity.location.latitude},${activity.location.longitude}`
-        : null);
+    const uri = googleMapsPlaceUrl({
+      googleMapsUri: placeView?.googleMapsUri,
+      placeId: activity.place_id,
+      name: activity.location?.name ?? activity.name,
+      latitude: activity.location?.latitude,
+      longitude: activity.location?.longitude,
+    });
     if (uri) window.open(uri, "_blank", "noopener,noreferrer");
   };
 
@@ -276,6 +291,59 @@ export function LocationDetailPanel({
               Google Maps
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Why This Stop — Pass C's prose, written for this traveller and this day */}
+      {(whyForYou || highlights.length > 0 || foodRecommendations.length > 0 || tips.length > 0) && (
+        <div className="location-detail-why flex flex-col gap-3 rounded-xl border border-edge-subtle bg-surface-alt p-3">
+          {whyForYou && (
+            <div className="location-detail-why-lead flex gap-2">
+              <Sparkles className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+              <p className="location-detail-why-text type-body-2 text-content">{whyForYou}</p>
+            </div>
+          )}
+
+          {highlights.length > 0 && (
+            <ul className="location-detail-highlights flex flex-col gap-1.5">
+              {highlights.map((highlight) => (
+                <li
+                  key={highlight}
+                  className="location-detail-highlight flex gap-2 type-body-3 text-content-secondary"
+                >
+                  <span aria-hidden="true" className="text-glyph-secondary">
+                    &bull;
+                  </span>
+                  <span>{highlight}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {foodRecommendations.length > 0 && (
+            <div className="location-detail-food flex flex-col gap-1.5">
+              {foodRecommendations.map((item) => (
+                <div key={item.dish} className="location-detail-food-item flex gap-2">
+                  <UtensilsCrossed className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+                  <p className="type-body-3 text-content-secondary">
+                    <span className="font-medium text-content">{item.dish}</span>
+                    {item.note ? ` — ${item.note}` : null}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tips.length > 0 && (
+            <div className="location-detail-tips flex flex-col gap-1.5">
+              {tips.map((tip) => (
+                <div key={tip} className="location-detail-tip flex gap-2">
+                  <Lightbulb className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+                  <p className="type-body-3 text-content-secondary">{tip}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -474,7 +542,7 @@ export function LocationDetailPanel({
         onOpenChange={setAlsoFoundInOpen}
         location={{
           name: activity.name,
-          description: activity.location?.location_context,
+          description: activity.location?.editorial_summary,
           thumbnailUrl: photoUrls[0] ?? null,
         }}
         references={references}

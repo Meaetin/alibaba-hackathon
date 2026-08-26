@@ -1,1 +1,0 @@
-None beyond standard Next.js build — the component relies on the app-wide `NavbarFilterContext`, Supabase client, and query hooks being available in the parent layout.

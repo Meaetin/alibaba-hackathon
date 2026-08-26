@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useToast } from '@/contexts/ToastContext'
 import { queryClient } from '@/lib/query/queryClient'
 import { queryKeys } from '@/lib/query/queryKeys'
-import type { QueueJob } from '@/hooks/useJobsQueue'
+import type { QueueJob } from '@/lib/jobs/types'
 
 export function ItineraryJobNotifier() {
   const { showToast } = useToast()

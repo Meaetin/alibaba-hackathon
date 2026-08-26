@@ -1,6 +1,0 @@
-- Each file exports exactly one default component and its props type via named `export { Component }` / `export type { Props }` statements at the bottom of the file.
-- Components are declared as `forwardRef<HTMLDivElement, Props>(...)` and assign a `.displayName` matching the component name before export.
-- Styling composes Tailwind classes through the `cn` helper from `@/lib/utils` and attaches a `data-slot="..."` attribute for testability.
-- Action menus on cards use the shared `Menu`/`MenuTrigger`/`MenuContent`/`MenuItem` primitives from `@/components/ui/primitives/Menu` with Edit/Delete actions wired via optional `onEdit`/`onDelete` callbacks.
-- Domain sidebars follow a uniform shape: accept an array of card-shaped props, render a loading spinner when `loading`, show `PanelEmptyState` when the list is empty, and map over items passing down edit/delete/open handlers.
-- Forms manage their own local state via `useState`, validate on submit by toggling a `showErrors` flag, and call a single `onSubmit(data)` callback with normalized values.

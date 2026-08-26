@@ -27,11 +27,20 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type {
+  DimensionScores,
+  QuizAnswers,
+  TravelArchetypeId,
+  TravelPersona,
+} from "@/lib/persona/types";
 import type { OpeningPeriod, PreferenceProfile } from "@/lib/planner/types";
 import type { FunnelStats } from "@/lib/planner/funnel";
 import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { TravelMode } from "@/lib/planner/pack";
+import type { EnrichmentFailure, EnrichmentSubject } from "@/lib/planner/enrich";
+import type { StageUsage } from "@/lib/planner/pricing";
+import type { PlannerDebug } from "@/lib/planner/debug";
 
 /** `itinerary_activities.travel_to_next`. `TravelLeg` plus the mode the packer
  *  chose, so a stored day renders without re-deriving it from the distance. */
@@ -94,6 +103,11 @@ export const locations = pgTable(
     /** Null = names stored, media never fetched. */
     photos_resolved_at: timestamptz("photos_resolved_at"),
     business_status: text("business_status"),
+    /** Google's canonical link for the place. Pro tier, so it rides free on a
+     *  search mask that already asks for `rating` and `regularOpeningHours`.
+     *  Null for every place retrieved before the field was on the mask — the
+     *  page falls back to `place_id` via `googleMapsPlaceUrl`. */
+    google_maps_uri: text("google_maps_uri"),
     /** Minutes; backfilled from enrichment. */
     stay_duration: integer("stay_duration"),
     fetched_at: timestamptz("fetched_at").notNull().defaultNow(),
@@ -158,6 +172,30 @@ export const place_enrichments = pgTable(
   ],
 );
 
+/** Durable OpenAI Batch handles. Subjects are retained because collection is
+ * separated from submission by up to 24 hours and validates every custom id
+ * and source hash against the exact payload originally sent. */
+export const enrichment_batches = pgTable(
+  "enrichment_batches",
+  {
+    provider_batch_id: text("provider_batch_id").primaryKey(),
+    status: text("status").notNull(),
+    subjects: jsonb("subjects").$type<EnrichmentSubject[]>().notNull(),
+    /** Every place this batch could not enrich, and why — including the lines
+     *  that only ever appear in the provider's error file. Written when the
+     *  batch goes terminal; the places themselves just miss the cache again. */
+    failures: jsonb("failures").$type<EnrichmentFailure[]>().notNull().default([]),
+    /** What the batch spent, written when it goes terminal. It lives here and
+     *  not on the itinerary that queued it: one batch's answers serve every
+     *  later trip touching those places, so charging it to the submitter would
+     *  overstate that trip and make all the others read as free. */
+    usage: jsonb("usage").$type<StageUsage>(),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("enrichment_batches_status_idx").on(t.status, t.created_at)],
+);
+
 export const area_guides = pgTable("area_guides", {
   /** `lower(trim(area || '|' || city))`. */
   area_key: text("area_key").primaryKey(),
@@ -167,6 +205,38 @@ export const area_guides = pgTable("area_guides", {
   expires_at: timestamptz("expires_at")
     .notNull()
     .default(sql`now() + interval '90 days'`),
+});
+
+// ─── Traveller ───────────────────────────────────────────────────────────────
+
+/**
+ * One row per traveller who finished the quiz. The client holds only `id`; the
+ * data lives here so a persona survives the dialog closing and can be named by
+ * a later plan request.
+ *
+ * `answers` is the source of truth and the other two columns are derived from
+ * it by `calculatePersona`. Storing the derivation as well is not redundancy:
+ * a read wants the archetype without re-running the scorer, and re-deriving
+ * every stored row after a scoring change wants the answers. Neither column
+ * can answer the other's question.
+ *
+ * **A retake rewrites the row in place** — one persona per person, one stable
+ * id, no pointer churn in `localStorage`. The consequence is that this table
+ * describes who the traveller is *now*, never who they were when an older trip
+ * was planned. That is what makes `itineraries.persona` load-bearing rather
+ * than decorative: after a retake it is the only record of what produced an
+ * older itinerary. Nothing explaining an existing trip may join to this table.
+ */
+export const travel_personas = pgTable("travel_personas", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** `QuizAnswers` — one option index per question, `null` where unanswered. */
+  answers: jsonb("answers").$type<QuizAnswers>().notNull(),
+  /** Derived. The four raw 0–100 axis scores. */
+  dimensions: jsonb("dimensions").$type<DimensionScores>().notNull(),
+  /** Derived. The nearest archetype's id. */
+  archetype: text("archetype").$type<TravelArchetypeId>().notNull(),
+  created_at: timestamptz("created_at").notNull().defaultNow(),
+  updated_at: timestamptz("updated_at").notNull().defaultNow(),
 });
 
 // ─── Itinerary ───────────────────────────────────────────────────────────────
@@ -184,8 +254,27 @@ export const itineraries = pgTable("itineraries", {
   total_days: integer("total_days").notNull(),
   /** The `PreferenceProfile` as submitted. */
   profile: jsonb("profile").$type<PreferenceProfile>().notNull(),
+  /**
+   * The persona that produced this trip, snapshotted whole — answers and
+   * derived result together. Null means the traveller never took the quiz.
+   *
+   * A snapshot, not a foreign key, and written on **every** plan rather than
+   * only the first: `travel_personas` is rewritten in place on a retake, so a
+   * join would silently re-explain an old trip with a new personality, and a
+   * snapshot taken only once is missing exactly when you need it. The prose
+   * inside `PersonaResult` is duplicated static text — that is the price of a
+   * record that does not need today's code to be read.
+   */
+  persona: jsonb("persona").$type<TravelPersona>(),
   /** Every cut, replayable: "why wasn't teamLab included?" has an answer. */
   funnel_stats: jsonb("funnel_stats").$type<FunnelStats>(),
+  /**
+   * What the model said and what we threw away — Pass B's per-stop reasoning,
+   * every id it named that we refused, and the per-stage counters. It is the
+   * only durable record of the two; both used to live and die inside one
+   * request. Diagnostics, never read by a card. See `src/lib/planner/debug.ts`.
+   */
+  planner_debug: jsonb("planner_debug").$type<PlannerDebug>(),
   created_at: timestamptz("created_at").notNull().defaultNow(),
 });
 
@@ -228,12 +317,42 @@ export const itinerary_activities = pgTable(
 
 // ─── Job queue ───────────────────────────────────────────────────────────────
 
+/**
+ * What the loading screen reads out of `jobs.progress`.
+ *
+ * The first five fields are the planner's own report: which stage is running,
+ * how far along the run is, and how many stages there are. The optional five
+ * below exist for the two hooks that animate the card between reports — a plan
+ * writes a row every stage or two, and without them the bar sits still through
+ * a twenty-second model call.
+ *
+ * `progress` is a `jsonb` column, so adding a field here changes no DDL and
+ * needs no migration.
+ */
 export interface JobProgress {
   percent: number;
   label: string;
   stage: string;
   done: number;
   total: number;
+  /**
+   * Legacy step ordinal, read by `useProgressAnimation` only when `percent` is
+   * absent. The planner leaves it unset: that hook's step→percent table
+   * describes the content-analysis pipeline, and a stage number from this one
+   * would map onto the wrong percentage.
+   */
+  step?: number;
+  /** When this report was written, ISO. `useProgressAnimation` starts its crawl
+   *  from it and `useProgressEta` counts down from it. */
+  fired_at?: string;
+  /** Seconds left in the whole run. Read by `useProgressEta`. */
+  eta_seconds?: number;
+  /** The percentage this stage ends at. `useProgressAnimation` walks the bar
+   *  toward it rather than parking on `percent`. */
+  next_percent?: number;
+  /** How long this stage is expected to take, ms. `useProgressAnimation` uses
+   *  it as the crawl's denominator. */
+  stage_ms?: number;
 }
 
 export const jobs = pgTable(

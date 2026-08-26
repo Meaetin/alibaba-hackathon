@@ -1,14 +1,22 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { InferSelectModel } from "drizzle-orm";
 
-import { itinerary_activities, locations } from "./schema";
+import {
+  enrichment_batches,
+  itinerary_activities,
+  locations,
+  place_enrichments,
+} from "./schema";
 import { formatMinutes } from "./time";
 import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { OpeningPeriod } from "@/lib/planner/types";
+import type { EnrichmentSubject } from "@/lib/planner/enrich";
 
 type LocationRow = InferSelectModel<typeof locations>;
 type ActivityRow = InferSelectModel<typeof itinerary_activities>;
+type EnrichmentRow = InferSelectModel<typeof place_enrichments>;
+type EnrichmentBatchRow = InferSelectModel<typeof enrichment_batches>;
 
 /**
  * These assertions exist because the columns they name are each the sole input
@@ -37,6 +45,37 @@ describe("locations row type", () => {
 
   it("keeps types non-nullable — an empty list is not the same as no answer", () => {
     expectTypeOf<LocationRow["types"]>().not.toBeNullable();
+  });
+});
+
+/**
+ * The four columns a cached enrichment is judged on. Drop any one and
+ * `readEnrichments` starts serving an answer to a question nobody asked — see
+ * the freshness tests in `src/lib/planner/enrich.test.ts`.
+ */
+describe("place_enrichments row type", () => {
+  it("carries all four freshness fields, none of them nullable", () => {
+    expectTypeOf<EnrichmentRow>().toExtend<{
+      place_id: string;
+      model: string;
+      prompt_version: number;
+      source_hash: string;
+      expires_at: Date;
+    }>();
+  });
+
+  /** Nullable on purpose: a row can predate the visit-length estimate. The
+   *  mapping collapses both nulls through `clampVisitMinutes`. */
+  it("leaves the visit-minute columns nullable", () => {
+    expectTypeOf<EnrichmentRow["visit_min"]>().toEqualTypeOf<number | null>();
+    expectTypeOf<EnrichmentRow["visit_max"]>().toEqualTypeOf<number | null>();
+  });
+});
+
+describe("enrichment_batches row type", () => {
+  it("retains the exact submitted subjects for later correlation", () => {
+    expectTypeOf<EnrichmentBatchRow["subjects"]>().toEqualTypeOf<EnrichmentSubject[]>();
+    expectTypeOf<EnrichmentBatchRow["provider_batch_id"]>().toEqualTypeOf<string>();
   });
 });
 

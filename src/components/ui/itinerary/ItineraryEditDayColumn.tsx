@@ -65,11 +65,8 @@ interface ItineraryEditDayColumnProps {
   onActivityTimeChange?: (activityId: string, startTime: string, endTime: string | null) => void;
   /** Optimize a single activity's placement (the time-picker wand) — locks all others. */
   onActivityOptimize?: (activityId: string) => void;
-  accommodation?: { checkInTime?: string; checkOutTime?: string; name?: string } | null;
-  totalDays?: number;
   lockedActivityIds?: Set<string>;
   onToggleActivityLock?: (activityId: string) => void;
-  previousDayLastActivity?: ItineraryActivityDetail | null;
   /** Re-time the day's activities around conflicts (forward cascade). */
   onResolveOverlaps?: (dayId: string) => void;
   /** True while travel times for a reorder are being priced — disables the button. */
@@ -79,13 +76,6 @@ interface ItineraryEditDayColumnProps {
 function isTransportActivity(activity: ItineraryActivityDetail): boolean {
   const cat = activity.category?.toLowerCase() ?? "";
   return cat === "transportation" || cat === "transport" || cat === "travel";
-}
-
-function hasTransportData(activity: ItineraryActivityDetail): boolean {
-  return (
-    (activity.travel_distance_meters != null && activity.travel_distance_meters > 0) ||
-    (activity.travel_duration_seconds != null && activity.travel_duration_seconds > 0)
-  );
 }
 
 /** A stop has coordinates only when its location carries both lat and lng. */
@@ -332,13 +322,9 @@ function DraggableActivityCard({
   markers?: DayTimeMarker[];
   onClick?: () => void;
 }) {
-  // Real lodging check-in/check-out activities (source_lodging_id = actual lodging
-  // row id) are user-movable. Only the synthetic UI bookends rendered around the
-  // day (source_lodging_id === "lodging-bookend") stay locked, since they have no
-  // DB row to write back to.
-  const isPermanentlyLocked =
-    !!activity.source_flight_id || activity.source_lodging_id === "lodging-bookend";
-  const isLocked = isPermanentlyLocked || !!locked;
+  // Flights and lodging supplied the only permanently-locked cards, and both
+  // are gone; a stop is locked now only because the caller says so.
+  const isLocked = !!locked;
 
   // While the inline time picker is open, drag is suspended so reordering can't
   // fire from underneath the open popover.
@@ -474,13 +460,10 @@ export function ItineraryEditDayColumn({
   transportModes,
   unavailableLegIds,
   onTransportModeChange,
-  accommodation,
-  totalDays = 1,
   lockedActivityIds,
   onToggleActivityLock,
   onActivityTimeChange,
   onActivityOptimize,
-  previousDayLastActivity,
   onResolveOverlaps,
   isResolvingOverlaps = false,
 }: ItineraryEditDayColumnProps) {
@@ -543,75 +526,7 @@ export function ItineraryEditDayColumn({
     [sortedActivities, resolvedTimezone],
   );
 
-  const isFirstDay = dayIndex === 0;
-  const isLastDay = dayIndex === totalDays - 1;
 
-  const MODE_MULT: Record<string, number> = { car: 1, walk: 4, bus: 1.8 };
-
-  const lodgingBookends = useMemo(() => {
-    if (!accommodation?.name) return { start: null, end: null };
-    const name = accommodation.name;
-    const defaultTravelSecs = 1800;
-
-    const fmt = (mins: number) => {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    };
-
-    let startCard: ItineraryActivityDetail | null = null;
-    if (!isFirstDay) {
-      const firstAct = sortedActivities[0];
-      const baseTravelSecs = firstAct?.travel_duration_seconds ?? defaultTravelSecs;
-      const startMode = transportModes?.[`lodging-start-${day.id}`] ?? "drive";
-      const travelMin = Math.round((baseTravelSecs * (MODE_MULT[startMode] ?? 1)) / 60);
-      const firstStartMin = firstAct?.start_time ? parseTimeMins(firstAct.start_time, resolvedTimezone) : 9 * 60;
-      const leaveAt = Math.max(firstStartMin - travelMin, 0);
-      startCard = {
-        id: `lodging-start-${day.id}`,
-        day_id: day.id,
-        day_index: dayIndex,
-        name,
-        start_time: fmt(leaveAt),
-        end_time: null as unknown as string,
-        category: "lodging",
-        source_lodging_id: "lodging-bookend",
-        travel_duration_seconds: baseTravelSecs,
-        travel_distance_meters: 5000,
-      };
-    }
-
-    let endCard: ItineraryActivityDetail | null = null;
-    if (!isLastDay) {
-      const lastAct = sortedActivities[sortedActivities.length - 1];
-      const lastEndMin = lastAct?.end_time ? parseTimeMins(lastAct.end_time, resolvedTimezone) : 18 * 60;
-      const lastStartMin = lastAct?.start_time ? parseTimeMins(lastAct.start_time, resolvedTimezone) : 0;
-      const baseTravelSecs = lastAct?.travel_duration_seconds ?? defaultTravelSecs;
-      const endMode = transportModes?.[`lodging-end-${day.id}`] ?? "drive";
-      const travelMin = Math.round((baseTravelSecs * (MODE_MULT[endMode] ?? 1)) / 60);
-
-      const realEndMin = (lastEndMin < lastStartMin) ? lastEndMin + 1440 : lastEndMin;
-      const accomStartMin = realEndMin + travelMin;
-
-      const NEXT_DAY_CUTOFF = 1440 + 360;
-      if (accomStartMin < NEXT_DAY_CUTOFF) {
-        endCard = {
-          id: `lodging-end-${day.id}`,
-          day_id: day.id,
-          day_index: dayIndex,
-          name,
-          start_time: fmt(accomStartMin),
-          end_time: null as unknown as string,
-          category: "lodging",
-          source_lodging_id: "lodging-bookend",
-          travel_duration_seconds: baseTravelSecs,
-          travel_distance_meters: 5000,
-        };
-      }
-    }
-
-    return { start: startCard, end: endCard };
-  }, [accommodation, day.id, dayIndex, isFirstDay, isLastDay, sortedActivities, transportModes]);
 
   // Activity time ranges for overlap detection
   const activityRanges = useMemo(() => {
@@ -742,23 +657,6 @@ export function ItineraryEditDayColumn({
       <div className={cn("edit-day-activities", "flex flex-col gap-2")}>
         {sortedActivities.length === 0 ? (
           <>
-            {/* Lodging Bookend — empty day (no timing, top only) */}
-            {(lodgingBookends.start || lodgingBookends.end) && (
-              <div className="edit-lodging-bookend-empty">
-                <div className="edit-activity-card-outer relative transition-[transform,opacity]">
-                  <CompactActivityCard
-                    activity={{
-                      ...(lodgingBookends.start ?? lodgingBookends.end!),
-                      start_time: null,
-                      end_time: null,
-                    }}
-                    timezone={resolvedTimezone}
-                    elevated
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Keep the full empty card registered as index 0 so both activity and
                 external-location drags can reliably target an otherwise empty day. */}
             <EmptyDayDropTarget
@@ -769,49 +667,6 @@ export function ItineraryEditDayColumn({
           </>
         ) : (
           <>
-            {/* Lodging Start Bookend */}
-            {lodgingBookends.start && (
-              <div className={cn("edit-lodging-bookend-start flex flex-col", !globalTransportHidden && "gap-2")}>
-                {/* Transport from previous day's last activity to hotel */}
-                {!globalTransportHidden && previousDayLastActivity && hasTransportData(previousDayLastActivity) && (
-                  <TransportDetailRow
-                    distanceMeters={previousDayLastActivity.travel_distance_meters ?? null}
-                    durationSeconds={previousDayLastActivity.travel_duration_seconds ?? null}
-                    transportMode={transportModes?.[`lodging-return-${day.id}`] ?? "drive"}
-                    globalHidden={false}
-                    loading={pendingTimeIds?.has(previousDayLastActivity.id)}
-                    onModeChange={(mode) => onTransportModeChange?.(`lodging-return-${day.id}`, mode)}
-                    mapsUrl={buildDirectionsUrl(previousDayLastActivity, lodgingBookends.start, transportModes?.[`lodging-return-${day.id}`] ?? "drive")}
-                  />
-                )}
-                <div className="edit-activity-card-outer relative transition-[transform,opacity]">
-                  <CompactActivityCard
-                    activity={lodgingBookends.start}
-                    selected={selectedActivityId === lodgingBookends.start.id}
-                    timezone={resolvedTimezone}
-                    elevated
-                    onClick={() => onActivityClick?.(lodgingBookends.start!)}
-                    onDelete={onActivityDelete ? () => onActivityDelete(lodgingBookends.start!.id) : undefined}
-                    onAction={onActivityAction ? (action) => onActivityAction(lodgingBookends.start!, action) : undefined}
-                    activityNotePreview={activityNotePreviews?.get(lodgingBookends.start.id) ?? null}
-                    onQuickNoteSubmit={(content) => onActivityQuickNoteSubmit?.(lodgingBookends.start!, content)}
-                    onQuickNoteRemove={() => onActivityQuickNoteRemove?.(lodgingBookends.start!)}
-                  />
-                </div>
-                {!globalTransportHidden && sortedActivities.length > 0 && (
-                  <TransportDetailRow
-                    distanceMeters={sortedActivities[0]?.travel_distance_meters ?? 5000}
-                    durationSeconds={sortedActivities[0]?.travel_duration_seconds ?? 1800}
-                    transportMode={transportModes?.[`lodging-start-${day.id}`] ?? "drive"}
-                    globalHidden={false}
-                    loading={pendingTimeIds?.has(sortedActivities[0].id)}
-                    onModeChange={(mode) => onTransportModeChange?.(`lodging-start-${day.id}`, mode)}
-                    mapsUrl={buildDirectionsUrl(lodgingBookends.start, sortedActivities[0], transportModes?.[`lodging-start-${day.id}`] ?? "drive")}
-                  />
-                )}
-              </div>
-            )}
-
             <SortableContext
               id={`edit-sortable-day-${day.id}`}
               items={sortedActivities.map((activity) => `edit-activity-${activity.id}`)}
@@ -953,8 +808,9 @@ export function ItineraryEditDayColumn({
               );
               })}
             </SortableContext>
-            {/* Drop gap after last card — hidden when end bookend exists */}
-            {!lodgingBookends.end && (
+            {/* Drop gap after the last card. It used to be hidden when a lodging
+                end-bookend took the slot; there is no lodging any more. */}
+            {(
               <>
                 <DropGap
                   dayId={day.id}
@@ -974,53 +830,6 @@ export function ItineraryEditDayColumn({
               </>
             )}
 
-            {/* Lodging End Bookend */}
-            {lodgingBookends.end && (
-              <>
-                {/* Gap before end bookend transport */}
-                <DropGap
-                  dayId={day.id}
-                  index={sortedActivities.length}
-                  isDragActive={isDragActive}
-                  dropEnabled={isDragActive}
-                  showDropZone={!preserveActivityOrder}
-                  onClickAdd={() => handleGapClick("pre-end-bookend", sortedActivities.length)}
-                  ghostActive={ghostSlot === "pre-end-bookend"}
-                  position="below-card"
-                />
-                <AnimatePresence>
-                  {ghostSlot === "pre-end-bookend" && (
-                    <GhostActivityCard onDismiss={dismissGhost} />
-                  )}
-                </AnimatePresence>
-
-                {!globalTransportHidden && sortedActivities.length > 0 && (
-                  <TransportDetailRow
-                    distanceMeters={lodgingBookends.end.travel_distance_meters ?? 5000}
-                    durationSeconds={lodgingBookends.end.travel_duration_seconds ?? 1800}
-                    transportMode={transportModes?.[`lodging-end-${day.id}`] ?? "drive"}
-                    globalHidden={false}
-                    loading={pendingTimeIds?.has(sortedActivities[sortedActivities.length - 1].id)}
-                    onModeChange={(mode) => onTransportModeChange?.(`lodging-end-${day.id}`, mode)}
-                    mapsUrl={buildDirectionsUrl(sortedActivities[sortedActivities.length - 1], lodgingBookends.end, transportModes?.[`lodging-end-${day.id}`] ?? "drive")}
-                  />
-                )}
-                <div className="edit-activity-card-outer relative transition-[transform,opacity]">
-                  <CompactActivityCard
-                    activity={lodgingBookends.end}
-                    selected={selectedActivityId === lodgingBookends.end.id}
-                    timezone={resolvedTimezone}
-                    elevated
-                    onClick={() => onActivityClick?.(lodgingBookends.end!)}
-                    onDelete={onActivityDelete ? () => onActivityDelete(lodgingBookends.end!.id) : undefined}
-                    onAction={onActivityAction ? (action) => onActivityAction(lodgingBookends.end!, action) : undefined}
-                    activityNotePreview={activityNotePreviews?.get(lodgingBookends.end.id) ?? null}
-                    onQuickNoteSubmit={(content) => onActivityQuickNoteSubmit?.(lodgingBookends.end!, content)}
-                    onQuickNoteRemove={() => onActivityQuickNoteRemove?.(lodgingBookends.end!)}
-                  />
-                </div>
-              </>
-            )}
           </>
         )}
       </div>

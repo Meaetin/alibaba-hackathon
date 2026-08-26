@@ -1,6 +1,0 @@
-- Each route segment follows the Next.js App Router convention of `layout.tsx` + `loading.tsx` + `page.tsx`, with the layout delegating chrome to `MainLayout` and loading providing a matching skeleton.
-- Async background work is modeled as typed jobs (`content-analysis`, `itinerary-planning`) submitted via `createJob` and observed through `useJobsQueue` callbacks that toast and invalidate React Query keys.
-- Optimistic UI updates use a ref-backed set of new item IDs plus a local `optimisticItineraries` array merged into the feed until the server refresh reconciles them, preventing flicker between queue cards and real rows.
-- User-facing errors are handled by discriminating error instances (`AlreadyAnalyzedError`, `LinkQuotaError`, `ItineraryQuotaError`) and routing each to either a redirect, a quota upgrade toast, or an inline error message rather than throwing.
-- Cards are rendered polymorphically via a `renderCardInner` switch on `item.type` that maps to `LinkCard` / `CollectionCard` / `ItineraryCard` / `LocationCard`, sharing common props like label, gradient, and href.
-- Heavy or browser-only dependencies (e.g. `StaticMap`) are imported lazily with `next/dynamic({ ssr: false })` to keep the initial bundle light.

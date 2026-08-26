@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>What Type of Traveler Are You?</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f0f12;
+    --surface: #1a1a22;
+    --surface-hover: #24242f;
+    --border: #2a2a38;
+    --text: #e8e6f0;
+    --text-muted: #8a879a;
+    --accent: #7c6aef;
+    --accent-glow: rgba(124, 106, 239, 0.25);
+    --accent2: #f0a050;
+    --accent3: #4ecdc4;
+    --radius: 16px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .bg-gradient {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 10%, rgba(124,106,239,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 90%, rgba(240,160,80,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 50%, rgba(78,205,196,0.04) 0%, transparent 60%);
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 720px; margin: 0 auto;
+    padding: 40px 20px 80px;
+  }
+
+  /* --- LANDING --- */
+  .landing { text-align: center; padding-top: 80px; }
+  .landing-icon { font-size: 64px; margin-bottom: 24px; animation: float 3s ease-in-out infinite; }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  .landing h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, #e8e6f0 30%, #7c6aef 70%, #f0a050);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .landing p {
+    font-size: 1.1rem; color: var(--text-muted);
+    max-width: 500px; margin: 0 auto 12px; line-height: 1.65;
+  }
+  .landing .meta { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 40px; opacity: 0.7; }
+
+  .btn-start {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 16px 40px; border: none; border-radius: 60px;
+    background: linear-gradient(135deg, var(--accent), #9b7af0);
+    color: white; font-size: 1.05rem; font-weight: 600;
+    cursor: pointer; transition: var(--transition);
+    box-shadow: 0 4px 30px var(--accent-glow);
+  }
+  .btn-start:hover { transform: translateY(-2px); box-shadow: 0 8px 40px var(--accent-glow); }
+
+  /* --- PROGRESS --- */
+  .progress-wrap {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 36px; font-size: 0.85rem; color: var(--text-muted);
+  }
+  .progress-bar {
+    flex: 1; height: 6px; background: var(--border); border-radius: 6px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.5s ease;
+  }
+
+  /* --- QUESTION CARD --- */
+  .question-card {
+    animation: slideUp 0.4s ease;
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .question-label {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 2px;
+    color: var(--accent); margin-bottom: 12px; font-weight: 600;
+  }
+  .question-text {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.3rem, 3.5vw, 1.75rem);
+    font-weight: 700; line-height: 1.35; margin-bottom: 32px;
+  }
+
+  /* --- OPTIONS --- */
+  .options { display: flex; flex-direction: column; gap: 12px; }
+  .option {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 18px 22px;
+    background: var(--surface); border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer; transition: var(--transition);
+    position: relative; overflow: hidden;
+  }
+  .option::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, var(--accent-glow), transparent);
+    opacity: 0; transition: opacity 0.3s;
+  }
+  .option:hover { border-color: var(--accent); transform: translateX(4px); }
+  .option:hover::before { opacity: 1; }
+  .option.selected { border-color: var(--accent); background: rgba(124,106,239,0.08); }
+  .option.selected::before { opacity: 1; }
+  .option-icon {
+    font-size: 1.4rem; flex-shrink: 0; margin-top: 2px; position: relative; z-index: 1;
+  }
+  .option-content { position: relative; z-index: 1; }
+  .option-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 3px; }
+  .option-desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
+
+  /* --- NAV --- */
+  .nav-row {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 32px; gap: 12px;
+  }
+  .btn-nav {
+    padding: 12px 28px; border: none; border-radius: 60px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    transition: var(--transition);
+  }
+  .btn-back {
+    background: transparent; border: 1.5px solid var(--border);
+    color: var(--text-muted);
+  }
+  .btn-back:hover { border-color: var(--text-muted); color: var(--text); }
+  .btn-next {
+    background: linear-gradient(135deg, var(--accent), #9b7af0);
+    color: white; margin-left: auto;
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+  .btn-next:hover { transform: translateY(-1px); box-shadow: 0 6px 30px var(--accent-glow); }
+  .btn-next:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* --- RESULT --- */
+  .result { text-align: center; animation: slideUp 0.6s ease; }
+  .result-badge {
+    display: inline-block; padding: 6px 20px; border-radius: 60px;
+    background: rgba(124,106,239,0.12); border: 1px solid rgba(124,106,239,0.25);
+    font-size: 0.8rem; font-weight: 600; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 20px;
+  }
+  .result-icon { font-size: 72px; margin-bottom: 16px; }
+  .result h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    font-weight: 800; margin-bottom: 8px;
+    background: linear-gradient(135deg, #e8e6f0, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .result .tagline {
+    font-size: 1.05rem; color: var(--accent2); font-weight: 500;
+    font-style: italic; margin-bottom: 24px;
+  }
+  .result .description {
+    font-size: 1rem; line-height: 1.75; color: var(--text-muted);
+    max-width: 560px; margin: 0 auto 32px;
+  }
+
+  .traits-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+    max-width: 480px; margin: 0 auto 32px; text-align: left;
+  }
+  .trait-card {
+    padding: 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  .trait-card .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; }
+  .trait-card .value { font-weight: 600; font-size: 0.92rem; }
+
+  .dimension-bars {
+    max-width: 480px; margin: 0 auto 36px; text-align: left;
+  }
+  .dimension-bars h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 16px; text-align: center; }
+  .dim-row { margin-bottom: 14px; }
+  .dim-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 5px; }
+  .dim-labels .active { color: var(--accent); font-weight: 600; }
+  .dim-track { height: 8px; background: var(--border); border-radius: 8px; overflow: hidden; position: relative; }
+  .dim-fill { height: 100%; border-radius: 8px; transition: width 0.8s ease; }
+
+  .destinations {
+    max-width: 480px; margin: 0 auto 36px; text-align: left;
+  }
+  .destinations h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 12px; text-align: center; }
+  .dest-tags { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .dest-tag {
+    padding: 8px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 60px; font-size: 0.85rem; font-weight: 500;
+  }
+
+  .btn-retake {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 36px; border: 1.5px solid var(--border);
+    border-radius: 60px; background: transparent;
+    color: var(--text); font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; transition: var(--transition);
+  }
+  .btn-retake:hover { border-color: var(--accent); color: var(--accent); }
+
+  .share-row { margin-bottom: 20px; }
+  .share-row p { font-size: 0.82rem; color: var(--text-muted); margin-bottom: 10px; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="bg-gradient"></div>
+<div class="container">
+
+  <!-- LANDING -->
+  <div id="landing" class="landing">
+    <div class="landing-icon">✈️</div>
+    <h1>What Type of Traveler Are You?</h1>
+    <p>Answer 12 quick questions to discover your travel personality archetype — from meticulous planner to spontaneous wanderer.</p>
+    <p class="meta">12 questions · ~3 minutes · No sign-up required</p>
+    <button class="btn-start" onclick="startQuiz()">Discover Your Type <span>→</span></button>
+  </div>
+
+  <!-- QUIZ -->
+  <div id="quiz" class="hidden">
+    <div class="progress-wrap">
+      <span id="q-count">1 / 12</span>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width: 8%"></div></div>
+    </div>
+    <div id="question-area"></div>
+    <div class="nav-row">
+      <button class="btn-nav btn-back" id="btn-back" onclick="prevQuestion()">← Back</button>
+      <button class="btn-nav btn-next" id="btn-next" onclick="nextQuestion()" disabled>Continue →</button>
+    </div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="result" class="hidden"></div>
+
+</div>
+
+<script>
+// ============================================================
+// DIMENSION MODEL (4 axes, each scored 0-100)
+// ============================================================
+// D1: Structure    — Planner (0) vs Spontaneous (100)
+// D2: Comfort      — Luxe (0) vs Rough (100)
+// D3: Focus        — Experiences (0) vs Immersion (100)
+// D4: Social       — Group (0) vs Solo (100)
+// ============================================================
+
+const questions = [
+  {
+    label: "Trip Prep",
+    text: "You just booked a 2-week trip to Japan. What's your next move?",
+    options: [
+      { icon: "📋", title: "Spreadsheet time", desc: "Build a day-by-day itinerary with backup plans, restaurant reservations, and transit schedules.", scores: { d1: 0, d2: 25, d3: 40, d4: 50 } },
+      { icon: "📌", title: "Bookmark a few things", desc: "Save a handful of must-sees and figure the rest out when you land.", scores: { d1: 45, d2: 40, d3: 50, d4: 50 } },
+      { icon: "🎒", title: "Just pack and go", desc: "The best trips are unplanned. You'll ask locals and follow your gut.", scores: { d1: 90, d2: 55, d3: 65, d4: 50 } }
+    ]
+  },
+  {
+    label: "First Morning",
+    text: "It's your first morning in a new city. How does your day start?",
+    options: [
+      { icon: "🗺️", title: "Hit the landmarks", desc: "Early start, camera ready — you want to see the iconic sights before the crowds.", scores: { d1: 20, d2: 30, d3: 25, d4: 50 } },
+      { icon: "☕", title: "Wander to a café", desc: "Find a neighborhood coffee spot, people-watch, and let the day unfold naturally.", scores: { d1: 75, d2: 40, d3: 65, d4: 55 } },
+      { icon: "🏞️", title: "Find the wild side", desc: "Head straight for a trail, a viewpoint, or anywhere that gets you into nature.", scores: { d1: 60, d2: 75, d3: 55, d4: 65 } }
+    ]
+  },
+  {
+    label: "Accommodation",
+    text: "Where do you genuinely prefer to sleep on a trip?",
+    options: [
+      { icon: "🏨", title: "A great hotel", desc: "Room service, a nice bed, maybe a pool. Travel should feel like a treat.", scores: { d1: 25, d2: 5, d3: 30, d4: 40 } },
+      { icon: "🏠", title: "Local Airbnb or guesthouse", desc: "A neighborhood feel, a local host's tips, and a kitchen to make breakfast.", scores: { d1: 50, d2: 45, d3: 60, d4: 45 } },
+      { icon: "⛺", title: "Hostel, camp, or wherever", desc: "You've slept in airports, hammocks, and tents — comfort is overrated.", scores: { d1: 70, d2: 90, d3: 65, d4: 35 } }
+    ]
+  },
+  {
+    label: "Pace",
+    text: "What does your ideal travel day look like?",
+    options: [
+      { icon: "⚡", title: "Packed from dawn to dusk", desc: "Morning hike, midday museum, afternoon food tour, evening show — maximize every moment.", scores: { d1: 15, d2: 30, d3: 30, d4: 50 } },
+      { icon: "🌊", title: "A loose rhythm", desc: "One or two planned things, with lots of space to wander, rest, or change plans.", scores: { d1: 55, d2: 45, d3: 55, d4: 50 } },
+      { icon: "🛋️", title: "Slow and unhurried", desc: "Maybe one activity. Maybe none. Naps, long meals, and zero pressure.", scores: { d1: 80, d2: 25, d3: 60, d4: 55 } }
+    ]
+  },
+  {
+    label: "Culture",
+    text: "You arrive somewhere with a totally different culture. You…",
+    options: [
+      { icon: "🎭", title: "Dive in completely", desc: "Learn basic phrases, eat what locals eat, attend ceremonies, try to understand daily life.", scores: { d1: 50, d2: 60, d3: 95, d4: 55 } },
+      { icon: "📸", title: "Sample the highlights", desc: "Visit the key cultural sites, try the famous dishes, snap great photos.", scores: { d1: 30, d2: 35, d3: 40, d4: 45 } },
+      { icon: "🧘", title: "Observe from a distance", desc: "You appreciate the difference, but you also enjoy finding familiar comforts.", scores: { d1: 40, d2: 20, d3: 20, d4: 60 } }
+    ]
+  },
+  {
+    label: "Social Style",
+    text: "On a trip, your social energy usually looks like…",
+    options: [
+      { icon: "👥", title: "Group all the way", desc: "You travel with friends or family and love every minute of shared experiences.", scores: { d1: 35, d2: 35, d3: 40, d4: 5 } },
+      { icon: "🤝", title: "Meet people along the way", desc: "You might travel solo but love striking up conversations and joining local gatherings.", scores: { d1: 55, d2: 55, d3: 65, d4: 45 } },
+      { icon: "🚶", title: "Happy on your own", desc: "Solo travel is your therapy. You recharge by wandering, journaling, and thinking.", scores: { d1: 65, d2: 50, d3: 70, d4: 95 } }
+    ]
+  },
+  {
+    label: "Food",
+    text: "When it comes to food on the road, you're most excited about…",
+    options: [
+      { icon: "🍽️", title: "The food IS the trip", desc: "You plan entire days around meals — markets, cooking classes, hole-in-the-wall gems.", scores: { d1: 40, d2: 50, d3: 75, d4: 45 } },
+      { icon: "🌮", title: "Street food adventures", desc: "You'll eat anything, anywhere. The weirder and more local, the better.", scores: { d1: 65, d2: 80, d3: 70, d4: 50 } },
+      { icon: "🥗", title: "Fuel for the journey", desc: "Food matters, but you'd rather spend time doing things than obsessing over restaurants.", scores: { d1: 30, d2: 30, d3: 30, d4: 55 } }
+    ]
+  },
+  {
+    label: "Risk & Comfort",
+    text: "A local invites you to a village festival 3 hours away by bus. You…",
+    options: [
+      { icon: "🚌", title: "Go immediately", desc: "These spontaneous invitations are the best part of traveling. Say yes first, plan later.", scores: { d1: 90, d2: 75, d3: 80, d4: 40 } },
+      { icon: "🤔", title: "Check reviews first", desc: "Sounds fun, but let me Google it, check the safety situation, and confirm transport.", scores: { d1: 20, d2: 30, d3: 50, d4: 55 } },
+      { icon: "😊", title: "Politely decline", desc: "You appreciate it, but your comfort zone is your happy place. Maybe next time.", scores: { d1: 25, d2: 10, d3: 20, d4: 65 } }
+    ]
+  },
+  {
+    label: "Packing",
+    text: "Be honest — what does your packing look like?",
+    options: [
+      { icon: "🧳", title: "Color-coded and labeled", desc: "Packing cubes, a checklist, and outfits planned for each day. You pack to be prepared.", scores: { d1: 5, d2: 20, d3: 35, d4: 50 } },
+      { icon: "🎒", title: "One carry-on, essentials only", desc: "You've mastered minimalism. Quick-dry fabrics, universal adapter, done.", scores: { d1: 55, d2: 65, d3: 55, d4: 55 } },
+      { icon: "🤷", title: "Throw things in a bag", desc: "You'll buy what you forget. Packing stresses you out more than forgetting stuff.", scores: { d1: 85, d2: 55, d3: 50, d4: 45 } }
+    ]
+  },
+  {
+    label: "Memories",
+    text: "What makes a trip truly unforgettable for you?",
+    options: [
+      { icon: "🏔️", title: "An epic adventure", desc: "Summiting a peak, diving a reef, or surviving something wild — the story matters.", scores: { d1: 45, d2: 80, d3: 50, d4: 45 } },
+      { icon: "💬", title: "A deep human connection", desc: "A conversation with a stranger that changed how you see the world.", scores: { d1: 65, d2: 55, d3: 90, d4: 50 } },
+      { icon: "🌅", title: "A perfect, peaceful moment", desc: "Watching a sunset from a balcony with nowhere to be. Pure contentment.", scores: { d1: 55, d2: 15, d3: 55, d4: 70 } }
+    ]
+  },
+  {
+    label: "Detours",
+    text: "Your train breaks down in a small town not on your itinerary. You feel…",
+    options: [
+      { icon: "😤", title: "Frustrated", desc: "This wasn't the plan. You immediately look for alternatives to get back on track.", scores: { d1: 5, d2: 25, d3: 30, d4: 55 } },
+      { icon: "🤩", title: "Delighted", desc: "Plot twist! This is now an adventure. Let's explore this town.", scores: { d1: 90, d2: 65, d3: 70, d4: 45 } },
+      { icon: "😌", title: "Chill about it", desc: "Delays happen. You'll find a café, read a book, and deal with it when it's fixed.", scores: { d1: 60, d2: 35, d3: 50, d4: 60 } }
+    ]
+  },
+  {
+    label: "Homecoming",
+    text: "You're home. What's the first thing people hear from you?",
+    options: [
+      { icon: "📊", title: "\"Let me show you my slides\"", desc: "Organized photo albums, stories sorted by day, and restaurant recs for everyone.", scores: { d1: 10, d2: 30, d3: 35, d4: 35 } },
+      { icon: "✨", title: "\"You HAVE to go there\"", desc: "Pure excitement. You're already planning your return or telling everyone to book a ticket.", scores: { d1: 45, d2: 40, d3: 55, d4: 25 } },
+      { icon: "🌍", title: "\"Where to next?\"", desc: "Home feels small already. You're scrolling for the next destination before jet lag ends.", scores: { d1: 70, d2: 55, d3: 60, d4: 55 } }
+    ]
+  }
+];
+
+// ============================================================
+// ARCHETYPES — mapped to dimension ranges
+// Each archetype has a "center" point in 4D space
+// ============================================================
+const archetypes = [
+  {
+    id: "master_planner",
+    name: "The Master Planner",
+    icon: "📋",
+    tagline: "\"A well-organized trip is a beautiful trip.\"",
+    center: { d1: 5, d2: 25, d3: 35, d4: 45 },
+    description: "You travel like you live — with intention, preparation, and a spreadsheet that would impress a project manager. Every detail is considered, from the optimal time to visit each landmark to the best seat at the best restaurant. You're not rigid — you're optimized. Your trips run so smoothly that travel companions feel like they're on a luxury guided tour, even when it's all you.",
+    traits: { style: "Highly Organized", vibe: "Prepared & Polished", superpower: "Logistics wizard", blindspot: "Over-scheduling" },
+    destinations: ["Japan", "Switzerland", "Singapore", "Germany"]
+  },
+  {
+    id: "spontaneous_wanderer",
+    name: "The Spontaneous Wanderer",
+    icon: "🌬️",
+    tagline: "\"The best plan is no plan at all.\"",
+    center: { d1: 90, d2: 65, d3: 60, d4: 50 },
+    description: "You follow the wind. Guidebooks are suggestions, itineraries are fiction, and the best moments are the ones you never saw coming. You thrive on serendipity — a missed train becomes a new friendship, a wrong turn leads to a hidden beach. You travel light, think fast, and collect stories instead of souvenirs.",
+    traits: { style: "Free-spirited", vibe: "Adaptable & Bold", superpower: "Serendipity magnet", blindspot: "Missing reservations" },
+    destinations: ["India", "Thailand", "Morocco", "Colombia"]
+  },
+  {
+    id: "cultural_diver",
+    name: "The Cultural Diver",
+    icon: "🎭",
+    tagline: "\"I don't visit places — I try to understand them.\"",
+    center: { d1: 50, d2: 60, d3: 95, d4: 50 },
+    description: "You travel to learn. Museums, temples, language exchanges, home-cooked meals with strangers — these aren't activities for you, they're the whole point. You read history books before flights, attempt the local language (badly, bravely), and come home with a deeper understanding of something bigger than yourself.",
+    traits: { style: "Deeply Curious", vibe: "Empathetic & Intellectual", superpower: "Cultural fluency", blindspot: "Overlooking rest" },
+    destinations: ["Italy", "Mexico", "Turkey", "Vietnam"]
+  },
+  {
+    id: "thrill_seeker",
+    name: "The Thrill Seeker",
+    icon: "⚡",
+    tagline: "\"If it doesn't scare me a little, it's not worth doing.\"",
+    center: { d1: 40, d2: 85, d3: 50, d4: 40 },
+    description: "You travel for adrenaline. Summiting volcanoes at dawn, cliff-diving in Croatia, motorbiking the Ha Giang Loop — your trips are measured in heartbeats, not hotel stars. You're not reckless; you're alive in a way that only comes from pushing past the edge of your comfort zone. Your camera roll looks like a Red Bull ad.",
+    traits: { style: "Adrenaline-driven", vibe: "Fearless & Physical", superpower: "Courage under pressure", blindspot: "Burnout & injury" },
+    destinations: ["New Zealand", "Nepal", "Iceland", "Costa Rica"]
+  },
+  {
+    id: "comfort_cruiser",
+    name: "The Comfort Cruiser",
+    icon: "🛋️",
+    tagline: "\"Travel should feel better than home, not harder.\"",
+    center: { d1: 25, d2: 5, d3: 25, d4: 50 },
+    description: "You've earned your relaxation, and you travel to enjoy it. Five-star hotels, ocean-view suites, spa days, and slow mornings with room service — this is your idea of paradise. You're not lazy; you're intentional about rest. Your trips are designed to recharge you, and you return home genuinely renewed.",
+    traits: { style: "Leisure-first", vibe: "Refined & Relaxed", superpower: "Finding the best of everything", blindspot: "Missing local texture" },
+    destinations: ["Maldives", "Santorini", "Bali", "Amalfi Coast"]
+  },
+  {
+    id: "culinary_nomad",
+    name: "The Culinary Nomad",
+    icon: "🍜",
+    tagline: "\"Tell me what a city eats, and I'll tell you what it is.\"",
+    center: { d1: 45, d2: 55, d3: 75, d4: 40 },
+    description: "For you, the meal IS the trip. You plan entire days around food — morning markets, cooking classes, lunch at the place with no English menu, dinner at the grandmother's kitchen you found through a local. You understand cultures through their kitchens, and your souvenir is always a new recipe.",
+    traits: { style: "Food-driven", vibe: "Sensory & Social", superpower: "Finding hidden gems", blindspot: "Ignoring non-food experiences" },
+    destinations: ["Japan", "Thailand", "Peru", "France"]
+  },
+  {
+    id: "soulful_soloist",
+    name: "The Soulful Soloist",
+    icon: "🧘",
+    tagline: "\"I travel to meet myself, somewhere new.\"",
+    center: { d1: 60, d2: 45, d3: 70, d4: 95 },
+    description: "Solo travel isn't just a preference for you — it's a practice. You journey outward to look inward. Long walks, journaling in cafés, meditation retreats, quiet sunrise viewpoints. You don't avoid people; you seek depth over small talk. Your best travel memories are quiet moments of clarity that changed something in you.",
+    traits: { style: "Reflective & Independent", vibe: "Introspective & Calm", superpower: "Self-awareness", blindspot: "Isolating too much" },
+    destinations: ["Bali", "Portugal", "Sri Lanka", "Patagonia"]
+  },
+  {
+    id: "social_explorer",
+    name: "The Social Explorer",
+    icon: "🎉",
+    tagline: "\"Every stranger is a friend I haven't met yet.\"",
+    center: { d1: 55, d2: 45, d3: 60, d4: 5 },
+    description: "You travel for people. The places are backdrop; the connections are the trip. You're the one who ends up at a family dinner in someone's home, dancing at a local wedding you weren't invited to, or hosting a rooftop dinner for hostel friends. You collect people, not stamps.",
+    traits: { style: "People-first", vibe: "Warm & Magnetic", superpower: "Building instant bonds", blindspot: "Neglecting solo reflection" },
+    destinations: ["Spain", "Brazil", "Ireland", "Philippines"]
+  },
+  {
+    id: "nature_pilgrim",
+    name: "The Nature Pilgrim",
+    icon: "🏔️",
+    tagline: "\"The mountains don't care about my inbox, and that's why I love them.\"",
+    center: { d1: 55, d2: 80, d3: 55, d4: 65 },
+    description: "Cities are fine, but you come alive in the wild. Hiking boots, tent poles, and trail maps are your travel essentials. You measure a trip in elevation gained, waterfalls found, and stars seen. Silence, fresh air, and the scale of nature put everything else in perspective. You don't conquer mountains — they recalibrate you.",
+    traits: { style: "Outdoors & Active", vibe: "Grounded & Resilient", superpower: "Endurance & presence", blindspot: "Skipping urban culture" },
+    destinations: ["Patagonia", "Norway", "Banff", "Nepal"]
+  },
+  {
+    id: "bucket_list_chaser",
+    name: "The Bucket List Chaser",
+    icon: "🏆",
+    tagline: "\"Life is short. I'm checking things off.\"",
+    center: { d1: 25, d2: 35, d3: 30, d4: 40 },
+    description: "You've got a list, and you're working through it. Northern Lights? Done. Machu Picchu? Check. Swimming with whale sharks? Next month. You're driven by iconic experiences and once-in-a-lifetime moments. Your trips are ambitious, visually stunning, and make for incredible stories. You inspire everyone around you to dream bigger.",
+    traits: { style: "Goal-driven", vibe: "Ambitious & Energetic", superpower: "Making things happen", blindspot: "Rushing past the present" },
+    destinations: ["Iceland", "Tanzania", "Egypt", "Galápagos"]
+  },
+  {
+    id: "slow_immersionist",
+    name: "The Slow Immersionist",
+    icon: "🕰️",
+    tagline: "\"I don't visit. I stay.\"",
+    center: { d1: 70, d2: 40, d3: 85, d4: 65 },
+    description: "You don't do drive-by tourism. When you travel, you embed. You rent an apartment, find a regular café, learn the neighborhood rhythms. Two weeks in one village beats seven cities in seven days, every time. You believe travel should change how you live, not just fill your photo album.",
+    traits: { style: "Slow & Deep", vibe: "Patient & Observant", superpower: "Becoming local anywhere", blindspot: "Missing variety" },
+    destinations: ["Tuscany", "Kyoto", "Oaxaca", "Lisbon"]
+  },
+  {
+    id: "weekend_warrior",
+    name: "The Weekend Warrior",
+    icon: "🚀",
+    tagline: "\"48 hours is enough if you use them right.\"",
+    center: { d1: 15, d2: 35, d3: 40, d4: 30 },
+    description: "You don't wait for the perfect two-week window. You grab a Friday night flight and squeeze every ounce of adventure out of 48 hours. Packed itineraries, efficient logistics, maximum experience per hour — you're a master of the micro-trip. Your coworkers don't understand how you saw so much in so little time.",
+    traits: { style: "Efficient & Intense", vibe: "High-energy & Focused", superpower: "Time maximization", blindspot: "Never fully unwinding" },
+    destinations: ["Barcelona", "Bangkok", "New York", "Mexico City"]
+  }
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let currentQ = 0;
+const answers = new Array(questions.length).fill(null);
+
+function startQuiz() {
+  document.getElementById('landing').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = questions[currentQ];
+  const area = document.getElementById('question-area');
+  document.getElementById('q-count').textContent = `${currentQ + 1} / ${questions.length}`;
+  document.getElementById('progress-fill').style.width = `${((currentQ + 1) / questions.length) * 100}%`;
+  document.getElementById('btn-back').style.visibility = currentQ === 0 ? 'hidden' : 'visible';
+  document.getElementById('btn-next').textContent = currentQ === questions.length - 1 ? 'See My Result →' : 'Continue →';
+
+  let html = `<div class="question-card">
+    <div class="question-label">${q.label}</div>
+    <div class="question-text">${q.text}</div>
+    <div class="options">`;
+
+  q.options.forEach((opt, i) => {
+    const sel = answers[currentQ] === i ? 'selected' : '';
+    html += `<div class="option ${sel}" onclick="selectOption(${i})">
+      <span class="option-icon">${opt.icon}</span>
+      <div class="option-content">
+        <div class="option-title">${opt.title}</div>
+        <div class="option-desc">${opt.desc}</div>
+      </div>
+    </div>`;
+  });
+
+  html += `</div></div>`;
+  area.innerHTML = html;
+  document.getElementById('btn-next').disabled = answers[currentQ] === null;
+}
+
+function selectOption(idx) {
+  answers[currentQ] = idx;
+  renderQuestion();
+}
+
+function nextQuestion() {
+  if (answers[currentQ] === null) return;
+  if (currentQ < questions.length - 1) {
+    currentQ++;
+    renderQuestion();
+  } else {
+    showResult();
+  }
+}
+
+function prevQuestion() {
+  if (currentQ > 0) {
+    currentQ--;
+    renderQuestion();
+  }
+}
+
+// ============================================================
+// SCORING
+// ============================================================
+function calculateScores() {
+  const totals = { d1: 0, d2: 0, d3: 0, d4: 0 };
+  answers.forEach((ansIdx, qIdx) => {
+    if (ansIdx !== null) {
+      const scores = questions[qIdx].options[ansIdx].scores;
+      totals.d1 += scores.d1;
+      totals.d2 += scores.d2;
+      totals.d3 += scores.d3;
+      totals.d4 += scores.d4;
+    }
+  });
+  // Average across questions
+  return {
+    d1: Math.round(totals.d1 / questions.length),
+    d2: Math.round(totals.d2 / questions.length),
+    d3: Math.round(totals.d3 / questions.length),
+    d4: Math.round(totals.d4 / questions.length)
+  };
+}
+
+function findArchetype(scores) {
+  let best = null;
+  let bestDist = Infinity;
+  archetypes.forEach(a => {
+    const dist = Math.sqrt(
+      Math.pow(scores.d1 - a.center.d1, 2) +
+      Math.pow(scores.d2 - a.center.d2, 2) +
+      Math.pow(scores.d3 - a.center.d3, 2) +
+      Math.pow(scores.d4 - a.center.d4, 2)
+    );
+    if (dist < bestDist) { bestDist = dist; best = a; }
+  });
+  return best;
+}
+
+function showResult() {
+  document.getElementById('quiz').classList.add('hidden');
+  const scores = calculateScores();
+  const a = findArchetype(scores);
+  const el = document.getElementById('result');
+  el.classList.remove('hidden');
+
+  const dims = [
+    { key: 'd1', left: 'Planner', right: 'Spontaneous', val: scores.d1, color: '#7c6aef' },
+    { key: 'd2', left: 'Luxe', right: 'Roughing It', val: scores.d2, color: '#f0a050' },
+    { key: 'd3', left: 'Highlights', right: 'Deep Immersion', val: scores.d3, color: '#4ecdc4' },
+    { key: 'd4', left: 'Group', right: 'Solo', val: scores.d4, color: '#e879a8' }
+  ];
+
+  let barsHtml = '<div class="dimension-bars"><h3>Your Travel DNA</h3>';
+  dims.forEach(d => {
+    const leftActive = d.val < 50 ? 'active' : '';
+    const rightActive = d.val >= 50 ? 'active' : '';
+    barsHtml += `<div class="dim-row">
+      <div class="dim-labels"><span class="${leftActive}">${d.left}</span><span class="${rightActive}">${d.right}</span></div>
+      <div class="dim-track"><div class="dim-fill" style="width:${d.val}%;background:${d.color}"></div></div>
+    </div>`;
+  });
+  barsHtml += '</div>';
+
+  let destHtml = '<div class="destinations"><h3>Destinations Made for You</h3><div class="dest-tags">';
+  a.destinations.forEach(d => { destHtml += `<span class="dest-tag">${d}</span>`; });
+  destHtml += '</div></div>';
+
+  el.innerHTML = `<div class="result">
+    <div class="result-badge">Your Travel Archetype</div>
+    <div class="result-icon">${a.icon}</div>
+    <h2>${a.name}</h2>
+    <div class="tagline">${a.tagline}</div>
+    <p class="description">${a.description}</p>
+    <div class="traits-grid">
+      <div class="trait-card"><div class="label">Travel Style</div><div class="value">${a.traits.style}</div></div>
+      <div class="trait-card"><div class="label">Vibe</div><div class="value">${a.traits.vibe}</div></div>
+      <div class="trait-card"><div class="label">Superpower</div><div class="value">${a.traits.superpower}</div></div>
+      <div class="trait-card"><div class="label">Blind Spot</div><div class="value">${a.traits.blindspot}</div></div>
+    </div>
+    ${barsHtml}
+    ${destHtml}
+    <div class="share-row"><p>Share your result or take it again with friends!</p></div>
+    <button class="btn-retake" onclick="retake()">↻ Retake Quiz</button>
+  </div>`;
+}
+
+function retake() {
+  currentQ = 0;
+  answers.fill(null);
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('landing').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

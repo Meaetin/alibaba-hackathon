@@ -2,22 +2,30 @@ import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
 import { parseLocalDate } from "@/lib/utils/itinerary";
 import type { LodgingInfo } from "./ItineraryDayColumn/sequence";
 
-export function parseTimeMins(t: string, timezone?: string): number {
+/**
+ * Minutes past midnight for a stored time, read in the itinerary's timezone.
+ *
+ * The default is UTC and it is load-bearing, not a shrug. `minutesToISO` builds
+ * every stored timestamp by adding minutes-past-midnight to a UTC midnight, so
+ * reading it back in UTC is that function's exact inverse. Reading it in the
+ * browser's zone is not: a viewer at UTC+8 turns a 17:15 stop into 01:15 the
+ * next morning, which sorts it to the top of the day. The page renders its
+ * labels in UTC, so the times looked right while the order was rotated by the
+ * viewer's offset — visible only to somebody east of Greenwich.
+ */
+export function parseTimeMins(t: string, timezone = "UTC"): number {
   if (t.includes("T")) {
     const d = new Date(t);
     if (!isNaN(d.getTime())) {
-      if (timezone) {
-        const parts = new Intl.DateTimeFormat("en-GB", {
-          timeZone: timezone,
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }).formatToParts(d);
-        const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
-        const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
-        return (h % 24) * 60 + m;
-      }
-      return d.getHours() * 60 + d.getMinutes();
+      const parts = new Intl.DateTimeFormat("en-GB", {
+        timeZone: timezone,
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(d);
+      const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+      const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+      return (h % 24) * 60 + m;
     }
   }
   const [h, m] = t.split(":");
@@ -29,7 +37,7 @@ export function formatDayDate(dateStr: string): string {
   return d.toLocaleDateString("en-US", { day: "numeric", month: "long" });
 }
 
-export function formatTimeRange(start: string | null, end: string | null, timezone?: string | null, use24h = false): string {
+export function formatTimeRange(start: string | null, end: string | null, timezone: string | null = "UTC", use24h = false): string {
   if (!start && !end) return "";
   const fmt = (t: string) => {
     if (t.includes("T")) {

@@ -1,8 +1,0 @@
-schema_version: 1
-module_path: app_routes
-title: App Routes (Next.js App Router)
-scope:
-    - src/app/
-source_files: []
-depends_on: []
-related_to: []

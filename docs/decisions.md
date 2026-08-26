@@ -126,15 +126,20 @@
   deliberately unused: code owns the clock, the geometry and the filtering, so the
   model only assigns IDs to buckets and writes two sentences. Both take
   `reasoning: { effort }` and default to `medium`, so set it explicitly or you buy
-  reasoning tokens for tag extraction. OpenAI's prompt caching is automatic and
-  prefix-hashed — no `cache_control` breakpoint, a 1024-token floor, and
-  `prompt_cache_key` to route Pass C's parallel calls to one entry.
+  reasoning tokens for tag extraction. GPT-5.6 caches only at eligible
+  breakpoints: Pass C marks the final stable developer `input_text` block,
+  uses explicit-only mode so per-stop suffixes are not written, clears the
+  1024-token floor, and shares one `prompt_cache_key` across the fan-out.
 - 2026-08-21 — A stop's `role` is `activity | lunch | dinner | cafe_break`: what it
   is, never when it happens. The old time-flavoured roles folded kind, position and
   a clock claim into one field; only the clock claim could be wrong and it
   duplicated `startMin`. Position is the array index, time is the timestamp. This
   deleted the soft-clamp-and-wait machinery that caused the bug, since an activity
   with no window has nothing to wait for.
+- 2026-08-24 — Enrichment misses enqueue OpenAI Batch work and persist the provider
+  batch id plus the exact submitted subjects in `enrichment_batches`; localhost
+  collection is the explicit `npm run enrichment:collect` command. This keeps the
+  24-hour handoff durable without adding deployment or worker infrastructure.
 - 2026-08-21 — The packer has **no cap on stops per day**, in count or in minutes.
   A count cut days the clock had room for (three temples, done by 13:28). Minutes
   don't fix it: the wall clock already caps a balanced day at ~415–465 activity
@@ -358,3 +363,162 @@
   `src/lib/planner`, `src/lib/db` and `src/lib/maps`, warns elsewhere: the
   ported UI's 27 hits are dead PostHog props, and underscoring them would
   disguise a backlog as intent. Zero errors, 81 warnings, exit 0.
+- 2026-08-24 — **Target localhost only for the demo.** `/api/plan` may continue
+  in the long-running local Node process after returning the job row;
+  production and serverless execution durability are out of scope.
+- 2026-08-25 — **`itineraries.planner_debug` (jsonb) added, plus
+  `enrichment_batches.failures`.** Pass B's per-stop `why` and every refused
+  place id were built and discarded inside a single request; both are now
+  durable and both are diagnostics only, versioned by `PLANNER_DEBUG_VERSION`
+  rather than by migration. Per-stage counters stay on `jobs.result.stats` — one
+  copy, not two. Migration `0003_flippant_maddog`, additive.
+- 2026-08-25 — **`country` reaches Google through `searchLocality`, appended
+  only when it differs from the city.** Chosen over always appending because the
+  Singapore demo sends city and country both as "Singapore": equality keeps the
+  query byte-identical and the pre-warmed `place_search_cache` rows valid. Other
+  cities gain "Kyoto, Japan" and a new cache key, which is correct and cheap.
+- 2026-08-25 — **A batch's error file is downloaded, and store failures are
+  reported rather than raised.** Requests the provider never ran appear only in
+  the error file; a rejected `place_enrichments` write now leaves the batch open
+  for the next sweep instead of throwing out of a loop that had nine more
+  batches to visit.
+- 2026-08-25 — **`/itineraries/[id]/debug` added as a server component,
+  unlinked.** Reads the planner's own storage directly through
+  `src/lib/db/diagnostics.ts` rather than through the ported `src/lib/api/**`
+  seam, because the data has no client-side existence. Not linked from the
+  itinerary page: auth is removed, and a link would expose every place id and
+  score. `diagnostics.ts` is deliberately not a port — the queries hold no
+  decisions, so the view is where the tests are.
+- 2026-08-25 — **`vitest.config.ts` gained `oxc.jsx.runtime: "automatic"` and
+  `*.test.tsx` in `include`.** Required to import any `.tsx` under Vitest while
+  `tsconfig.json` keeps `jsx: preserve` for Next. Chosen over adding
+  `@vitejs/plugin-react` for one test file; `esbuild.jsx` is ignored because
+  Vite 8 parses with oxc.
+- 2026-08-25 — **The persona is stored server-side in `travel_personas`, and a
+  retake rewrites the row in place.** The client holds only the id. One persona
+  per person means one stable pointer and nothing to migrate, at the cost of
+  the table no longer describing who planned an older trip — which is why
+  `itineraries.persona` snapshots the whole persona (answers and derived result)
+  on every plan and nothing explaining an existing trip may join to the table.
+- 2026-08-25 — **Axis precedence lives in one file, `src/lib/planner/knobs.ts`.**
+  Four pairs of quiz axes reach for the same constants in opposite directions;
+  resolving that at each call site would resolve it differently. No module below
+  reads a `PersonaResult` — each takes the knob it needs as a parameter.
+- 2026-08-25 — **A missing persona resolves to today's constants, and so does
+  every `mid` band.** One table, one rule: a genuinely middling traveller gets
+  the unopinionated plan. Two bridge proposals lose to this — a 0.1 popularity
+  weight at mid and one social venue a day at mid — because the alternative is
+  two definitions of "unopinionated" with only one of them tested.
+- 2026-08-25 — **`visitDurationBias`: pace sets the floor, immersion may raise
+  it one step and never lower it.** The bridge gives the knob to the focus axis
+  and the precedence rule gives minutes to pace; this satisfies both. A packed
+  day stays brisk, but a deep-immersion traveller does not get the 45-minute
+  version of the temple the day was built around.
+- 2026-08-25 — **Pace is asked for in the create modal, so `derivePace` is a
+  fallback.** Quiz Q4 feeds the spontaneity axis, which conflates *unhurried*
+  with *unplanned*: a wanderer who wants full days reads as relaxed. Generalised
+  — a thing the user typed beats a thing the quiz inferred.
+- 2026-08-25 — **`getFocusScoringAdjustments` and `getSocialSchedulingRules`
+  deleted, not connected.** `knobs.ts` says the same thing with bands that cut
+  at 33/66 rather than 30/60/70, and with mid rows equal to today's constants.
+  Connecting the originals would have left two mappings disagreeing. Three of
+  their fields had no mechanism to connect to and are named in `profile.ts`
+  rather than lost: `eveningActivityRequired`, `preferQuietPlaces`,
+  `allowSolitudeSlots`.
+- 2026-08-25 — **The server composes the profile, not the client.** The browser
+  holds only a persona id, so `POST /api/plan` calls `buildProfile` after
+  resolving it. `profile.interests` on the wire is the demo placeholder and is
+  deliberately not treated as a choice; a real interest picker sends the new
+  `interestOverrides` field instead.
+- 2026-08-25 — **`goodForChildren` was NOT added to `SHORTLIST_FIELD_MASK`.**
+  Free on the Atmosphere call, but not free to keep: it needs a column, a
+  migration and a row type, and nothing reads it. Adding it now would recreate
+  exactly the orphan pattern this work exists to remove.
+- 2026-08-25 — **Themed planning is `PlanRequest.mode`, default `"geographic"`.**
+  Every rung falls back to geography — a dead theme pass, a hallucinated anchor,
+  an anchor with no coordinates — so the worst case for a themed run is the
+  default run plus one model call.
+- 2026-08-25 — **A Nearby Search is a `SearchRequest` with a `nearby` field, so
+  it flows through `retrievePlaces`.** Same cache, same location persistence,
+  same dedupe, same stats — and, crucially, the same "publish the cache entry
+  only after the rows land" rule. A second path to Google would be a second
+  place to forget it. `SEARCH_FIELD_MASK` for both: one Atmosphere field would
+  bump the SKU tier on every nearby call.
+- 2026-08-25 — **`runFunnel` gained `dayAligned`.** A themed cluster carries
+  `theme.dayIndex`; the funnel's default score-ranking would move day three's
+  premise onto day one, and dropping an empty cluster would renumber every day
+  after it. Off by default, which is the old behaviour.
+- 2026-08-25 — **The survey's areas are k-means clusters carrying landmarks, not
+  named neighbourhoods.** Nothing here geocodes and `formatted_address` would
+  need a parser per country. The model names areas from the best-known places in
+  them, which is evidence rather than invention.
+- 2026-08-25 — **`runPlan` keeps defaulting to `"geographic"`; the client sends
+  `"themed"`.** The plan called for flipping the default in phase 5. Flipping it
+  in the library would break the property every phase leans on — "no mode means
+  today, exactly" — so the product default lives in `createItineraryRouted`
+  instead, where it is one visible line.
+- 2026-08-25 — **"Merge" in the feasibility ladder means borrow, not fuse.**
+  Fusing two thin days would leave the trip a day short and renumber every day
+  after it. The thin day takes surplus restaurants from its nearest neighbour by
+  anchor distance, and the donor is never taken below its own feasibility.
+- 2026-08-25 — **`promptCacheKeyFor` is hashed, because OpenAI caps
+  `prompt_cache_key` at 64 characters.** Spelled out, Singapore plus four
+  interests plus four persona bands is 84, and the provider answers 400 on
+  *every* model call in the run — each of which then degrades to its documented
+  fallback, so the trip still completes and still looks like a trip. No test
+  caught it; one live run did. A short readable city prefix survives.
+- 2026-08-25 — **A theme's `includedTypes` must pass two rules, not one.** The
+  type must appear in the retrieved pool (kills invented types) **and** not be
+  one of Google's descriptive-only Table B types (`food`, `place_of_worship`,
+  `point_of_interest`, …). Both come back on real places; asking Google to
+  filter on one is a 400 for the whole circle, not a warning. Two of three
+  Singapore nearby searches were lost this way before the fix.
+
+## 2026-08-25 — three planner fixes from the first live themed Singapore run
+
+- **Build `rows` from `poolWithExplored`, not `pool` (`pipeline.ts`).** Explored places were absent from `result.places`, so their stops were saved with a null `location_id`, no photo and no Atmosphere fields. Why: `result.places` is the list `saveItinerary` resolves ids from. The suite missed it because the Google fake served nearby searches from the text-search pool; `nearbyOnly` now separates them.
+- **`pickVictim` drops from before the meal that missed its window (`pack.ts`).** Why: nothing after a meal can move it earlier, so those cuts buy nothing and the loop cuts again — one late lunch cost a whole afternoon. `stampDay` reports `blockedBefore`; the narrowing falls back to the whole day so the loop still terminates.
+- **Cap theme membership at `radiusFor(hint, walkMaxMeters) * 1.5` (`group.ts`), and bound borrowing by the same reach (`feasibility.ts`).** Why: `nearestTheme` had no distance limit and the type-match discount let a cafe 5.7 km out join a walkable theme. Rejected: capping by squared degrees — an absolute threshold cannot ride a monotonic transform. Refused places are counted as `unclaimed` rather than silently dropped.
+- **Not done: a minute-level feasibility check.** Considered and rejected — it would be a second packer, and with the reach cap in place the infeasibility it was meant to catch is prevented at grouping time instead.
+
+## 2026-08-25 — the itinerary page reads Neon
+
+- **`readItineraryDetail` + `GET /api/itineraries/[id]` replace the Supabase query.** Why: the page is a client component and Neon is server-side only. Types now live in `src/lib/db/itinerary-detail.ts`; `queries/home.ts` re-exports them so the ~20 importing components need no edit.
+- **Reads only.** The page's 30 mutations still target the old REST backend. Rejected wiring writes as well: it is a much larger job, and a half-wired editor fails silently on drag.
+- **`overview` from the theme premises; card description prefers Pass C's `whyForYou`.** Why: both were paid for on a model and only the debug page showed them.
+- **Absent features removed, not blanked** (user's call): sharing/invite, collaborators, companion collection, flights, lodging, attachments, realtime notes channel, `travel_polyline`, `timezone`, and the panel's website/phone/Maps link.
+- **Kept opening hours** by building `weekdayDescriptions` from the stored `opening_periods` rather than deleting the panel section — the data was already there.
+
+## 2026-08-26 — Itinerary page: order, route, durations, links, prose
+
+- **`parseTimeMins` defaults to UTC, not the browser's timezone.** Why: `minutesToISO` writes UTC-built timestamps, so UTC is its inverse. Browser-local rotated the day's order by the reader's offset while the labels stayed correct.
+- **Route order is its own step (`sequence.ts`), between Pass B and the packer.** Why: the model gets no coordinates and the packer must not reorder, so nothing looked at the map. Rejected reordering inside `pack.ts` — it would break the rule that the sequence is the caller's.
+- **Meals are pinned; opening hours are not consulted during reordering.** Why: a meal's index is the day's shape, and predicting a stop's clock time needs the packer, which needs the order. `validate.ts` repairs closures afterwards, and on the three real days it caused zero extra repairs.
+- **`POST /api/enrichments/collect` sweeps the durable batch queue.** Why: `collectQueuedEnrichments` had no caller, so `place_enrichments` was empty and every duration came off the type heuristic. Rejected a cron for now — the demo runtime is a local process.
+- **`places.googleMapsUri` added to `SEARCH_FIELD_MASK`.** Why: it is Pro and the mask is already Enterprise, so it is free. `googleMapsPlaceUrl` falls back to `query_place_id` for rows stored before the column existed.
+- **Pass C's `highlights`/`foodRecommendations`/`tips` render in the detail views.** Why: they were generated, stored, and shown by nothing.
+
+## 2026-08-26 — Real travel times and a five-minute clock
+
+- **Compute Route Matrix replaces crow-flight legs (`routes.ts`).** Why: the straight line understated every real distance by 30–100% and a 1200 m threshold decided the mode without ever asking. Rejected per-leg Directions: `TravelLegProvider` is called thousands of times per day, so it must be a prefetched matrix.
+- **Two matrices per day, walk and transit; faster wins by 5 minutes.** Why: the mode should be a measurement. The margin stops the planner boarding a bus to save ninety seconds.
+- **`TravelLeg.mode` is authoritative when present.** Why: a measured mode must beat `travelModeForMeters`, which is a guess from distance.
+- **Departure time is 10:00 local, estimated at one hour per 15° of longitude.** Why: the planner has no timezone and midnight UTC is a night timetable outside Europe. Clamped into Google's -7/+100 day window so a past trip still routes.
+- **Everything degrades to the straight line, counted in `stats.travel.estimated`.** Why: a fully-degraded trip looks identical to a routed one.
+- **All schedule arithmetic moves in 5-minute steps.** Why: nothing upstream measures a visit to the minute, so "9:43" was arithmetic, not an estimate. Gate A snapshots accepted after confirming both cities keep the identical set of stops.
+
+## 2026-08-26 — Model cost tracking
+
+- **Store tokens, price at render (`pricing.ts`).** Why: list prices move; a persisted dollar figure becomes a wrong claim about an unmeasurable run. Correcting a rate now re-prices history.
+- **An unpriced model returns `null`, not `0`.** Why: a confident $0.00 is worse than a blank. The page calls the total a floor and names the model.
+- **`StageUsage.stage` is separate from `model`.** Why: Pass B and the theme call share `MODELS.assign`, so the model name cannot attribute the spend.
+- **Enrichment cost lives on `enrichment_batches.usage`, not on the plan.** Why: one batch serves every later trip touching those places; billing the submitter overstates it and makes reusers look free. Counted before parsing, because a rejected line was still billed.
+- **Rejected: switching enrich/narrate to a cheaper model.** Why: they are already on `gpt-5.6-luna` with reasoning off, and the single `assign` call on terra is ~80% of a trip's LLM cost. The saving is about a cent per trip and the quality risk lands on `avgVisitMinutes`, which now drives every visit length.
+
+## 2026-08-26 — Enrichment moves before Pass B
+
+- **`enrichPlaces` fetches cache misses live, in the enrich stage.** Why: the batch's answers arrive up to 24h later, so every first trip to a city sized visits from the type table and looked complete. Costs ~1 cent and ~11s.
+- **Concurrency 16.** Why: measured on a real 58-place shortlist — 8 was 19.6s, 16 was 11.4s, 24 and 32 added only tail latency. No 429s; the binding limit is tokens (~48k of 200k/min), not requests.
+- **`enrichNow` defaults off in `runPlan`, on in `defaultPlanRouteDeps`.** Why: same rule as `mode` — a library default that silently spends money is a trap.
+- **Rejected a batch-completion webhook.** Why: it automates collection but does not make data arrive before the plan that needs it, and it needs a public URL the localhost demo does not have.
+- **`withBackoff` added beside `withRetry`.** Why: instant retry is useless against a 429 when 58 calls fan out together. Retries only 429/5xx/transport — a 400 is our bug.

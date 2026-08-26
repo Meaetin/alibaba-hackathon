@@ -1,8 +1,8 @@
 /**
- * Drizzle-backed implementations of the two ports `retrieval.ts` declares.
- * Nothing at a call site changes when you swap these in for
- * `createInMemorySearchCache` / `createInMemoryLocationStore` — that's the whole
- * point of the ports, and it's why Step 10 didn't have to wait for Step 9.
+ * Drizzle-backed implementations of the ports the planner declares — two in
+ * `retrieval.ts`, one in `enrich.ts`. Nothing at a call site changes when you
+ * swap these in for the `createInMemory*` factories — that's the whole point of
+ * the ports, and it's why Step 10 didn't have to wait for Step 9.
  *
  * Location upserts return the merged stored rows. Enrichment is preserved, and
  * resolved media is preserved only while its photo resource-name set matches.
@@ -13,8 +13,10 @@
  * in the path and make the TTL untestable.
  */
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
+import { clampVisitMinutes } from "@/lib/planner/enrich";
+import type { EnrichmentStore, StoredEnrichment } from "@/lib/planner/enrich";
 import type {
   CachedSearch,
   LocationStore,
@@ -24,7 +26,7 @@ import type {
 import type { PriceLevelOrdinal } from "@/lib/maps/price-level";
 
 import type { Database } from "./client";
-import { locations, place_search_cache } from "./schema";
+import { locations, place_enrichments, place_search_cache } from "./schema";
 
 type LocationRow = typeof locations.$inferSelect;
 type LocationInsert = typeof locations.$inferInsert;
@@ -105,6 +107,10 @@ export function createLocationStore(db: Database): LocationStore {
             shortlist_hydrated_at: sql`coalesce(excluded.shortlist_hydrated_at, ${locations.shortlist_hydrated_at})`,
             photo_names: sql`excluded.photo_names`,
             business_status: sql`excluded.business_status`,
+            // A nearby-search refetch can legitimately answer with no URI where
+            // an earlier text search had one. Keeping the stored value is the
+            // same rule the editorial fields already follow.
+            google_maps_uri: sql`coalesce(excluded.google_maps_uri, ${locations.google_maps_uri})`,
             fetched_at: sql`excluded.fetched_at`,
             // Retrieval never learns these — enrichment (Step 12) backfills
             // stay_duration and Step 11 resolves the photo media. A refetch
@@ -188,6 +194,7 @@ export function toRetrievedPlace(row: LocationRow): RetrievedPlace {
     userRatingCount: row.user_rating_count ?? undefined,
     priceLevel: (row.price_level ?? undefined) as PriceLevelOrdinal | undefined,
     businessStatus: row.business_status ?? undefined,
+    googleMapsUri: row.google_maps_uri ?? undefined,
     stayDuration: row.stay_duration ?? undefined,
     openingPeriods: row.opening_periods ?? undefined,
     city: row.city ?? "",
@@ -230,7 +237,118 @@ export function toInsert(place: RetrievedPlace): LocationInsert {
     photo_urls: place.photoUrls,
     photos_resolved_at: place.photosResolvedAt,
     business_status: place.businessStatus ?? null,
+    google_maps_uri: place.googleMapsUri ?? null,
     stay_duration: place.stayDuration ?? null,
     fetched_at: place.fetchedAt,
+  };
+}
+
+// ─── place_enrichments ───────────────────────────────────────────────────────
+
+type EnrichmentRow = typeof place_enrichments.$inferSelect;
+type EnrichmentInsert = typeof place_enrichments.$inferInsert;
+
+/**
+ * `place_enrichments`, plus the one narrow patch enrichment makes to
+ * `locations`.
+ *
+ * `updateStayDuration` carries its "only where null" rule in the WHERE clause
+ * rather than in a read-then-write, so two concurrent pre-warm runs can't race
+ * each other into overwriting a value someone set by hand.
+ */
+export function createEnrichmentStore(db: Database): EnrichmentStore {
+  return {
+    async getMany(placeIds) {
+      if (placeIds.length === 0) return [];
+      const rows = await db
+        .select()
+        .from(place_enrichments)
+        .where(inArray(place_enrichments.place_id, [...placeIds]));
+      // Returned in the order asked for, matching the in-memory store.
+      const byPlaceId = new Map(rows.map((row) => [row.place_id, row]));
+      return placeIds.flatMap((id) => {
+        const row = byPlaceId.get(id);
+        return row ? [toStoredEnrichment(row)] : [];
+      });
+    },
+
+    async putMany(rows) {
+      if (rows.length === 0) return;
+      await db
+        .insert(place_enrichments)
+        .values(rows.map(toEnrichmentInsert))
+        .onConflictDoUpdate({
+          target: place_enrichments.place_id,
+          set: {
+            description: sql`excluded.description`,
+            tags: sql`excluded.tags`,
+            confidence: sql`excluded.confidence`,
+            visit_min: sql`excluded.visit_min`,
+            visit_max: sql`excluded.visit_max`,
+            signature_dishes: sql`excluded.signature_dishes`,
+            best_time_of_day: sql`excluded.best_time_of_day`,
+            crowd_profile: sql`excluded.crowd_profile`,
+            model: sql`excluded.model`,
+            prompt_version: sql`excluded.prompt_version`,
+            source_hash: sql`excluded.source_hash`,
+            expires_at: sql`excluded.expires_at`,
+          },
+        });
+    },
+
+    async updateStayDuration(updates) {
+      await Promise.all(
+        updates.map((update) =>
+          db
+            .update(locations)
+            .set({ stay_duration: update.minutes })
+            .where(and(eq(locations.place_id, update.placeId), isNull(locations.stay_duration))),
+        ),
+      );
+    },
+  };
+}
+
+/**
+ * Row → domain. The nullable minute columns collapse through
+ * `clampVisitMinutes`, which is also the guard against a row written by hand or
+ * by a script that predates the clamp.
+ */
+export function toStoredEnrichment(row: EnrichmentRow): StoredEnrichment {
+  return {
+    placeId: row.place_id,
+    description: row.description,
+    tags: row.tags,
+    confidence: row.confidence,
+    avgVisitMinutes: clampVisitMinutes([
+      row.visit_min ?? Number.NaN,
+      row.visit_max ?? Number.NaN,
+    ]),
+    signatureDishes: row.signature_dishes ?? undefined,
+    bestTimeOfDay: row.best_time_of_day ?? undefined,
+    crowdProfile: row.crowd_profile ?? undefined,
+    model: row.model,
+    promptVersion: row.prompt_version,
+    sourceHash: row.source_hash,
+    expiresAt: row.expires_at,
+  };
+}
+
+/** Domain → row. */
+export function toEnrichmentInsert(enrichment: StoredEnrichment): EnrichmentInsert {
+  return {
+    place_id: enrichment.placeId,
+    description: enrichment.description,
+    tags: enrichment.tags,
+    confidence: enrichment.confidence,
+    visit_min: enrichment.avgVisitMinutes[0],
+    visit_max: enrichment.avgVisitMinutes[1],
+    signature_dishes: enrichment.signatureDishes ?? null,
+    best_time_of_day: enrichment.bestTimeOfDay ?? null,
+    crowd_profile: enrichment.crowdProfile ?? null,
+    model: enrichment.model,
+    prompt_version: enrichment.promptVersion,
+    source_hash: enrichment.sourceHash,
+    expires_at: enrichment.expiresAt,
   };
 }

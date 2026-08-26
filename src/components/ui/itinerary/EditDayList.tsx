@@ -8,7 +8,6 @@ import { Layers, Plus, Minus, PlaneTakeoff, House } from "lucide-react";
 import { Button } from "@/components/ui/primitives/Button";
 import { ItineraryEditDayColumn } from "./ItineraryEditDayColumn";
 import { EditDaySelector } from "./EditDaySelector";
-import { parseTimeMins } from "./activity-utils";
 import { CompactActivityCard } from "./CompactActivityCard";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/supabase/queries/home";
@@ -68,7 +67,6 @@ interface EditDayListProps {
   isAddingFlight?: boolean;
   onAddLodging?: () => void;
   isAddingLodging?: boolean;
-  lodgingMap?: Record<string, { checkInTime?: string; checkOutTime?: string; name?: string } | null>;
   onActivityTimeChange?: (activityId: string, startTime: string, endTime: string | null) => void;
   /** Optimize a single activity's placement (the time-picker wand) — locks all others. */
   onActivityOptimize?: (activityId: string) => void;
@@ -115,7 +113,6 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
   isAddingFlight,
   onAddLodging,
   isAddingLodging,
-  lodgingMap,
   onActivityTimeChange,
   onActivityOptimize,
   lockedActivityIds,
@@ -474,18 +471,10 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
             onTransportModeChange={onTransportModeChange}
             onCollectionOpen={onCollectionOpen}
             isCollectionActive={isCollectionActive}
-            accommodation={lodgingMap?.[day.id] ?? null}
-            totalDays={days.length}
             lockedActivityIds={lockedActivityIds}
             onToggleActivityLock={onToggleActivityLock}
             onActivityTimeChange={onActivityTimeChange}
             onActivityOptimize={onActivityOptimize}
-            previousDayLastActivity={i > 0 ? (() => {
-              const prevActivities = days[i - 1].activities
-                .filter((a) => a.start_time)
-                .sort((a, b) => parseTimeMins(a.start_time!) - parseTimeMins(b.start_time!));
-              return prevActivities[prevActivities.length - 1] ?? null;
-            })() : null}
           />
         </div>
       ))}
