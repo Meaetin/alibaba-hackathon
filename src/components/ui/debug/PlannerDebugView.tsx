@@ -22,6 +22,13 @@
 import { AlertTriangle, Check, Info } from "lucide-react";
 
 import type { PlanDiagnostics } from "@/lib/db/diagnostics";
+import {
+  PRICES_AS_OF,
+  formatUsd,
+  summarizeCost,
+  type PlanCostSummary,
+  type StageUsage,
+} from "@/lib/planner/pricing";
 import { hhmm } from "@/lib/planner/validate";
 import { formatDuration } from "@/lib/utils/calendar";
 import { cn } from "@/lib/utils";
@@ -41,6 +48,12 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
       entry,
     ]),
   );
+  // `job.stats` is `unknown` by design — `diagnostics.ts` passes the blob
+  // through rather than re-declaring the pipeline's stats shape one table over.
+  // So the cost array is narrowed here, and a plan from before it existed reads
+  // as "not recorded" rather than as a run that made no calls.
+  const cost = costFrom(job?.stats);
+
   const fallbackDays = new Set(debug?.assignment.fallbackDays ?? []);
   const narrationFallbacks = new Map(
     (debug?.narration.fallbacks ?? []).map((entry) => [entry.placeId, entry.message]),
@@ -159,6 +172,75 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
           <FunnelBars stats={funnelStats} />
         ) : (
           <Empty>No funnel stats on this row.</Empty>
+        )}
+      </Section>
+
+      {/* Model Cost */}
+      <Section
+        region="itinerary-debug-cost"
+        title="Model spend"
+        note={`Token counts are what the run recorded; the dollars are today's list prices applied to them, checked ${PRICES_AS_OF}. Enrichment is not here — its batch serves every later trip, so it is billed to the batch row instead.`}
+      >
+        {cost === null ? (
+          <Empty>Not recorded — this plan ran before token usage was tracked.</Empty>
+        ) : cost.stages.length === 0 ? (
+          <Empty>No model calls were made.</Empty>
+        ) : (
+          <div className="planner-debug-cost flex flex-col gap-2">
+            <div className="overflow-x-auto">
+              <table className="planner-debug-cost-table w-full min-w-[34rem] text-left type-body-3">
+                <thead className="text-content-tertiary">
+                  <tr>
+                    <th className="py-1 pr-4 font-normal">Stage</th>
+                    <th className="py-1 pr-4 font-normal">Model</th>
+                    <th className="py-1 pr-4 text-right font-normal">Calls</th>
+                    <th className="py-1 pr-4 text-right font-normal">In</th>
+                    <th className="py-1 pr-4 text-right font-normal">Cached</th>
+                    <th className="py-1 pr-4 text-right font-normal">Out</th>
+                    <th className="py-1 text-right font-normal">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cost.stages.map((stage) => (
+                    <tr key={stage.stage} className="border-t border-edge-subtle text-content-secondary">
+                      <td className="py-1 pr-4 font-medium text-content">{stage.stage}</td>
+                      <td className="py-1 pr-4 font-mono text-content-tertiary">
+                        {stage.model}
+                        {stage.batch ? " (batch)" : ""}
+                      </td>
+                      <td className="py-1 pr-4 text-right">{stage.calls}</td>
+                      <td className="py-1 pr-4 text-right">{stage.inputTokens.toLocaleString()}</td>
+                      <td className="py-1 pr-4 text-right">
+                        {stage.cachedInputTokens.toLocaleString()}
+                      </td>
+                      <td className="py-1 pr-4 text-right">{stage.outputTokens.toLocaleString()}</td>
+                      <td className="py-1 text-right">
+                        {stage.usd === null ? (
+                          <span className="text-content-error">no price on file</span>
+                        ) : (
+                          formatUsd(stage.usd)
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-edge text-content">
+                    <td className="py-1 pr-4 font-medium" colSpan={6}>
+                      Total
+                    </td>
+                    <td className="py-1 text-right font-medium">{formatUsd(cost.usd)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            {cost.unpriced.length > 0 && (
+              // The total is a floor, not the answer, and saying so is the whole
+              // reason an unpriced model reports null instead of zero.
+              <p className="type-body-3 text-content-error">
+                No rate on file for {cost.unpriced.join(", ")} — the total above is lower than
+                what this run actually cost.
+              </p>
+            )}
+          </div>
         )}
       </Section>
 
@@ -379,6 +461,41 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
         )}
       </Section>
 
+      {/* Route Order */}
+      <Section
+        region="itinerary-debug-sequencing"
+        title="Route order"
+        note="Pass B orders a day without ever seeing a coordinate. This is what reordering it before the clock was stamped bought, in travel minutes."
+      >
+        {debug === null || debug.sequencing === undefined ? (
+          <Empty>Not recorded — this itinerary was planned before the reorder existed.</Empty>
+        ) : debug.sequencing.length === 0 ? (
+          <Empty>No days to sequence.</Empty>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {debug.sequencing.map((day) => (
+              <li
+                key={day.dayIndex}
+                className="type-body-3 flex flex-wrap items-baseline gap-2 text-content-secondary"
+              >
+                <span className="font-medium text-content">Day {day.dayIndex + 1}</span>
+                <span>
+                  {day.beforeMinutes} → {day.afterMinutes} travel minutes
+                </span>
+                <span className="text-content-tertiary">{(day.meters / 1000).toFixed(1)} km</span>
+                {day.reordered ? (
+                  <Chip label={`saved ${day.savedMinutes}m`} />
+                ) : (
+                  // Not the same claim as "saved 0m". This day's stops were
+                  // already in their shortest order.
+                  <span className="text-content-tertiary">already shortest</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       {/* Footer */}
       <footer className="planner-debug-footer type-body-4 border-t border-edge-subtle pt-4 text-content-tertiary">
         {debug
@@ -391,6 +508,19 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
 }
 
 // ── the small pieces ─────────────────────────────────────────────────────────
+
+/**
+ * Pulls `stats.cost` out of the untyped job blob and prices it.
+ *
+ * Null for a plan that predates the field. That is not the same answer as an
+ * empty stage list, which means the plan ran and made no model calls — and the
+ * one page whose job is the truth must not conflate them.
+ */
+function costFrom(stats: unknown): PlanCostSummary | null {
+  const raw = (stats as { cost?: unknown } | null | undefined)?.cost;
+  if (!Array.isArray(raw)) return null;
+  return summarizeCost(raw as StageUsage[]);
+}
 
 function Section({
   region,

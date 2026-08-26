@@ -95,6 +95,85 @@ const render = (input: PlanDiagnostics) =>
 
 // ── the sentence has to land on the right stop ───────────────────────────────
 
+describe("PlannerDebugView — model spend", () => {
+  const stage = (over: Record<string, unknown>) => ({
+    stage: "assign",
+    model: "gpt-5.6-terra",
+    calls: 1,
+    inputTokens: 1_000_000,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    ...over,
+  });
+
+  it("says 'not recorded' for a plan from before usage was tracked", () => {
+    // Not the same claim as "this plan made no model calls" — see the
+    // `debug: null` rule this file already keeps.
+    const html = render(diagnostics({ job: { id: "j", status: "completed", error: null, stats: {} } }));
+    expect(html).toContain("before token usage was tracked");
+  });
+
+  it("renders a row per stage with its tokens and its cost", () => {
+    const html = render(
+      diagnostics({
+        job: {
+          id: "j",
+          status: "completed",
+          error: null,
+          stats: { cost: [stage({}), stage({ stage: "theme" })] },
+        },
+      }),
+    );
+    expect(html).toContain("assign");
+    expect(html).toContain("theme");
+    expect(html).toContain("gpt-5.6-terra");
+    // 1M input on terra is $2 a stage, $4 the pair.
+    expect(html).toContain("$2.0000");
+    expect(html).toContain("$4.0000");
+  });
+
+  it("flags a model it has no rate for instead of pricing it at zero", () => {
+    const html = render(
+      diagnostics({
+        job: {
+          id: "j",
+          status: "completed",
+          error: null,
+          stats: { cost: [stage({ model: "gpt-5-nano" })] },
+        },
+      }),
+    );
+    expect(html).toContain("no price on file");
+    expect(html).toContain("lower than");
+  });
+});
+
+describe("PlannerDebugView — route order", () => {
+  // The rule the rest of this file already keeps: a field that is absent and a
+  // field that is present and empty are different answers, and the one page
+  // whose job is the truth must not conflate them.
+  it("says 'not recorded' for an itinerary planned before sequencing existed", () => {
+    const html = render(diagnostics({ debug: debugRecord({ sequencing: undefined }) }));
+    expect(html).toContain("planned before the reorder existed");
+  });
+
+  it("distinguishes a day it improved from a day that was already shortest", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          sequencing: [
+            { dayIndex: 0, beforeMinutes: 92, afterMinutes: 69, savedMinutes: 23, reordered: true, meters: 6012 },
+            { dayIndex: 1, beforeMinutes: 40, afterMinutes: 40, savedMinutes: 0, reordered: false, meters: 3100 },
+          ],
+        }),
+      }),
+    );
+    expect(html).toContain("saved 23m");
+    expect(html).toContain("already shortest");
+    expect(html).toContain("6.0 km");
+  });
+});
+
 describe("Pass B's rationale", () => {
   it("puts each sentence under the stop it was written for", () => {
     const html = render(
