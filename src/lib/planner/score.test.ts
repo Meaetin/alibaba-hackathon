@@ -125,6 +125,35 @@ describe('hard filters — the guarantees', () => {
     expect(kept).toEqual([])
   })
 
+  // The real failure that put these types on the list: a live Singapore run
+  // seated a vegetarian at Poulet - VivoCity for dinner. Google was silent on
+  // `servesVegetarianFood`, and the type list had nothing to say about a place
+  // whose whole cuisine is the animal.
+  it('a chicken restaurant is removed from meal-slot candidates for a vegetarian', () => {
+    const poulet = makePlace({
+      placeId: 'ChIJ_poulet',
+      types: ['french_restaurant', 'chicken_restaurant', 'restaurant'],
+    })
+    expect(poulet.servesVegetarianFood).toBeUndefined()
+    expect(applyHardFilters([poulet], vegetarianProfile, { mealSlot: true })).toEqual([])
+  })
+
+  // The boundary the list is drawn on: the animal has to be the cuisine, not an
+  // item on the menu. A list that also killed these would delete most of a city.
+  // Ramen and sushi were tried on the conflict list and rejected: both name the
+  // carbohydrate. Gate A's Kyoto fixture has a vegan ramen shop in it, and the
+  // ramen rule deleted it — this is that lesson, pinned where the rule lives.
+  it.each([
+    ['italian', ['italian_restaurant', 'restaurant']],
+    ['ramen', ['ramen_restaurant', 'restaurant']],
+    ['sushi', ['sushi_restaurant', 'restaurant']],
+    ['a plain cafe', ['cafe', 'coffee_shop']],
+    ['a hawker centre', ['food_court', 'market', 'restaurant']],
+  ])('%s survives, because Google never said and the cuisine is not an animal', (_label, types) => {
+    const place = makePlace({ placeId: 'ChIJ_ok', types })
+    expect(applyHardFilters([place], vegetarianProfile, { mealSlot: true })).toHaveLength(1)
+  })
+
   // A diet doesn't ban you from a museum with a grill in the lobby.
   it('that same steakhouse is NOT removed from non-meal candidates', () => {
     const kept = applyHardFilters([steakhouse], vegetarianProfile, { mealSlot: false })
