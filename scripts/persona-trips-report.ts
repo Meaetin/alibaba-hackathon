@@ -52,6 +52,8 @@ interface Entry {
   confidence?: number;
   bands?: string;
   profile?: { interests: string[]; budget?: number; pace: string; typeAffinities?: Record<string, number> };
+  /** `itineraries.profile` — what the pipeline planned from. Beats `profile`. */
+  storedProfile?: { interests: string[]; budget?: number; pace: string };
   knobs?: Record<string, unknown>;
   brief?: Record<string, string>;
   stats?: Record<string, unknown>;
@@ -104,9 +106,13 @@ async function main() {
     }
     console.log(`  archetype ${entry.archetype} (confidence ${entry.confidence})`);
     console.log(`  bands     ${entry.bands}`);
+    // The stored row, never the recomputed one: `itineraries.profile` is what
+    // the pipeline actually planned from, and a profile rebuilt here can differ
+    // if the rebuild is missing an argument. It was, once.
+    const used = entry.storedProfile ?? entry.profile;
     console.log(
-      `  profile   interests [${entry.profile?.interests.join(", ")}]` +
-        `  budget ${entry.profile?.budget ?? "—"}  pace ${entry.profile?.pace}`,
+      `  profile   interests [${used?.interests.join(", ")}]` +
+        `  budget ${used?.budget ?? "—"}  pace ${used?.pace}   (from the stored row)`,
     );
 
     const moved = knobDiff(entry.knobs);

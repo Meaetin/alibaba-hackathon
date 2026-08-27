@@ -292,13 +292,21 @@ async function planFor(traveller: Traveller) {
   // What the persona was *supposed* to do, computed the same way the pipeline
   // computes it. Printed beside the trip so a difference in the plan can be
   // traced to a knob rather than guessed at.
-  const profile = buildProfile(persona, {
-    city: TRIP.city,
-    totalDays: TRIP.totalDays,
-    dietary: traveller.form.dietary,
-    pace: traveller.form.pace,
-    budget: traveller.form.budget,
-  });
+  // The answers go across too. Passing `persona` alone silently falls back to
+  // archetype-only tastes, which is the failure `profile.ts` documents — and it
+  // made this report claim The Trailhead was sent shopping when the row said
+  // otherwise. `storedProfile` below is the arbiter either way.
+  const profile = buildProfile(
+    persona,
+    {
+      city: TRIP.city,
+      totalDays: TRIP.totalDays,
+      dietary: traveller.form.dietary,
+      pace: traveller.form.pace,
+      budget: traveller.form.budget,
+    },
+    traveller.answers,
+  );
   const knobs = resolvePlannerKnobs(profile, persona, profile.pace);
 
   console.log(`   itinerary ${itineraryId} — ${trip.days.reduce((n, d) => n + d.stops.length, 0)} stops`);
