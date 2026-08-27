@@ -52,7 +52,12 @@ import { clusterPlaces } from "./cluster";
 import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
 import { pathMeters, sequenceDay } from "./sequence";
 import { buildTravelMatrix, type TravelMatrixStats } from "./routes";
-import { PLANNER_DEBUG_VERSION, type PlannerDebug, type SequencingRecord } from "./debug";
+import {
+  PLANNER_DEBUG_VERSION,
+  type PlannerDebug,
+  type SchedulingRecord,
+  type SequencingRecord,
+} from "./debug";
 import {
   enrichPlaces,
   readEnrichments,
@@ -818,6 +823,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     enrichment.enrichments,
   );
   const sequencing: SequencingRecord[] = [];
+  const scheduling: SchedulingRecord[] = [];
   const travelStats: TravelMatrixStats[] = [];
   const days: PlannedDay[] = await Promise.all(
     assignment.days.map(async (assigned, index): Promise<PlannedDay> => {
@@ -868,6 +874,55 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
         reordered: sequenced.reordered,
         meters: Math.round(pathMeters(sequenced.input.assignments)),
       };
+
+      // Everything below was already computed and then dropped when the request
+      // ended. `stats.scheduling.failedDays` counted these days and could never
+      // say which one, or why — which is exactly the question asked the morning
+      // after a trip came back with an empty day in it.
+      const scheduledStops = validation.day.segments.filter(
+        (segment) => segment.kind === "activity",
+      ).length;
+      scheduling[index] = {
+        dayIndex: assigned.dayIndex,
+        areaName: assigned.areaName ?? null,
+        offered:
+          sequenced.input.assignments.length + (sequenced.input.flex?.length ?? 0),
+        scheduled: scheduledStops,
+        repairs: validation.repairs.map((repair) => ({
+          rule: repair.rule,
+          role: repair.role,
+          removed: repair.removed.name,
+          inserted: repair.inserted?.name ?? null,
+          reason: repair.reason,
+        })),
+        failures: validation.failures.map((failure) => ({
+          rule: failure.rule,
+          role: failure.role,
+          placeId: failure.placeId,
+          name: failure.name,
+          reason: failure.reason,
+        })),
+      };
+
+      // Warned as it happens as well as stored, following the same rule the
+      // assignment drops follow: the dev terminal is where somebody is actually
+      // looking while a plan runs. An empty day is warned about separately
+      // because it is the one outcome no traveller can use.
+      if (scheduledStops === 0) {
+        console.warn(
+          `[plan] day ${assigned.dayIndex} (${assigned.areaName ?? "no area"}) ` +
+            `shipped EMPTY — ${sequenced.input.assignments.length} stops assigned, ` +
+            `${validation.repairs.length} repairs, none survived. ` +
+            `Failures: ${validation.failures.map((f) => `${f.rule} ${f.name} (${f.reason})`).join("; ") || "none recorded"}`,
+        );
+      } else if (validation.failures.length > 0) {
+        console.warn(
+          `[plan] day ${assigned.dayIndex} (${assigned.areaName ?? "no area"}) ` +
+            `kept ${scheduledStops} of ${sequenced.input.assignments.length} assigned stops with ` +
+            `${validation.failures.length} unfixed: ` +
+            validation.failures.map((f) => `${f.rule} ${f.name} (${f.reason})`).join("; "),
+        );
+      }
 
       return {
         dayIndex: assigned.dayIndex,
@@ -952,6 +1007,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       },
       enrichment: { misses: enrichment.misses },
       sequencing,
+      scheduling,
       ...(themed
         ? {
             themes: {

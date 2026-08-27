@@ -173,6 +173,52 @@ describe("PlannerDebugView — route order", () => {
   });
 });
 
+describe("PlannerDebugView — scheduling", () => {
+  // Same rule as route order one section up, and the reason it matters more
+  // here: "we never looked" and "we looked and every day was fine" are opposite
+  // answers, and this is the page somebody opens because a day came back empty.
+  it("says 'not recorded' for an itinerary planned before scheduling was captured", () => {
+    const html = render(diagnostics({ debug: debugRecord({ scheduling: undefined }) }));
+    expect(html).toContain("planned before scheduling was captured");
+    expect(html).not.toContain("shipped empty");
+  });
+
+  it("calls an empty day empty, and does not call it merely repaired", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          scheduling: [
+            { dayIndex: 0, areaName: "Civic Arts", offered: 6, scheduled: 5, repairs: [], failures: [] },
+            {
+              dayIndex: 2,
+              areaName: "Treetops and Reservoir Trails",
+              offered: 7,
+              scheduled: 0,
+              repairs: [
+                { rule: "closed", role: "activity", removed: "Rifle Range", inserted: null, reason: "closed during its slot" },
+              ],
+              failures: [
+                { rule: "lost_meal", role: "lunch", placeId: "place-x", name: "Balestier Market", reason: "travel ate the window" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    expect(html).toContain("shipped empty");
+    expect(html).toContain("Treetops and Reservoir Trails");
+    expect(html).toContain("kept 0 of 7");
+    // The repair and the unfixed failure are different lines with different
+    // meanings: one is the ladder working, the other is it running out.
+    expect(html).toContain("Rifle Range");
+    expect(html).toContain("dropped");
+    expect(html).toContain("unfixed lost_meal");
+    expect(html).toContain("travel ate the window");
+    // A clean day must not borrow the empty day's alarm.
+    expect(html).toContain("clean");
+  });
+});
+
 describe("Pass B's rationale", () => {
   it("puts each sentence under the stop it was written for", () => {
     const html = render(

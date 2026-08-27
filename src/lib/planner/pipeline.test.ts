@@ -530,7 +530,58 @@ describe('the diagnostic record', () => {
   it('stamps itself from the injected clock, never the wall clock', async () => {
     const { result } = await plan()
     expect(result.debug.recordedAt).toBe(NOW.toISOString())
-    expect(result.debug.version).toBe(1)
+    expect(result.debug.version).toBe(2)
+  })
+
+  // The record that would have answered "why did day three ship empty". Every
+  // field in it was already computed by `validateDay` and thrown away when the
+  // request ended; `stats.scheduling.failedDays` counted the days and could
+  // never name one. A row per day, clean days included — "needed no repair" and
+  // "was never checked" are different answers.
+  it('records one scheduling row per day, and the stop counts are real', async () => {
+    const { result } = await plan()
+
+    const rows = result.debug.scheduling ?? []
+    expect(rows.map((row) => row.dayIndex)).toEqual(result.days.map((day) => day.dayIndex))
+
+    for (const [index, row] of rows.entries()) {
+      // `scheduled` must be counted off the stored timeline, not off the
+      // assignment — the whole point is to catch the day where those differ.
+      const stops = result.days[index].day.segments.filter((s) => s.kind === 'activity').length
+      expect(row.scheduled).toBe(stops)
+      // `offered` counts assignments plus the flex picks the packer may
+      // promote. Counting assignments alone made this read "kept 8 of 7".
+      expect(row.offered).toBeGreaterThan(0)
+      expect(row.offered).toBeGreaterThanOrEqual(row.scheduled)
+      expect(row.failures).toEqual(result.days[index].failures.map((f) => ({
+        rule: f.rule,
+        role: f.role,
+        placeId: f.placeId,
+        name: f.name,
+        reason: f.reason,
+      })))
+    }
+
+    // Zeroes everywhere would satisfy the shape while proving nothing ran. The
+    // Kyoto fixture repairs on every weekday, so at least one swap is real.
+    expect(rows.some((row) => row.repairs.length > 0)).toBe(true)
+  })
+
+  it('warns on the terminal, not only into the column, when a day loses stops', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { result } = await plan()
+    const lost = (result.debug.scheduling ?? []).filter(
+      (row) => row.scheduled === 0 || row.failures.length > 0,
+    )
+    // The assertion is conditional on the fixture, and says so: if Kyoto ever
+    // validates clean this test proves nothing and should be given a day that
+    // cannot be saved. It is the counter that is load-bearing, not the string.
+    if (lost.length > 0) {
+      expect(warn).toHaveBeenCalled()
+      const said = warn.mock.calls.map((call) => String(call[0])).join('\n')
+      expect(said).toContain(`day ${lost[0].dayIndex}`)
+    }
+    warn.mockRestore()
   })
 
   // The reorder is a step nothing else in this suite can see: `sequence.ts` has

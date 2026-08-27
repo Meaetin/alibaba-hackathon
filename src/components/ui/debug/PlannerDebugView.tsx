@@ -483,6 +483,55 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
         )}
       </Section>
 
+      {/* Scheduling */}
+      <Section
+        region="itinerary-debug-scheduling"
+        title="Scheduling"
+        note="What the validator swapped, dropped and could not fix, per day. A day that kept none of its stops is the one to read first."
+      >
+        {debug === null || debug.scheduling === undefined ? (
+          <Empty>Not recorded — this itinerary was planned before scheduling was captured.</Empty>
+        ) : debug.scheduling.length === 0 ? (
+          <Empty>No days to schedule.</Empty>
+        ) : (
+          <ul className="scheduling-day-list flex flex-col gap-3">
+            {debug.scheduling.map((day) => (
+              <li key={day.dayIndex} className="flex flex-col gap-1">
+                <div className="type-body-3 flex flex-wrap items-baseline gap-2 text-content-secondary">
+                  <span className="font-medium text-content">Day {day.dayIndex + 1}</span>
+                  {day.areaName && <span className="text-content-tertiary">{day.areaName}</span>}
+                  <span>
+                    kept {day.scheduled} of {day.offered} offered
+                  </span>
+                  {/* Empty is its own claim, and a louder one than "some were
+                      dropped" — nobody can use a day with nothing in it. */}
+                  {day.scheduled === 0 ? (
+                    <Chip label="shipped empty" tone="error" />
+                  ) : day.failures.length > 0 ? (
+                    <Chip label={`${day.failures.length} unfixed`} tone="warning" />
+                  ) : day.repairs.length > 0 ? (
+                    <Chip label={`${day.repairs.length} repaired`} />
+                  ) : (
+                    <Ok>clean</Ok>
+                  )}
+                </div>
+                {day.repairs.map((repair, index) => (
+                  <p key={index} className="type-body-4 pl-4 text-content-tertiary">
+                    {repair.rule} · {repair.removed}
+                    {repair.inserted ? ` → ${repair.inserted}` : " → dropped"} ({repair.reason})
+                  </p>
+                ))}
+                {day.failures.map((failure) => (
+                  <p key={failure.placeId} className="type-body-4 pl-4 text-content-secondary">
+                    unfixed {failure.rule} · {failure.name} ({failure.reason})
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
       {/* Footer */}
       <footer className="planner-debug-footer type-body-4 border-t border-edge-subtle pt-4 text-content-tertiary">
         {debug
