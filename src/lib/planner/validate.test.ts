@@ -128,11 +128,101 @@ describe('a valid day', () => {
   })
 
   it('does not spend an alternate it had no use for', () => {
+    // A day already holding `MIN_STOPS_PER_DAY`. A thinner one is offered
+    // spares on purpose now — see "a thin day" below — so this fixture has to
+    // be full, or it tests the fill pass rather than the repair path.
+    const full: PackDayInput = {
+      assignments: [
+        stop(place('temple', ['place_of_worship'], TEMPLE_HOURS), 'activity'),
+        stop(place('shrine', ['place_of_worship'], TEMPLE_HOURS), 'activity'),
+        stop(place('soba', ['restaurant'], MEAL_SERVICE), 'lunch'),
+        stop(place('garden', ['garden'], TEMPLE_HOURS), 'activity'),
+        stop(place('museum', ['museum'], TEMPLE_HOURS), 'activity'),
+        stop(place('izakaya', ['restaurant'], MEAL_SERVICE), 'dinner'),
+      ],
+    }
     const untouched = place('backup', ['place_of_worship'], ALL_DAY)
-    const result = validateDay(input, deps({ alternates: [spare(untouched)] }))
+    const result = validateDay(full, deps({ alternates: [spare(untouched)] }))
 
     expect(result.repairs).toEqual([])
     expect(scheduled(result)).not.toContain('backup')
+  })
+})
+
+// ── the two guarantees ───────────────────────────────────────────────────────
+
+describe('a day with nothing to eat', () => {
+  // Rung 3 refuses to *drop* a meal, which is a different promise: if Pass B
+  // never seated one — or `assign.ts` demoted the shopping centre it named for
+  // lunch — nothing was lost and nothing complained. One live traveller shipped
+  // three days holding one meal between them.
+  const mealless: PackDayInput = {
+    assignments: [
+      stop(place('temple', ['place_of_worship'], TEMPLE_HOURS), 'activity'),
+      stop(place('garden', ['garden'], TEMPLE_HOURS), 'activity'),
+    ],
+  }
+
+  it('seats one from the ranked list, and says it did', () => {
+    const soba = place('soba', ['restaurant'], MEAL_SERVICE)
+    const result = validateDay(mealless, deps({ alternates: [spare(soba)] }))
+
+    expect(scheduled(result)).toContain('soba')
+    expect(result.repairs.map((r) => r.rule)).toContain('lost_meal')
+    expect(result.ok).toBe(true)
+    expectSelfConsistent(result)
+  })
+
+  it('seats no meal at all when nothing in the list can hold one', () => {
+    // No invention, and no lie: a city with no restaurant left in reach is a
+    // real outcome, and the day says so rather than seating a temple for lunch.
+    // The shrine may still arrive as an *activity* — that is the fill pass, and
+    // a different rule.
+    const notFood = place('backup', ['place_of_worship'], ALL_DAY)
+    const result = validateDay(mealless, deps({ alternates: [spare(notFood)] }))
+
+    const roles = result.day.segments
+      .filter((s): s is typeof s & { role: string } => s.kind === 'activity')
+      .map((s) => s.role)
+    expect(roles).not.toContain('lunch')
+    expect(roles).not.toContain('dinner')
+    expect(result.repairs.map((r) => r.rule)).not.toContain('lost_meal')
+  })
+
+  it('does nothing to a day that already eats', () => {
+    const fed: PackDayInput = {
+      assignments: [
+        stop(place('temple', ['place_of_worship'], TEMPLE_HOURS), 'activity'),
+        stop(place('soba', ['restaurant'], MEAL_SERVICE), 'lunch'),
+      ],
+    }
+    const other = place('other-soba', ['restaurant'], MEAL_SERVICE)
+    const result = validateDay(fed, deps({ alternates: [spare(other)] }))
+    expect(scheduled(result)).not.toContain('other-soba')
+  })
+})
+
+describe('a thin day', () => {
+  // `packDay` shrinks and then drops, and dropping is one-way. A live day lost
+  // its four-hour stop to save its lunch and shipped with one stop and six
+  // empty hours, which nothing reconsidered.
+  const thin: PackDayInput = {
+    assignments: [stop(place('soba', ['restaurant'], MEAL_SERVICE), 'lunch')],
+  }
+
+  it('is offered more stops from the ranked list', () => {
+    const spares = ['a', 'b', 'c'].map((id) => spare(place(id, ['museum'], ALL_DAY)))
+    const result = validateDay(thin, deps({ alternates: spares }))
+
+    expect(scheduled(result).length).toBeGreaterThan(1)
+    expect(result.ok).toBe(true)
+  })
+
+  it('will not fill a day with restaurants', () => {
+    // A restaurant may hold a meal or a cafe break, never a plain activity.
+    const spares = ['a', 'b'].map((id) => spare(place(id, ['restaurant'], MEAL_SERVICE)))
+    const result = validateDay(thin, deps({ alternates: spares }))
+    expect(scheduled(result)).toEqual(['soba'])
   })
 })
 
@@ -532,11 +622,15 @@ describe('an unfixable activity', () => {
 // ── hours we don't have are not hours we checked ─────────────────────────────
 
 describe('places with no opening hours', () => {
+  // Every fixture here carries a meal it does not otherwise need: a day with
+  // nothing to eat is `ok: false` now, and these cases are about hours.
+  const lunch = () => stop(place('soba', ['restaurant'], MEAL_SERVICE), 'lunch')
+
   it('are passed, and reported as an assumption rather than a check', () => {
     const trail = place('trail', ['hiking_area'])
     const temple = place('temple', ['place_of_worship'], TEMPLE_HOURS)
     const result = validateDay(
-      { assignments: [stop(temple, 'activity'), stop(trail, 'activity')] },
+      { assignments: [stop(temple, 'activity'), lunch(), stop(trail, 'activity')] },
       deps(),
     )
 
@@ -546,7 +640,12 @@ describe('places with no opening hours', () => {
 
   it('are not reported when the hours are real', () => {
     const result = validateDay(
-      { assignments: [stop(place('temple', ['place_of_worship'], TEMPLE_HOURS), 'activity')] },
+      {
+        assignments: [
+          stop(place('temple', ['place_of_worship'], TEMPLE_HOURS), 'activity'),
+          lunch(),
+        ],
+      },
       deps(),
     )
 

@@ -62,8 +62,10 @@ exports[`Singapore — the trip itself > matches the recorded itinerary 1`] = `
     "assumedOpen": [],
     "day": 3,
     "dropped": [],
-    "failures": [],
-    "ok": true,
+    "failures": [
+      "no meal seated: nothing in this day's shortlist could hold a meal",
+    ],
+    "ok": false,
     "repairs": [],
     "timeline": [
       "09:00-10:30 activity: Rifle Range Nature Park",
@@ -77,8 +79,10 @@ exports[`Singapore — the trip itself > matches the recorded itinerary 1`] = `
     "assumedOpen": [],
     "day": 4,
     "dropped": [],
-    "failures": [],
-    "ok": true,
+    "failures": [
+      "no meal seated: nothing in this day's shortlist could hold a meal",
+    ],
+    "ok": false,
     "repairs": [],
     "timeline": [
       "09:00-10:30 activity: Chestnut Nature Park",

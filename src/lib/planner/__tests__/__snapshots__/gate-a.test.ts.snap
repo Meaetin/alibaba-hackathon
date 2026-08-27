@@ -230,8 +230,10 @@ exports[`Gate A — the validated trip itself > matches the recorded repairs 1`]
       "Funaoka Onsen",
     ],
     "day": 4,
-    "failures": [],
-    "ok": true,
+    "failures": [
+      "no meal seated: nothing in this day's shortlist could hold a meal",
+    ],
+    "ok": false,
     "repairs": [
       "Kyoto Imperial Palace -> Funaoka Onsen (closed during its 17:30–18:40 slot)",
     ],

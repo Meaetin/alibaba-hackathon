@@ -76,7 +76,7 @@ import type {
   TimelineSegment,
   TravelLegProvider,
 } from "./pack";
-import { isMealRole, packDay, slotWindow } from "./pack";
+import { DAY_START_MIN, isMealRole, packDay, slotWindow } from "./pack";
 import { type Weekday, hasKnownHours, isOpenDuring } from "./hours";
 import { hardFilterReason } from "./score";
 import { isRestaurant } from "./taxonomy";
@@ -182,6 +182,29 @@ export interface DayValidation {
  */
 export const MAX_REPAIR_ROUNDS = 8;
 
+/**
+ * A day with nothing to eat in it is not a day.
+ *
+ * Rung 3 below refuses to *drop* a meal, which is not the same guarantee: if
+ * Pass B never seated one, or `assign.ts` demoted a shopping centre it had
+ * named for lunch, nothing was lost and nothing complained. A live Singapore
+ * traveller shipped three days holding one meal between them.
+ */
+export const MIN_MEALS_PER_DAY = 1;
+
+/**
+ * Under this many stops, a day is worth trying to fill from the ranked list.
+ *
+ * `packDay` shrinks and then drops, and dropping is one-way — it never
+ * reconsiders. A day that lost a four-hour stop to save its lunch keeps the
+ * hours the stop was using and ends with one stop and six empty hours, which is
+ * exactly what one live day did. Six is a judgement, not a measurement.
+ */
+export const MIN_STOPS_PER_DAY = 6;
+
+/** How many alternates to offer a thin day. Each one costs a re-pack. */
+const FILL_CANDIDATES = 4;
+
 /** Granularity of the seating probe below. Meal windows are two hours wide. */
 const SEATING_PROBE_MIN = 15;
 
@@ -200,6 +223,11 @@ export function validateDay(input: PackDayInput, deps: ValidateDeps): DayValidat
   const repairs: Repair[] = [];
   const cut: DroppedPlace[] = [];
   let current = input;
+  // Both run at most once. Each re-enters the loop, so a guarantee that keeps
+  // re-triggering would never terminate — and each can leave the day failing,
+  // which the ordinary repair path below then handles.
+  let fedOnce = false;
+  let filledOnce = false;
 
   /** The packer's cuts and ours, in one list — a caller asking "why isn't X in
    *  my day" must not have to know which module removed it. */
@@ -212,7 +240,50 @@ export function validateDay(input: PackDayInput, deps: ValidateDeps): DayValidat
     const assumed = assumedStops(current, day);
 
     if (failures.length === 0) {
-      return { ok: true, day: settle(day), input: current, repairs, failures: [], assumed };
+      if (!fedOnce) {
+        fedOnce = true;
+        const fed = withMeal(current, day, deps, spent);
+        if (fed) {
+          spent.add(fed.inserted.placeId);
+          repairs.push(fed.repair);
+          current = fed.input;
+          continue;
+        }
+      }
+      if (!filledOnce) {
+        filledOnce = true;
+        const filled = withFill(current, day, deps, spent);
+        if (filled) {
+          for (const id of filled.added) spent.add(id);
+          current = filled.input;
+          continue;
+        }
+      }
+      // Everything that could be tried has been. A day still holding no meal
+      // is not a valid day, and saying `ok: true` about it is the lie this
+      // whole rule exists to stop — the Singapore fixture ships two such days
+      // and reported them clean for as long as anyone has looked.
+      const starved: ValidationFailure[] =
+        servedMeals(day) >= MIN_MEALS_PER_DAY
+          ? []
+          : [
+              {
+                rule: "lost_meal",
+                placeId: "",
+                name: "no meal seated",
+                role: "lunch",
+                reason: "nothing in this day's shortlist could hold a meal",
+              },
+            ];
+
+      return {
+        ok: starved.length === 0,
+        day: settle(day),
+        input: current,
+        repairs,
+        failures: starved,
+        assumed,
+      };
     }
 
     const failure = failures[0];
@@ -249,6 +320,133 @@ export function validateDay(input: PackDayInput, deps: ValidateDeps): DayValidat
       reason: failure.reason,
     });
   }
+}
+
+// ── the two guarantees ───────────────────────────────────────────────────────
+
+/** Stops actually stamped into the day, by role. */
+function servedMeals(day: PackedDay): number {
+  return day.segments.filter((s) => s.kind === "activity" && isMealRole(s.role)).length;
+}
+
+function servedStops(day: PackedDay): number {
+  return day.segments.filter((s) => s.kind === "activity").length;
+}
+
+/**
+ * Puts a meal into a day that has none.
+ *
+ * Only ever *adds*. If the day is then too full the ordinary repair path takes
+ * over and may drop an activity to make room, which is the right trade — a day
+ * with one fewer sight is a day; a day with nothing to eat is not.
+ *
+ * Seated at index 1 rather than appended: `stampDay` gives a meal a hard window
+ * and its index is what decides how much of the day comes before it, so a lunch
+ * pushed to the end of the list has the whole day in front of it and nothing
+ * after.
+ */
+function withMeal(
+  input: PackDayInput,
+  day: PackedDay,
+  deps: ValidateDeps,
+  spent: ReadonlySet<string>,
+): { input: PackDayInput; repair: Repair; inserted: CandidatePlace } | undefined {
+  if (servedMeals(day) >= MIN_MEALS_PER_DAY) return undefined;
+
+  const candidate = deps.alternates.find(
+    (alternate) =>
+      !spent.has(alternate.place.placeId) &&
+      !mealSlotReason(alternate.place, deps.profile) &&
+      canSeat(alternate, slotWindow("lunch"), deps),
+  );
+  if (!candidate) return undefined;
+
+  const at = Math.min(1, input.assignments.length);
+  const assignments = [...input.assignments];
+  assignments.splice(at, 0, {
+    place: candidate.place,
+    role: "lunch",
+    score: candidate.score,
+    duration: candidate.duration,
+  });
+
+  return {
+    input: { ...input, assignments },
+    inserted: candidate.place,
+    repair: {
+      rule: "lost_meal",
+      role: "lunch",
+      removed: { placeId: candidate.place.placeId, name: candidate.place.name },
+      inserted: { placeId: candidate.place.placeId, name: candidate.place.name },
+      reason: "the day had nothing to eat — seated a meal from the ranked list",
+    },
+  };
+}
+
+/**
+ * Offers a thin day more stops, as flex picks.
+ *
+ * Flex is the packer's existing "take this if there is room" channel, so this
+ * needs no guess about where a stop would fit: `selectStops` puts them in and
+ * the fit ladder sheds them first if they do not.
+ *
+ * **It verifies before it returns, and that is not belt-and-braces.** Extra
+ * stops can be seated *before* a meal and push it out of its window — the first
+ * version of this function turned a valid one-stop day into an invalid
+ * four-stop one, with lunch at 13:30 against a 14:30 close. A day that eats
+ * beats a day with more sights, so a fill that breaks anything is discarded
+ * whole.
+ *
+ * The asymmetry with `withMeal` is deliberate: seating a missing meal *may*
+ * leave the day failing, because dropping an activity to make room is the right
+ * trade and the repair path below knows how to do it. Adding a fourth gallery
+ * is not worth one minute of that.
+ */
+function withFill(
+  input: PackDayInput,
+  day: PackedDay,
+  deps: ValidateDeps,
+  spent: ReadonlySet<string>,
+): { input: PackDayInput; added: string[] } | undefined {
+  if (servedStops(day) >= MIN_STOPS_PER_DAY) return undefined;
+
+  const picks = deps.alternates
+    .filter(
+      (alternate) =>
+        !spent.has(alternate.place.placeId) &&
+        // A restaurant may hold a meal or a cafe break, never a plain activity.
+        !isRestaurant(alternate.place) &&
+        canSeat(alternate, [DAY_START_MIN, slotWindow("dinner")[1]], deps),
+    )
+    .slice(0, FILL_CANDIDATES);
+  if (picks.length === 0) return undefined;
+
+  // One at a time, keeping what survives. All-or-nothing throws away a stop
+  // that fits because a later one did not: three galleries pushed a 13:30 lunch
+  // past its 14:30 close, one of them fitted the afternoon exactly.
+  let best = input;
+  let bestStops = servedStops(day);
+  const added: string[] = [];
+
+  for (const pick of picks) {
+    const candidate: PackDayInput = {
+      ...best,
+      flex: [
+        ...(best.flex ?? []),
+        { place: pick.place, score: pick.score, duration: pick.duration },
+      ],
+    };
+    const packed = packDay(candidate, deps.pace, deps.getTravelLeg, deps.packKnobs);
+    if (inspect(candidate, packed, deps).length > 0) continue;
+    if (servedStops(packed) <= bestStops) continue;
+
+    best = candidate;
+    bestStops = servedStops(packed);
+    added.push(pick.place.placeId);
+    if (bestStops >= MIN_STOPS_PER_DAY) break;
+  }
+
+  return added.length > 0 ? { input: best, added } : undefined;
 }
 
 // ── the three checks ─────────────────────────────────────────────────────────
