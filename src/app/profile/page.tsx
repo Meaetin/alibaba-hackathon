@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
-import { FolderOpen, Settings } from "lucide-react";
+import { FolderOpen, RefreshCw, Settings } from "lucide-react";
 
 import {
   CollectionCard,
@@ -18,6 +19,15 @@ import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useProfileQuery } from "@/hooks/queries/useProfileQuery";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { motionPresets, motionTransitions } from "@/lib/motion/presets";
+import {
+  ARCHETYPE_ILLUSTRATIONS,
+  INTRO_ILLUSTRATION,
+} from "@/lib/persona/illustrations";
+import type { PersonaResult, TravelArchetypeId } from "@/lib/persona/types";
+import {
+  getNextRandomBannerIndex,
+  TRAVEL_PROFILE_BANNERS,
+} from "@/lib/profile/banner-images";
 import type { RecentContentItem } from "@/lib/supabase/queries/home";
 
 const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
@@ -26,6 +36,17 @@ const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
   itinerary: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
   location: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
 };
+
+const PERSONA_STORAGE_PREFIX = "argo:persona:";
+const BANNER_STORAGE_PREFIX = "argo:profile-banner:";
+
+function isStoredPersona(value: unknown): value is PersonaResult {
+  if (!value || typeof value !== "object") return false;
+  const archetypeId = (value as PersonaResult).archetype?.id as
+    | TravelArchetypeId
+    | undefined;
+  return Boolean(archetypeId && ARCHETYPE_ILLUSTRATIONS[archetypeId]);
+}
 
 function getItemHref(item: RecentContentItem): string {
   switch (item.type) {
@@ -47,12 +68,77 @@ export default function ProfilePage() {
   });
 
   const [quizOpen, setQuizOpen] = useState(false);
+  const [persona, setPersona] = useState<PersonaResult | null>(null);
+  const [bannerIndex, setBannerIndex] = useState(0);
 
   const displayName =
     profile?.display_name || profile?.email?.split("@")[0] || "Guest";
   const handle = profile?.email
     ? `@${profile.email.split("@")[0]}`
     : "Not signed in";
+  const avatarHash = profile?.id ?? profile?.email ?? userId ?? "argo-guest";
+  const banner = TRAVEL_PROFILE_BANNERS[bannerIndex];
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(
+        `${PERSONA_STORAGE_PREFIX}${avatarHash}`,
+      );
+      if (!stored) {
+        setPersona(null);
+        return;
+      }
+      const parsed: unknown = JSON.parse(stored);
+      setPersona(isStoredPersona(parsed) ? parsed : null);
+    } catch (error) {
+      console.error("Failed to load the saved travel persona:", error);
+      setPersona(null);
+    }
+  }, [avatarHash]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(
+        `${BANNER_STORAGE_PREFIX}${avatarHash}`,
+      );
+      const storedIndex = stored === null ? 0 : Number.parseInt(stored, 10);
+      setBannerIndex(
+        Number.isInteger(storedIndex) &&
+          storedIndex >= 0 &&
+          storedIndex < TRAVEL_PROFILE_BANNERS.length
+          ? storedIndex
+          : 0,
+      );
+    } catch (error) {
+      console.error("Failed to load the saved profile banner:", error);
+      setBannerIndex(0);
+    }
+  }, [avatarHash]);
+
+  const handlePersonaComplete = (result: PersonaResult) => {
+    setPersona(result);
+    try {
+      window.localStorage.setItem(
+        `${PERSONA_STORAGE_PREFIX}${avatarHash}`,
+        JSON.stringify(result),
+      );
+    } catch (error) {
+      console.error("Failed to save the travel persona:", error);
+    }
+  };
+
+  const randomizeBanner = () => {
+    const nextIndex = getNextRandomBannerIndex(bannerIndex);
+    setBannerIndex(nextIndex);
+    try {
+      window.localStorage.setItem(
+        `${BANNER_STORAGE_PREFIX}${avatarHash}`,
+        String(nextIndex),
+      );
+    } catch (error) {
+      console.error("Failed to save the profile banner:", error);
+    }
+  };
 
   // Stats are stubbed until the backend exposes per-user counts.
   const stats = ["0 Locations", "0 Collections", "0 Itineraries"];
@@ -115,15 +201,38 @@ export default function ProfilePage() {
         >
           {/* Hero Banner */}
           <div
-            className="profile-hero-banner -mb-[74px] h-[240px] w-full rounded-2xl border border-edge-subtle bg-surface-muted"
+            className="profile-hero-banner relative -mb-[74px] h-[240px] w-full overflow-hidden rounded-2xl border border-edge-subtle bg-surface-muted"
             data-region="profile-hero-banner"
-          />
+          >
+            <Image
+              src={banner.src}
+              alt={banner.alt}
+              fill
+              priority
+              sizes="(max-width: 1376px) 100vw, 1328px"
+              className="object-cover object-center"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              icon="only"
+              aria-label="Show another travel banner"
+              title="Randomize travel banner"
+              className="absolute bottom-3 right-3 z-10 bg-surface"
+              onClick={randomizeBanner}
+              data-region="profile-banner-randomize"
+            >
+              <RefreshCw className="size-4" strokeWidth={2} />
+            </Button>
+          </div>
 
           <div className="profile-header-body relative flex flex-col gap-4 pl-0 md:pl-16">
             {/* Avatar */}
             <Avatar
-              type={profile?.avatar_url ? "image" : "initial"}
+              type={profile?.avatar_url ? "image" : "generated"}
               src={profile?.avatar_url ?? undefined}
+              hash={avatarHash}
               name={displayName}
               alt={displayName}
               size="xl"
@@ -184,11 +293,41 @@ export default function ProfilePage() {
 
               {/* Persona Quiz Card */}
               <div
-                className="profile-persona-card flex min-h-[120px] w-full items-end justify-end rounded-2xl border border-edge-subtle bg-surface-alt p-[13px] md:min-h-0 md:w-[460px] md:self-stretch"
+                className="profile-persona-card relative flex min-h-[160px] w-full items-end justify-end overflow-hidden rounded-2xl border border-edge-subtle bg-surface-alt p-[13px] md:min-h-0 md:w-[460px] md:self-stretch"
                 data-region="profile-persona-card"
               >
-                <Button variant="outline" onClick={() => setQuizOpen(true)}>
-                  Persona Quiz
+                {persona ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={ARCHETYPE_ILLUSTRATIONS[persona.archetype.id]}
+                    alt={persona.archetype.name}
+                    className="absolute inset-0 size-full object-cover"
+                    draggable="false"
+                  />
+                ) : (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={INTRO_ILLUSTRATION.background}
+                      alt=""
+                      className="absolute inset-0 size-full object-cover"
+                      draggable="false"
+                    />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={INTRO_ILLUSTRATION.owl}
+                      alt="Argo the owl"
+                      className="absolute bottom-0 left-1/2 h-full -translate-x-1/2 object-contain"
+                      draggable="false"
+                    />
+                  </>
+                )}
+                <Button
+                  variant="outline"
+                  className="relative z-10 bg-surface"
+                  onClick={() => setQuizOpen(true)}
+                >
+                  {persona?.archetype.name ?? "Persona Quiz"}
                 </Button>
               </div>
             </div>
@@ -246,7 +385,12 @@ export default function ProfilePage() {
       </div>
 
       {/* Persona Quiz Dialog */}
-      <PersonaQuizDialog open={quizOpen} onOpenChange={setQuizOpen} />
+      <PersonaQuizDialog
+        open={quizOpen}
+        onOpenChange={setQuizOpen}
+        persona={persona}
+        onComplete={handlePersonaComplete}
+      />
     </div>
   );
 }

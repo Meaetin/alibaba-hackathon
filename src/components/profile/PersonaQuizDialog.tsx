@@ -2,7 +2,7 @@
 
 import { Dialog } from "@base-ui/react/dialog";
 import { motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/primitives/Button";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 interface PersonaQuizDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  persona?: PersonaResult | null;
+  onComplete?: (result: PersonaResult) => void;
 }
 
 /**
@@ -30,7 +32,12 @@ interface PersonaQuizDialogProps {
  * model (see docs/travel-persona-quiz-methodology.md). Internal state machine:
  * intro → questions → result. Scoring lives in src/lib/persona/quiz.ts.
  */
-function PersonaQuizDialog({ open, onOpenChange }: PersonaQuizDialogProps) {
+function PersonaQuizDialog({
+  open,
+  onOpenChange,
+  persona,
+  onComplete,
+}: PersonaQuizDialogProps) {
   const { isPhone } = useBreakpoint();
   const prefersReducedMotion = useReducedMotion();
 
@@ -40,6 +47,12 @@ function PersonaQuizDialog({ open, onOpenChange }: PersonaQuizDialogProps) {
     Array(QUESTIONS.length).fill(null),
   );
   const [result, setResult] = useState<PersonaResult | null>(null);
+
+  useEffect(() => {
+    if (!open || !persona) return;
+    setResult(persona);
+    setStage("result");
+  }, [open, persona]);
 
   const reset = () => {
     setStage("intro");
@@ -66,7 +79,9 @@ function PersonaQuizDialog({ open, onOpenChange }: PersonaQuizDialogProps) {
       setCurrentQ((q) => q + 1);
       return;
     }
-    setResult(calculatePersona(answers));
+    const nextResult = calculatePersona(answers);
+    setResult(nextResult);
+    onComplete?.(nextResult);
     setStage("result");
   };
 
