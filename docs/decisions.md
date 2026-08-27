@@ -532,3 +532,13 @@
 - **The debug page's per-place enrichment failure reason is gone, not moved.** Why: `enrichment_batches.failures` was its only source. The misses are still listed by id; the reason was judged not worth a new column.
 - **Migration `0007_robust_blob` drops the table. Applied 2026-08-26.**
 
+
+## 2026-08-26 — Persona reachability and answer-derived tastes
+
+- **`scoreAnswers` returns a percentile, not an average.** Why: averaging twelve vectors put 94.3% of all 531,441 answer sets on the neutral band row and left 7 of 12 archetypes unreachable. Now 12/12 reachable, 1.5% neutral.
+- **Questions are weighted by their per-axis spread, bucketed to 15 points.** Why: a question whose three options score the same on an axis should not get a vote there. Bucketing keeps the exact percentile tables at ~80 KB and ~1 ms instead of ~1.2 MB and ~28 ms, and moves every measured number by under 0.1 points.
+- **Rejected re-placing the archetype centres onto the reachable patch.** Why: `knobs.ts` reads the raw axis numbers too, so the planner would still have read `mid` for nearly everyone.
+- **Rejected a hand-tuned linear stretch.** Why: it works (12/12 reachable at k=4) but the constant goes stale the moment an option's score is edited, and nothing fails when it does. The percentile table is rebuilt from `QUESTIONS`.
+- **Accepted a jump in sensitivity: one changed answer of twelve now moves the archetype ~45% of the time, against 17%.** Why: the old stability was the disease, not the cure.
+- **Interests and type affinities are read from the chosen options, with the archetype topping up.** Why: an outdoors traveller matched an archetype whose tags contain no outdoors and got a mall itinerary. A stated answer beats an inferred archetype — same precedence the file already used for pace and budget.
+- **Reachability is pinned in `npm test` by a frozen witness answer set per archetype, not by enumeration.** Why: the full sweep takes ~1 minute. `npm run personas:reach` regenerates the witnesses.

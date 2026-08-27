@@ -206,6 +206,20 @@ no vegan food, so `false` is sound for both. It does **not** read it at rung 2,
 because vegetarian is not vegan. That asymmetry is deliberate; both directions
 have a test.
 
+`DIETARY_CONFLICT_TYPES` is rung 2, and the rule for adding a type is **the
+animal has to be the cuisine, not an item on the menu**. `steak_house` is in
+because a steakhouse without steak is not a steakhouse. `chicken_restaurant`
+was added on 2026-08-26 after a live Singapore run seated a vegetarian at
+Poulet - VivoCity for dinner — Google was silent on `servesVegetarianFood` and
+a four-entry list had nothing to say about it.
+
+`sushi_restaurant` and `ramen_restaurant` were tried in the same change and
+**rejected**: both name the carbohydrate. Gate A's Kyoto fixture contains Vegan
+Ramen Uzu Kyoto, and the ramen rule deleted it — which is the whole reason that
+fixture exists. Where such a place genuinely serves nothing, Google's direct
+`false` catches it at rung 1, the rung that knows rather than guesses. Both
+directions have a test in `score.test.ts`.
+
 Measured on 20 live Singapore places (`scripts/output/singapore-place-details.json`):
 `servesVegetarianFood` present on 7, `goodForChildren` on 17, `editorialSummary`
 on 10, `reviewSummary` on **0**. `reviewSummary` is not broken — it returns full
@@ -218,8 +232,8 @@ role. Don't remove either guard.
 `retrieval.integration.test.ts` is the only thing that catches Google changing a
 response shape — `editorialSummary` is `{text}` but `reviewSummary` is
 `{text:{text}}`, and a silent change to either leaves every summary undefined
-with the whole offline suite still green. It bills real money, so it skips
-unless `GOOGLE_PLACES_API_KEY` is set: `npm run test:places`.
+with the whole offline suite still green. It bills real money, so the only way
+to run it is `npm run test:places` — `npm test` cannot see the file at all.
 
 ### Lint is `eslint .` on a flat config, and it is green at zero errors
 `next lint` is deprecated in Next 15 and gone in 16, so `npm run lint` calls the
@@ -244,8 +258,28 @@ Anything that redeclares `{ startPrice, endPrice, currency }` inline is drift �
 import the type. `normalizePlace` and
 `SEARCH_FIELDS` are module-private; export them if you need to test the mapping.
 
+### `npm test` cannot reach an integration test — that is the gate
+There are two Vitest configs. `vitest.config.ts` excludes
+`**/*.integration.test.ts` outright, so the default run is offline and free.
+`vitest.integration.config.ts` includes only those files, and the three scripts
+that use it (`test:db`, `test:blobs`, `test:places`) pass it with `-c`. A
+filename on the CLI only *filters* `include`; it cannot add back what `include`
+omits, which is why a second config exists rather than an `exclude` override.
+
+The `describe.skipIf(...)` guards are still there, but they are the second lock,
+not the first. Vitest does **not** read `.env.local` — only Node's
+`--env-file-if-exists=.env.local`, which those same three scripts pass, does.
+So a bare `npm test` sees no `DATABASE_URL` or `GOOGLE_PLACES_API_KEY` however
+full your `.env.local` is. Skipped is not the same as covered.
+
+`src/lib/db/itineraries.test.ts` is named in the integration config explicitly:
+it mixes pure row-shaper tests with one `DATABASE_URL`-gated `saveItinerary`
+block, so the filename convention alone would miss it. It is the only such
+exception — put new database or live-API tests in an `*.integration.test.ts`
+file and nothing needs listing.
+
 ### Tests are Vitest, colocated
-`npm test` (`vitest run`). Test files sit next to their module
+Test files sit next to their module
 (`src/lib/planner/score.test.ts`), fixtures in `__fixtures__/`. `__tests__/` is
 for **cross-module** work only — the invariant suite (`__tests__/invariants.ts`),
 the shared seeded rng, and the Gate A end-to-end run. Per-module tests don't go
@@ -386,6 +420,32 @@ without a migration because the column is `jsonb` and `PLANNER_DEBUG_VERSION`
 says which shape a row is. Per-stage counters deliberately are **not** in it:
 they are already durable on `jobs.result.stats`, and a second copy is a second
 thing to keep true.
+
+### `planner_debug.scheduling` exists because a day shipped empty and nothing said so
+A live Singapore run produced a three-day trip whose day three had **zero**
+stops. The day was in `itinerary_days` with a date and an area name; it just had
+no activities. Pass B had filled it and `sequenceDay` had routed it — 4.4 km,
+86 travel minutes — and then `validateDay` emptied it. The only surviving trace
+was `stats.scheduling.failedDays: 1`, which says how many days went wrong and
+never which, or why.
+
+Every field needed was already on `DayValidation` — `repairs`, `failures`,
+`assumed` — and was thrown away when the request ended. `SchedulingRecord` keeps
+the per-day version of it now, and `pipeline.ts` `console.warn`s an empty or
+unfixed day as it happens, following the rule the assignment drops already
+follow: the dev terminal is where somebody is actually looking while a plan runs.
+
+`offered` counts Pass B's assignments **plus** the flex picks the packer may
+promote. Counting assignments alone was the first version of this field, and it
+rendered "kept 8 of 7" on a day where a spare was promoted.
+
+Every day is listed, clean ones included, and the field is optional on the type —
+so a plan made before it existed reads as "not recorded" rather than "nothing
+went wrong". Same rule `sequencing` keeps one field up, and the same reason.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **2**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately: a shape change should have
+to be conscious rather than absorbed.
 
 ### `EnrichmentSubject` is a `Pick`, which is compile-time only
 Hand the enricher a whole `RetrievedPlace` and the whole thing reaches the
@@ -550,6 +610,100 @@ prompt so the model can hold both.
 The brief and the day premises go in `buildSharedPrefix`, **never** the per-stop
 payload — the other way round is fifteen cache misses. `promptCacheKeyFor` gained
 the four bands for the same reason.
+
+
+### An axis score is a percentile now, not an average — and that is why the quiz works
+Averaging twelve option vectors is the central limit theorem applied to a
+personality quiz. Enumerating all 3^12 = 531,441 answer sets showed what that
+cost: **seven of the twelve archetypes were unreachable by any answer set**,
+`culinary_nomad` and `bucket_list_chaser` took 99.1% between them, the averaged
+`social` score never left 40..61, and **94.3% of answer sets read `mid` on all
+four bands** — the row `resolvePlannerKnobs` answers with this planner's plain
+defaults. For nineteen travellers in twenty the quiz moved no knob at all, and
+every test was green because there is no assertion for an archetype nobody can
+reach.
+
+`scoreAnswers` does two things instead, both derived from `QUESTIONS` rather
+than tuned: it weights each question by the spread between its highest and
+lowest option on that axis (in steps of 15), then converts the weighted total to
+its **percentile** among all 531,441 answer sets, counted exactly by a dynamic
+program at first use. After: 12/12 reachable, every archetype between 4.8% and
+15.4%, all four axes span 0..100, all 81 band combinations occur, 1.5% all
+neutral. `npm run personas:reach` (`scripts/persona-reachability.ts`) prints the
+whole picture in about a minute.
+
+The percentile is what makes it self-maintaining. A stretch factor picked by
+staring at a table goes stale the moment somebody edits one option's numbers and
+nothing fails when it does; the table is rebuilt from `QUESTIONS`. The price is
+honest and worth stating: the quiz **reacts** now — one changed answer of twelve
+moves the archetype about 45% of the time against 17% before. A quiz that almost
+never changes its answer is a quiz that is not reading the answers.
+
+`matchArchetype`, the archetype centres and the band cuts at 33/66 are all
+unchanged. So is `knobs.ts` — an absent persona and every `mid` band still
+return today's constants, and no Gate A snapshot moved, because Gate A plans
+without a persona.
+
+**Re-scoring is automatic and that is the point.** `travel_personas` stores raw
+answers and `POST /api/plan` rebuilds with `calculatePersona` on every plan, so
+every stored persona now reads differently and most will show a different
+archetype. `itineraries.persona` snapshots the whole `TravelPersona` per plan
+(`request.persona ?? null` in `itineraries.ts`), so existing trips keep the
+archetype they were built with.
+
+### The archetype is a prior, not the traveller's taste
+Twelve answers became four numbers, four numbers became one archetype, and that
+archetype's fixed tag list became the whole trip. A real traveller who answered
+"find the wild side", "hostel, camp, or wherever", "street food adventures",
+"go immediately" and "an epic adventure" matched The Spontaneous Wanderer, whose
+tags are cafes / street art / local markets / walking tours, and got a Singapore
+trip of Orchard Road malls and art galleries. **No `outdoors` anywhere**, and
+nothing downstream could tell the persona had contradicted the person.
+
+`ANSWER_SIGNALS` in `profile.ts` reads the chosen options directly. Interests
+are what the answers named, ordered by weight, with the archetype only topping
+the list up to three; `typeAffinities` is the preset with the answers layered on
+top and the **strongest opinion per type winning**, the same rule
+`typeAffinityBonus` already applies. Pinned by question label **and** option
+title, like `SIGNAL_QUESTIONS` — an index would move onto the wrong answer
+silently.
+
+Only options that name *content* are in the table. "Spreadsheet time" and "one
+carry-on" describe a style and the four axes already read them; inventing a
+taste from a style answer is how the archetype got it wrong to begin with. Two
+options carry a **refusal** ("fuel for the journey", "politely decline") which
+cannot push an interest down — there is no negative weight — but does stop the
+archetype topping that interest back up.
+
+The list is capped at five and floored at three because `affinity` in `score.ts`
+is matched-over-total, so every extra interest dilutes the rest, and
+`buildSearchPlan` bills a text search per interest.
+
+Two gaps, named rather than papered over. The quiz never asks about evenings, so
+`nightlife` reaches a profile only through the festival answer or the Social
+Explorer preset. And a refusal does not yet damp the preset's *type* weights —
+a traveller who said food is not the point can still carry `restaurant: 1.5`
+from a culinary archetype.
+
+### Three scripts drive the persona layer, and only one of them spends money
+`npm run personas:reach` is the enumeration described two sections up — offline,
+free, about a minute, and the source of the witness answer sets that
+`quiz.reachability.test.ts` freezes. `npm run personas:plan` sends all seven travellers in
+`scripts/travellers.ts` through `POST /api/persona` and `POST /api/plan`
+against a running dev server, sequentially, and writes every result to the
+gitignored `scripts/output/persona-trips.json`. `npm run personas:report` reads
+that file back, so the comparison can be re-shaped without re-planning seven
+trips. The runner re-scores all seven answer sets first and refuses to start if
+any lands on a different archetype or different bands than it claims.
+
+Scripts run on bare Node, which cannot resolve `./presets` without an extension
+or `@/lib/...` at all — both are bundler conventions that everything under
+`src/` relies on. `scripts/lib/resolve-hooks.mjs` handles that, installed with
+`node --import`. It runs only **after** Node's own resolution has failed, so it
+cannot change what already resolves. Note that type-only imports are erased
+before resolution, which is why some `src/` modules import cleanly on bare Node
+and others do not — the difference is invisible until it bites.
+
 
 ### Themed planning: `PlanRequest.mode`, and every rung falls back
 `"themed"` replaces the statistical centroid with a semantic anchor. Four
