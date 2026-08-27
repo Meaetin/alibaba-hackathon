@@ -2,9 +2,8 @@
 
 import { Fragment, useEffect, useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "motion/react";
-import { FolderOpen, RefreshCw, Settings } from "lucide-react";
+import { FolderOpen, RefreshCw } from "lucide-react";
 
 import {
   CollectionCard,
@@ -13,8 +12,10 @@ import {
   LocationCard,
 } from "@/components/ui";
 import { PersonaQuizDialog } from "@/components/profile/PersonaQuizDialog";
+import { PreferencesDialog } from "@/components/profile/PreferencesDialog";
 import { Avatar } from "@/components/ui/primitives/Avatar";
 import { Button } from "@/components/ui/primitives/Button";
+import { useToast } from "@/contexts/ToastContext";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useProfileQuery } from "@/hooks/queries/useProfileQuery";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
@@ -25,10 +26,17 @@ import {
 } from "@/lib/persona/illustrations";
 import type { PersonaResult, TravelArchetypeId } from "@/lib/persona/types";
 import {
+  PREFERENCE_BY_ID,
+  createSavedPreferences,
+  isSavedTravelPreferences,
+} from "@/lib/preferences/registry";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
+import {
   getNextRandomBannerIndex,
   TRAVEL_PROFILE_BANNERS,
 } from "@/lib/profile/banner-images";
 import type { RecentContentItem } from "@/lib/supabase/queries/home";
+import { cn } from "@/lib/utils";
 
 const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
   link: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
@@ -39,6 +47,7 @@ const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
 
 const PERSONA_STORAGE_PREFIX = "argo:persona:";
 const BANNER_STORAGE_PREFIX = "argo:profile-banner:";
+const PREFERENCES_STORAGE_PREFIX = "argo:travel-preferences:";
 
 function isStoredPersona(value: unknown): value is PersonaResult {
   if (!value || typeof value !== "object") return false;
@@ -57,7 +66,7 @@ function getItemHref(item: RecentContentItem): string {
 }
 
 export default function ProfilePage() {
-  const router = useRouter();
+  const { showToast } = useToast();
   const prefersReducedMotion = useReducedMotion();
   const userId = useSessionUserId();
   const { data: profile } = useProfileQuery(userId);
@@ -68,7 +77,10 @@ export default function ProfilePage() {
   });
 
   const [quizOpen, setQuizOpen] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [persona, setPersona] = useState<PersonaResult | null>(null);
+  const [travelPreferences, setTravelPreferences] =
+    useState<SavedTravelPreferences | null>(null);
   const [bannerIndex, setBannerIndex] = useState(0);
 
   const displayName =
@@ -78,6 +90,12 @@ export default function ProfilePage() {
     : "Not signed in";
   const avatarHash = profile?.id ?? profile?.email ?? userId ?? "argo-guest";
   const banner = TRAVEL_PROFILE_BANNERS[bannerIndex];
+  const savedPreferenceDefinitions = (travelPreferences?.selectedIds ?? [])
+    .flatMap((id) => {
+      const preference = PREFERENCE_BY_ID.get(id);
+      return preference ? [preference] : [];
+    })
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   useEffect(() => {
     try {
@@ -93,6 +111,23 @@ export default function ProfilePage() {
     } catch (error) {
       console.error("Failed to load the saved travel persona:", error);
       setPersona(null);
+    }
+  }, [avatarHash]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(
+        `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
+      );
+      if (!stored) {
+        setTravelPreferences(null);
+        return;
+      }
+      const parsed: unknown = JSON.parse(stored);
+      setTravelPreferences(isSavedTravelPreferences(parsed) ? parsed : null);
+    } catch (error) {
+      console.error("Failed to load the saved travel preferences:", error);
+      setTravelPreferences(null);
     }
   }, [avatarHash]);
 
@@ -124,6 +159,47 @@ export default function ProfilePage() {
       );
     } catch (error) {
       console.error("Failed to save the travel persona:", error);
+    }
+
+    setTravelPreferences((current) => {
+      if (!current) return current;
+      const updated = createSavedPreferences(
+        current.selectedIds,
+        current.confirmedConstraintIds,
+        current.preferredEndTime,
+        result,
+      );
+      try {
+        window.localStorage.setItem(
+          `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
+          JSON.stringify(updated),
+        );
+      } catch (error) {
+        console.error("Failed to update preferences for the travel persona:", error);
+      }
+      return updated;
+    });
+  };
+
+  const handlePreferencesSave = (next: SavedTravelPreferences) => {
+    setTravelPreferences(next);
+    try {
+      window.localStorage.setItem(
+        `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
+        JSON.stringify(next),
+      );
+      showToast({
+        title: "Preferences saved",
+        description: `${next.selectedIds.length} preference${next.selectedIds.length === 1 ? "" : "s"} will shape your recommendations.`,
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Failed to save the travel preferences:", error);
+      showToast({
+        title: "Preferences couldn't be saved",
+        description: "Please try again.",
+        variant: "error",
+      });
     }
   };
 
@@ -274,19 +350,25 @@ export default function ProfilePage() {
                   ))}
                 </div>
 
-                {/* Action Row */}
+                {/* Preferences Row */}
                 <div
-                  className="profile-actions flex items-center gap-2"
-                  data-region="profile-actions"
+                  className={cn("flex max-w-xl flex-wrap items-center gap-2")}
+                  role="group"
+                  aria-label="Travel preferences"
+                  data-region="profile-preferences"
                 >
-                  <Button variant="outline">Add Preferences</Button>
-                  <Button
-                    variant="ghost"
-                    icon="only"
-                    aria-label="Settings"
-                    onClick={() => router.push("/settings")}
-                  >
-                    <Settings className="size-5" />
+                  {savedPreferenceDefinitions.map((preference) => (
+                    <span
+                      key={preference.id}
+                      className={cn(
+                        "rounded-xl border border-edge-subtle bg-surface-alt px-3 py-1.5 type-body-2 font-medium text-content",
+                      )}
+                    >
+                      {preference.label}
+                    </span>
+                  ))}
+                  <Button variant="outline" onClick={() => setPreferencesOpen(true)}>
+                    {travelPreferences ? "Edit Preferences" : "Add Preferences"}
                   </Button>
                 </div>
               </div>
@@ -390,6 +472,15 @@ export default function ProfilePage() {
         onOpenChange={setQuizOpen}
         persona={persona}
         onComplete={handlePersonaComplete}
+      />
+
+      {/* Preferences Dialog */}
+      <PreferencesDialog
+        open={preferencesOpen}
+        onOpenChange={setPreferencesOpen}
+        persona={persona}
+        preferences={travelPreferences}
+        onSave={handlePreferencesSave}
       />
     </div>
   );
