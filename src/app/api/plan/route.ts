@@ -208,6 +208,12 @@ async function resolvePersona(
  * precise signal. The client's `profile.interests` are deliberately *not*
  * passed as overrides — they are the demo's placeholder, and treating a
  * placeholder as a choice is how the persona would end up changing nothing.
+ *
+ * **The answers go across too, not just the result.** Interests and type
+ * affinities are read from the options the traveller actually chose, with the
+ * archetype only topping up what they left unsaid — passing `persona.result`
+ * alone silently falls back to archetype-only tastes, which is the failure
+ * documented at the top of `profile.ts`.
  */
 function composeProfile(
   submitted: PreferenceProfile,
@@ -215,16 +221,20 @@ function composeProfile(
   interestOverrides: Interest[] | undefined,
 ): PreferenceProfile {
   if (!persona) return submitted;
-  return buildProfile(persona.result, {
-    // `buildProfile` takes these for symmetry with the bridge doc; nothing in
-    // the profile it returns reads either.
-    city: "",
-    totalDays: 0,
-    dietary: submitted.dietary,
-    pace: submitted.pace,
-    budget: submitted.budget,
-    ...(interestOverrides ? { interestOverrides } : {}),
-  });
+  return buildProfile(
+    persona.result,
+    {
+      // `buildProfile` takes these for symmetry with the bridge doc; nothing in
+      // the profile it returns reads either.
+      city: "",
+      totalDays: 0,
+      dietary: submitted.dietary,
+      pace: submitted.pace,
+      budget: submitted.budget,
+      ...(interestOverrides ? { interestOverrides } : {}),
+    },
+    persona.answers,
+  );
 }
 
 /**

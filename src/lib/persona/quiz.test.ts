@@ -30,14 +30,69 @@ describe("quiz data", () => {
 });
 
 describe("scoreAnswers", () => {
-  it("averages option vectors across questions", () => {
+  it("scores an answer set as its percentile on each axis", () => {
+    // Every first option: spreadsheet time, landmarks, a great hotel, packed
+    // days, group all the way. Near the bottom of spontaneity and of solitude,
+    // above the middle on focus because "dive in completely" and "the food IS
+    // the trip" are both first options.
     const allFirst = Array(12).fill(0);
     expect(scoreAnswers(allFirst)).toEqual({
-      structure: 28,
-      comfort: 39,
-      focus: 47,
-      social: 43,
+      structure: 1,
+      comfort: 28,
+      focus: 57,
+      social: 2,
     });
+  });
+
+  it("puts the extremes at the ends of each axis", () => {
+    // The lowest and highest option per question per axis, which by definition
+    // is the 0th and 100th percentile. Under the old averaging the widest any
+    // axis ever got was social's 40..61.
+    const lowest = QUESTIONS.map(
+      (question) =>
+        question.options.reduce(
+          (best, option, index) =>
+            option.scores.structure < question.options[best].scores.structure ? index : best,
+          0,
+        ),
+    );
+    expect(scoreAnswers(lowest).structure).toBe(0);
+
+    const highest = QUESTIONS.map((question) =>
+      question.options.reduce(
+        (best, option, index) =>
+          option.scores.structure > question.options[best].scores.structure ? index : best,
+        0,
+      ),
+    );
+    expect(scoreAnswers(highest).structure).toBe(100);
+  });
+
+  it("lets go of the axis as questions go unanswered", () => {
+    // The most planner-leaning answer set there is, scoring 0 on structure.
+    const lowest = QUESTIONS.map((question) =>
+      question.options.reduce(
+        (best, option, index) =>
+          option.scores.structure < question.options[best].scores.structure ? index : best,
+        0,
+      ),
+    );
+    expect(scoreAnswers(lowest).structure).toBe(0);
+
+    // An unanswered question contributes the middle of its *own* three options,
+    // so each one blanked out stops pulling and the score drifts back inward.
+    const halfBlank: (number | null)[] = [...lowest];
+    for (let i = 0; i < 6; i += 1) halfBlank[i] = null;
+    expect(scoreAnswers(halfBlank).structure).toBeGreaterThan(0);
+    expect(scoreAnswers(halfBlank).structure).toBeLessThan(50);
+
+    // Nothing answered at all is the middle of every axis — which is what the
+    // absent-persona path in `knobs.ts` already assumes about a blank quiz.
+    const blank = scoreAnswers(Array(12).fill(null));
+    for (const value of Object.values(blank)) {
+      expect(value).toBeGreaterThan(40);
+      expect(value).toBeLessThan(60);
+    }
   });
 });
 
@@ -69,7 +124,9 @@ describe("matchArchetype", () => {
 describe("calculatePersona", () => {
   it("maps a fully planner-leaning answer sheet to a planner-family archetype", () => {
     const result = calculatePersona(Array(12).fill(0));
-    expect(result.archetype.id).toBe("bucket_list_chaser");
+    expect(["weekend_warrior", "master_planner", "bucket_list_chaser"]).toContain(
+      result.archetype.id,
+    );
   });
 
   it("maps a fully spontaneous answer sheet away from planner types", () => {

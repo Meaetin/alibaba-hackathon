@@ -195,6 +195,15 @@ Every question has **3 options**, and each option carries a score vector across 
 
 ## 3. How Scoring Works
 
+> **Steps 1 and 2 below describe the original scoring and no longer match the
+> code.** Averaging twelve vectors made the result pile up in the middle: seven
+> of the twelve archetypes were unreachable by any answer set, and 94% of answer
+> sets read `mid` on all four planner bands. `scoreAnswers` in
+> `src/lib/persona/quiz.ts` now weights each question by how far apart its three
+> options sit on that axis, then converts the weighted total to its percentile
+> among all 531,441 possible answer sets. Step 3 is unchanged. Run
+> `npm run personas:reach` for the current numbers.
+
 ### Step 1: Sum Raw Scores
 
 Each of the 12 questions contributes a score to all 4 dimensions. After answering all questions, the raw totals are calculated:
