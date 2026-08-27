@@ -35,6 +35,7 @@ import {
   VISIT_STEP_MINUTES,
   ceilToStep,
   quantizeDuration,
+  toStep,
   type VisitDuration,
 } from "./duration";
 
@@ -270,6 +271,25 @@ export interface PackedDay {
   dropped: DroppedPlace[];
 }
 
+/**
+ * The longest a meal may be planned for, when no persona says otherwise.
+ *
+ * A meal is a stop like any other to `resolveVisitDuration`, so a restaurant
+ * whose `stay_duration` says 135 minutes was being planned at its ceiling — and
+ * a live Singapore day stamped a lunch from 11:30 to 14:55. Nobody eats for
+ * three and a half hours. `mealMinutes` already existed as a persona knob and
+ * was read in exactly one place, `dayCapacity`, to budget Pass B's ask; it
+ * never sized the meal it was named for. Now it does.
+ *
+ * A ceiling, not a fixed length: the packer may still squeeze a meal toward its
+ * `min` on a tight day. It may no longer stretch one past this.
+ *
+ * The value duplicates `MEAL_MINUTES` in `assign.ts` and
+ * `DEFAULT_KNOBS.mealMinutes` in `knobs.ts` because this module may not import
+ * either — `assign.ts` imports *this* one. A test pins all three equal.
+ */
+export const MEAL_MAX_MINUTES = 75;
+
 export function travelModeForMeters(meters: number, walkMaxMeters = WALK_MAX_METERS): TravelMode {
   return meters < walkMaxMeters ? "walk" : "transit";
 }
@@ -308,6 +328,8 @@ interface Stop {
 export interface PackKnobs {
   visitDurationBias: DurationBias;
   walkMaxMeters: number;
+  /** `PlannerKnobs.mealMinutes`. Omitted means `MEAL_MAX_MINUTES`. */
+  mealMinutes?: number;
 }
 
 /**
@@ -317,6 +339,8 @@ export interface PackKnobs {
  */
 interface EffectivePlan extends PacePlan {
   walkMaxMeters: number;
+  /** Ceiling for a `lunch` or `dinner` stop. See `MEAL_MAX_MINUTES`. */
+  mealMinutes: number;
 }
 
 const OVER_BUDGET_REASON = "over budget — no room left in the day";
@@ -348,6 +372,7 @@ export function packDay(
     ...PACE_PLANS[pace],
     ...(knobs ? { durationBias: knobs.visitDurationBias } : {}),
     walkMaxMeters: knobs?.walkMaxMeters ?? WALK_MAX_METERS,
+    mealMinutes: knobs?.mealMinutes ?? MEAL_MAX_MINUTES,
   };
   const dropped: DroppedPlace[] = [];
   let stops = selectStops(input, plan);
@@ -405,10 +430,24 @@ function toStop(
   // one that stamps a clock, so keeping every time on the grid is its promise
   // to keep. In production `resolveVisitDuration` has already done it and this
   // changes nothing.
-  const onGrid = quantizeDuration(duration);
+  const onGrid = capMeal(quantizeDuration(duration), role, plan.mealMinutes);
   const isAnchor = onGrid.min >= ANCHOR_MIN_MINUTES;
   const base = baseSize(onGrid, isAnchor, plan);
   return { place, role, score, duration: onGrid, isAnchor, isFlex, base, size: base };
+}
+
+/**
+ * Holds a meal to its ceiling, leaving every other role alone.
+ *
+ * `min` is lowered with the rest rather than left above the new ceiling: the
+ * packer treats these bounds as honest and squeezes against them, so a range
+ * that came back with `min` above `max` would be a worse bug than the long
+ * lunch this fixes.
+ */
+function capMeal(duration: VisitDuration, role: SlotRole, ceiling: number): VisitDuration {
+  if (!isMealRole(role) || duration.max <= ceiling) return duration;
+  const max = toStep(ceiling);
+  return { min: Math.min(duration.min, max), preferred: Math.min(duration.preferred, max), max };
 }
 
 /** What `fitDay` produced: a stamped day, or nothing plus the stop it stuck on. */

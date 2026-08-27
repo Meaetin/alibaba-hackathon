@@ -16,6 +16,7 @@ import { VISIT_STEP_MINUTES, type VisitDuration } from './duration'
 import {
   DAY_END_MIN,
   DAY_SKELETON,
+  MEAL_MAX_MINUTES,
   PACE_PLANS,
   WALK_MAX_METERS,
   packDay,
@@ -121,12 +122,17 @@ const typicalDay = (): PackDayInput => ({
 })
 
 /** Over budget at preferred sizes, but shrinking alone brings it home. */
+// The pressure has to come from the activities. Meals are capped at
+// `MEAL_MAX_MINUTES` now, so a fixture that overloaded the day with two
+// two-hour lunches gets those ninety minutes handed straight back and the
+// museum never needs to shrink — which is the cap working, not the packer
+// failing.
 const overShrinkable = (): PackDayInput => ({
   assignments: [
-    assign('temple', 'activity', 0.9, dur(90, 180, 240)),
-    assign('tofu_lunch', 'lunch', 0.8, dur(60, 90, 120)),
+    assign('temple', 'activity', 0.9, dur(105, 210, 280)),
+    assign('tofu_lunch', 'lunch', 0.8, dur(45, 70, 75)),
     assign('museum', 'activity', 0.95, dur(120, 270, 330)),
-    assign('izakaya', 'dinner', 0.75, dur(60, 90, 120)),
+    assign('izakaya', 'dinner', 0.75, dur(45, 70, 75)),
   ],
   flex: [flex('gallery', 0.55, dur(30, 60, 90))],
 })
@@ -266,13 +272,16 @@ describe('over budget', () => {
   })
 
   it('drops flex picks next — real assignments untouched', () => {
-    // No slack anywhere (min === preferred), so shrinking cannot help.
+    // No slack anywhere (min === preferred), so shrinking cannot help. Meals
+    // sit exactly at `MEAL_MAX_MINUTES` so the cap has nothing to give back —
+    // the thirty minutes they used to carry are in the museum instead, which
+    // keeps the day's total, and so the test's premise, unchanged.
     const input: PackDayInput = {
       assignments: [
         assign('temple', 'activity', 0.9, dur(120)),
-        assign('tofu_lunch', 'lunch', 0.8, dur(90)),
-        assign('museum', 'activity', 0.95, dur(240)),
-        assign('izakaya', 'dinner', 0.75, dur(90)),
+        assign('tofu_lunch', 'lunch', 0.8, dur(75)),
+        assign('museum', 'activity', 0.95, dur(270)),
+        assign('izakaya', 'dinner', 0.75, dur(75)),
         assign('night_walk', 'activity', 0.8, dur(60)),
       ],
       flex: [flex('gallery', 0.55, dur(60))],
@@ -521,5 +530,54 @@ describe('the step grid', () => {
     const day = packDay(overShrinkable(), 'balanced', travel(18, 1400))
     expectOnStepGrid(day)
     expectContiguous(day)
+  })
+})
+
+describe('a meal is capped, not elastic upwards', () => {
+  // The live failure: a restaurant whose stay_duration said 135 minutes was
+  // planned at its ceiling and a Singapore day stamped lunch 11:30–14:55.
+  const withLongLunch = (): PackDayInput => ({
+    assignments: [
+      assign('temple', 'activity', 0.9, dur(60, 60, 60)),
+      assign('long_lunch', 'lunch', 0.8, dur(90, 160, 205)),
+    ],
+  })
+
+  it('holds a meal to MEAL_MAX_MINUTES when no persona says otherwise', () => {
+    const day = packDay(withLongLunch(), 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'long_lunch')!)).toBeLessThanOrEqual(MEAL_MAX_MINUTES)
+  })
+
+  it('lets the persona move the ceiling in both directions', () => {
+    const knobs = (mealMinutes: number) => ({
+      visitDurationBias: 'max' as const,
+      walkMaxMeters: 1200,
+      mealMinutes,
+    })
+    const group = packDay(withLongLunch(), 'relaxed', NO_TRAVEL, knobs(95))
+    const solo = packDay(withLongLunch(), 'relaxed', NO_TRAVEL, knobs(60))
+    expect(lengthOf(segmentFor(group, 'long_lunch')!)).toBeLessThanOrEqual(95)
+    expect(lengthOf(segmentFor(solo, 'long_lunch')!)).toBeLessThanOrEqual(60)
+    expect(lengthOf(segmentFor(group, 'long_lunch')!)).toBeGreaterThan(
+      lengthOf(segmentFor(solo, 'long_lunch')!),
+    )
+  })
+
+  it('caps only meals — an activity of the same length is untouched', () => {
+    const input: PackDayInput = {
+      assignments: [assign('gallery', 'activity', 0.9, dur(90, 160, 205))],
+    }
+    const day = packDay(input, 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'gallery')!)).toBeGreaterThan(MEAL_MAX_MINUTES)
+  })
+
+  it('keeps min at or below the new ceiling', () => {
+    // A range whose floor sits above the cap would leave the packer squeezing
+    // against bounds that contradict each other — worse than the long lunch.
+    const input: PackDayInput = {
+      assignments: [assign('banquet', 'lunch', 0.8, dur(180, 200, 240))],
+    }
+    const day = packDay(input, 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'banquet')!)).toBeLessThanOrEqual(MEAL_MAX_MINUTES)
   })
 })

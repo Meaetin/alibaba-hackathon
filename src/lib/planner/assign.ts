@@ -58,10 +58,12 @@ import {
   DAY_END_MIN,
   DAY_START_MIN,
   PACE_PLANS,
+  isMealRole,
   type FlexPick,
   type PackDayInput,
   type SlotAssignment,
   type SlotRole,
+  type DurationBias,
 } from "./pack";
 import { isRestaurant } from "./taxonomy";
 import type { CandidatePlace, Pace, PlaceEnrichment, PreferenceProfile } from "./types";
@@ -164,12 +166,38 @@ export const DEFAULT_FLEX_PER_DAY = 1;
 export interface CapacityKnobs {
   mealMinutes: number;
   flexPerDay: number;
+  /**
+   * What the packer will plan each visit at. Omitted means the pace's own bias,
+   * which is what a caller with no persona has always got.
+   */
+  visitDurationBias?: DurationBias;
 }
 
 /** Today's capacity, for every caller with no persona to hand. */
 export const DEFAULT_CAPACITY_KNOBS: CapacityKnobs = {
   mealMinutes: MEAL_MINUTES,
   flexPerDay: DEFAULT_FLEX_PER_DAY,
+};
+
+/**
+ * How much of the raw activity budget to state, given what the packer will do
+ * with the places the model picks.
+ *
+ * The budget below was counted in *preferred* minutes and the packer plans in
+ * whichever bound `durationBias` names. On a relaxed day those are different
+ * numbers and nothing reconciled them: Pass B was told 272 activity minutes,
+ * obeyed with two stops worth 218 preferred minutes, and the packer then built
+ * those same two stops plus two meals at 711 minutes against a 660-minute day —
+ * over budget before a single minute of travel. That day shipped empty.
+ *
+ * These are the inverse of the inflation each bias causes, rounded to something
+ * a person can reason about. They are a hint like the rest of this function:
+ * `packDay` still recomputes everything against the real clock.
+ */
+export const BIAS_BUDGET_FACTOR: Record<DurationBias, number> = {
+  min: 1.2,
+  preferred: 1,
+  max: 0.75,
 };
 
 /**
@@ -195,7 +223,9 @@ export function dayCapacity(
 ): DayCapacity {
   const dayMinutes = PACE_PLANS[pace].dayEndMin - DAY_START_MIN;
   const travelMinutes = Math.round(dayMinutes * TRAVEL_SHARE[pace]);
-  const activityMinutes = Math.max(0, dayMinutes - meals * knobs.mealMinutes - travelMinutes);
+  const bias = knobs.visitDurationBias ?? PACE_PLANS[pace].durationBias;
+  const raw = dayMinutes - meals * knobs.mealMinutes - travelMinutes;
+  const activityMinutes = Math.max(0, Math.round(raw * BIAS_BUDGET_FACTOR[bias]));
   return { activityMinutes, meals, flex: knobs.flexPerDay };
 }
 
@@ -263,6 +293,7 @@ const DROP_REASONS = {
   unknown: "not in the candidate set — nothing with this id was retrieved",
   otherArea: "belongs to another day's area",
   duplicate: "already assigned earlier in this day",
+  notAMeal: "named for a meal but is not somewhere you can eat one — kept as an activity",
 } as const;
 
 // ── the wire ─────────────────────────────────────────────────────────────────
@@ -284,6 +315,24 @@ interface CandidatePayload {
   open_windows: OpenWindow[];
   score: number;
   match_reasons: string[];
+  /**
+   * Whether this place may hold `lunch` or `dinner`, from `isRestaurant` — the
+   * same predicate `validate.ts` enforces after the model has answered.
+   *
+   * It is on the wire because the model could not otherwise know. `types` is
+   * already here, but reading a mall's types and inferring "no meal" is a rule,
+   * and a rule the model has to re-derive is a rule it will eventually get
+   * wrong. It did: a live Singapore day seated lunch at TANGS at Tang Plaza and
+   * dinner at Mandarin Gallery, both department stores, and `validate.ts`
+   * refused both with "not somewhere you can eat a meal". Pass B's own sentence
+   * said the food hall was fine — which it may well be, but a card that says
+   * "eat at a shopping centre" names no restaurant and carries no `price_level`
+   * for budget scoring to read.
+   *
+   * Hawker centres already pass: Google types them `food_court, market,
+   * restaurant`.
+   */
+  can_hold_a_meal: boolean;
 }
 
 interface ClusterPayload {
@@ -362,7 +411,11 @@ const SYSTEM_PROMPT = [
   "- Offer a full day's worth of stops. The scheduler decides what actually fits,",
   "  so a short list only makes the day thin.",
   "- Add up `visit_minutes.preferred` for the non-meal stops and aim near the day's",
-  "  `capacity.activity_minutes`. Seat `capacity.meals` meals in restaurants.",
+  "  `capacity.activity_minutes`. Seat `capacity.meals` meals.",
+  "- A `lunch` or `dinner` stop MUST have `can_hold_a_meal: true`. A shopping",
+  "  centre with a food hall does not qualify, however good the food is — the",
+  "  traveller needs the name of a restaurant, not the name of a mall. If a day",
+  "  has too few such places, seat fewer meals rather than seating a wrong one.",
   "- Respect `open_windows`: do not seat a place in a part of the day it is shut.",
   "- Put `capacity.flex` extra picks in `flex` — places worth visiting that the",
   "  budget did not fit. They are spares, not stops.",
@@ -397,6 +450,7 @@ function candidatePayload(
     open_windows: openWindowsFor(place, weekday),
     score: Math.round(score * 1000) / 1000,
     match_reasons: reasons,
+    can_hold_a_meal: isRestaurant(place),
   };
 }
 
@@ -625,6 +679,32 @@ export async function assignDays(input: AssignInput, deps: AssignDeps): Promise<
  * the packer knows the real travel legs and the real wall clock, and truncating
  * on an estimate would drop a stop that fits.
  */
+/**
+ * Holds the model to `can_hold_a_meal`, which the payload already told it.
+ *
+ * **Demoted, not dropped.** A mall named for lunch is usually still a perfectly
+ * good place to spend an hour — TANGS at Tang Plaza suits a shopping-minded
+ * traveller fine, it just is not lunch. Dropping it would cost the day a stop
+ * as well as a meal to punish a mistake the traveller never made.
+ *
+ * The day is then one meal short, and that is deliberately somebody else's
+ * problem: `validate.ts` reports it as `lost_meal`, which is the signal the
+ * pipeline acts on. Silently seating the wrong place is what this prevents.
+ */
+function mealRoleOrActivity(
+  place: CandidatePlace,
+  role: SlotRole,
+  dayIndex: number,
+  dropped: AssignmentDrop[],
+): SlotRole {
+  if (!isMealRole(role) || isRestaurant(place)) return role;
+  dropped.push({ dayIndex, placeId: place.placeId, reason: DROP_REASONS.notAMeal });
+  console.warn(
+    `[plan] day ${dayIndex}: Pass B named ${place.name} as ${role}, but it is not a restaurant — kept as an activity`,
+  );
+  return "activity";
+}
+
 function resolveDay(
   answer: Assignment["days"][number],
   cluster: ScoredCluster | undefined,
@@ -675,7 +755,7 @@ function resolveDay(
     return [
       {
         place: entry.place,
-        role: slot.slot_role,
+        role: mealRoleOrActivity(entry.place, slot.slot_role, request.dayIndex, dropped),
         score: entry.score,
         duration: durationOf(entry.place),
       },

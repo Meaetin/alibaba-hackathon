@@ -837,3 +837,75 @@ describe("a refused id is said out loud", () => {
     warn.mockRestore();
   });
 });
+
+describe("only a restaurant may hold a meal", () => {
+  // The live failure: Pass B seated lunch at TANGS at Tang Plaza and dinner at
+  // Mandarin Gallery, both department stores. `validate.ts` refused both with
+  // "not somewhere you can eat a meal", and the day shipped with one stop.
+  it("tells the model which places can hold a meal", () => {
+    const request = buildAssignRequest(assignInput(), { client: fakeClient([]).client })
+    const content = request.input[1].content
+    if (typeof content !== "string") throw new Error("Pass B payload must be text")
+    const payload = JSON.parse(content) as {
+      clusters: { candidates: { types: string[]; can_hold_a_meal: boolean }[] }[]
+    }
+    const candidates = payload.clusters.flatMap((c) => c.candidates)
+    expect(candidates.length).toBeGreaterThan(0)
+    for (const candidate of candidates) {
+      const isRestaurant = candidate.types.some(
+        (t) => t === "restaurant" || t.endsWith("_restaurant"),
+      )
+      expect(candidate.can_hold_a_meal).toBe(isRestaurant)
+    }
+    // Both answers have to occur, or the flag is a constant and proves nothing.
+    expect(candidates.some((c) => c.can_hold_a_meal)).toBe(true)
+    expect(candidates.some((c) => !c.can_hold_a_meal)).toBe(true)
+  })
+
+  it("keeps a non-restaurant named for lunch, as an activity", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { client } = fakeClient([
+      reply([
+        {
+          day: 1,
+          assignments: [
+            // Kimono Forest is a tourist attraction. A perfectly good hour, and
+            // not lunch.
+            { slot_role: "lunch", place_id: "kimono" },
+            { slot_role: "activity", place_id: "bamboo" },
+          ],
+        },
+        { day: 2, area_name: "Gion", assignments: DAY_TWO },
+      ]),
+    ])
+
+    const result = await assignDays(assignInput(), { client })
+    const dayOne = result.days[0].input.assignments
+    const kimono = dayOne.find((a) => a.place.placeId === "kimono")
+
+    // Demoted, not dropped: punishing the model's mistake by deleting the stop
+    // costs the traveller a place they never chose wrongly.
+    expect(kimono).toBeDefined()
+    expect(kimono!.role).toBe("activity")
+    expect(dayOne.some((a) => a.role === "lunch")).toBe(false)
+
+    // And it is recorded, both durably and on the terminal.
+    expect(result.dropped.some((d) => d.placeId === "kimono")).toBe(true)
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it("leaves a real restaurant in its meal slot", async () => {
+    const { client } = fakeClient([BOTH_DAYS])
+    const result = await assignDays(assignInput(), { client })
+    const meals = result.days.flatMap((d) =>
+      d.input.assignments.filter((a) => a.role === "lunch" || a.role === "dinner"),
+    )
+    expect(meals.length).toBeGreaterThan(0)
+    for (const meal of meals) {
+      expect(meal.place.types.some((t) => t === "restaurant" || t.endsWith("_restaurant"))).toBe(
+        true,
+      )
+    }
+  })
+})

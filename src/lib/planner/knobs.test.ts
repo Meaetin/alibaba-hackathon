@@ -12,7 +12,8 @@ import {
   toPersonaAxes,
   type PersonaAxisKey,
 } from "./knobs";
-import { PACE_PLANS } from "./pack";
+import { MEAL_MAX_MINUTES, PACE_PLANS } from "./pack";
+import { MEAL_MINUTES } from "./assign";
 import type { Pace, PreferenceProfile } from "./types";
 
 const PACES: readonly Pace[] = ["relaxed", "balanced", "packed"];
@@ -210,3 +211,13 @@ describe("the twelve archetypes are actually distinguishable", () => {
     expect(new Set(resolved).size).toBeGreaterThanOrEqual(9);
   });
 });
+
+describe('the meal ceiling has three homes and one value', () => {
+  // `pack.ts` may not import `assign.ts` (assign imports pack) and neither may
+  // import `knobs.ts`, so the default meal length is written down three times.
+  // Nothing else stops them drifting apart.
+  it('MEAL_MAX_MINUTES, MEAL_MINUTES and DEFAULT_KNOBS.mealMinutes agree', () => {
+    expect(MEAL_MAX_MINUTES).toBe(MEAL_MINUTES)
+    expect(DEFAULT_KNOBS.mealMinutes).toBe(MEAL_MAX_MINUTES)
+  })
+})

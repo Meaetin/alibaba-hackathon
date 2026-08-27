@@ -74,12 +74,6 @@ export interface GroupInput {
   totalDays: number;
   /** Injected. Only the geographic fallback consumes it. */
   rng: () => number;
-  /**
-   * `knobs.walkMaxMeters`. Scales every theme's radius exactly as it does in
-   * `explorePlaces`, so the circle a place must sit in to join a theme is the
-   * same circle that theme searched.
-   */
-  walkMaxMeters: number;
 }
 
 export interface GroupResult {
@@ -113,7 +107,7 @@ export function groupByTheme(input: GroupInput): GroupResult {
       {
         theme,
         anchor: { latitude: anchor.latitude, longitude: anchor.longitude },
-        reach: radiusFor(theme.radiusHint, input.walkMaxMeters) * MEMBER_RADIUS_SLACK,
+        reach: radiusFor(theme.radiusHint) * MEMBER_RADIUS_SLACK,
       },
     ];
   });

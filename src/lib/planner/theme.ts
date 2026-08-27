@@ -89,15 +89,26 @@ export const RADIUS_METERS: Record<RadiusHint, number> = {
 };
 
 /**
- * The radius for one theme, scaled by how far this traveller will go.
+ * The radius for one theme. The hint decides it, and nothing else does.
  *
- * `comfortTolerance` owns distance — the same axis that owns `walkMaxMeters` in
- * `knobs.ts` — so the scale is derived from that knob rather than from a second
- * table that could drift away from it.
+ * It used to be scaled by `knobs.walkMaxMeters`, on the reasoning that
+ * `comfortTolerance` owns distance. That conflated two different questions:
+ * **how far you will walk between two stops** is not **how much of the city we
+ * should search for candidates**. A traveller who takes the MRT everywhere
+ * still visits places three kilometres apart; they simply will not walk it.
+ *
+ * The cost was measured. A `polished` traveller scales at 800/1200, so every
+ * circle came back a third smaller — and their live Singapore run billed three
+ * Nearby Searches for **three unique places**, with two of three clusters
+ * flagged `shortfall` and one day shipping empty. Saying "I like it
+ * comfortable" should not quietly shrink the map.
+ *
+ * `group.ts` and `feasibility.ts` both cap membership at this same circle
+ * multiplied by `MEMBER_RADIUS_SLACK`, so all three stay in lockstep on the
+ * circle a theme was actually billed for.
  */
-export function radiusFor(hint: RadiusHint, walkMaxMeters: number): number {
-  const scale = walkMaxMeters / RADIUS_METERS.walkable;
-  return Math.round(RADIUS_METERS[hint] * scale);
+export function radiusFor(hint: RadiusHint): number {
+  return RADIUS_METERS[hint];
 }
 
 // ── the model's answer ───────────────────────────────────────────────────────

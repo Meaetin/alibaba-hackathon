@@ -645,6 +645,9 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   const packKnobs: PackKnobs = {
     visitDurationBias: knobs.visitDurationBias,
     walkMaxMeters: knobs.walkMaxMeters,
+    // Read by nothing before this: `mealMinutes` sized Pass B's budget and
+    // never the meal it is named for. See `MEAL_MAX_MINUTES` in `pack.ts`.
+    mealMinutes: knobs.mealMinutes,
   };
   const getTravelLeg = deps.getTravelLeg ?? createStraightLineTravel();
 
@@ -1284,7 +1287,6 @@ async function planThemedDays(
     pool: merged,
     totalDays: request.totalDays,
     rng: deps.rng,
-    walkMaxMeters: knobs.walkMaxMeters,
   });
   if (grouped.unclaimed > 0) {
     console.warn(
@@ -1314,9 +1316,6 @@ async function planThemedDays(
     // what they wanted, so it is computed from the leftovers the same way
     // `groupByTheme` does — one k-means over what no theme is using.
     geographicFor: (dayIndex) => geographicFallbackFor(grouped.clusters, dayIndex, deps.rng),
-    // Same reach the membership cap uses, so rung 2 cannot hand back a place
-    // rung 0 refused.
-    walkMaxMeters: knobs.walkMaxMeters,
   });
 
   return {
@@ -1395,9 +1394,9 @@ async function explorePlaces(
       nearbyRequest(
         request.city,
         { latitude: anchor.latitude, longitude: anchor.longitude },
-        // `comfortTolerance` owns distance, so the radius scales with the same
-        // knob that decides what counts as walking.
-        radiusFor(theme.radiusHint, knobs.walkMaxMeters),
+        // The hint alone. How far this traveller will walk between two stops is
+        // a different question from how much city to search — see `radiusFor`.
+        radiusFor(theme.radiusHint),
         theme.includedTypes,
       ),
     ];

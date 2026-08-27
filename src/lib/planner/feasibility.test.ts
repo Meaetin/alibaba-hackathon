@@ -198,6 +198,8 @@ describe("repairFeasibility", () => {
 
   it("will not borrow a restaurant the borrower could never reach", async () => {
     // The cap in `groupByTheme` refuses a distant place at membership time.
+    // It is unconditional now — there used to be an opt-out (omit
+    // `walkMaxMeters` and the bound disappeared), and a test pinning it.
     // Without the same bound here, rung 2 hands one straight back and the day
     // reads as repaired — two restaurants — while the packer still spends the
     // morning on transit. The donor is themeless so it is not repaired on the
@@ -216,10 +218,7 @@ describe("repairFeasibility", () => {
       false,
     );
 
-    const { clusters, repairs } = await repairFeasibility([thin, donor], {
-      mealsPerDay: MEALS,
-      walkMaxMeters: 1_200, // a walkable theme reaches 1.8 km
-    });
+    const { clusters, repairs } = await repairFeasibility([thin, donor], { mealsPerDay: MEALS });
 
     const borrowed = clusters[0].places.map((p) => p.placeId);
     expect(borrowed).toContain("reachable");
@@ -227,21 +226,6 @@ describe("repairFeasibility", () => {
     // The donor could spare three, and the day still needed two. Taking only
     // the one that is actually reachable leaves the day short, and it says so.
     expect(repairs.map((r) => r.rung)).toEqual(["merged"]);
-    expect(mealCapacity(clusters[0])).toBe(1);
-  });
-
-  it("borrows without a distance bound when the caller gives none", async () => {
-    // `walkMaxMeters` is optional, and absent means the unbounded behaviour this
-    // ladder had before the cap. An optional knob that quietly changes results
-    // needs the other half of its contract pinned too.
-    const thin = cluster(0, [sight("a")], { latitude: 35.0, longitude: 135.7 });
-    const donor = cluster(
-      1,
-      [eatery("far-1", 35.1, 135.7), eatery("far-2", 35.11, 135.7), eatery("far-3", 35.12, 135.7)],
-      { latitude: 35.1, longitude: 135.7 },
-      false,
-    );
-    const { clusters } = await repairFeasibility([thin, donor], { mealsPerDay: MEALS });
     expect(mealCapacity(clusters[0])).toBe(1);
   });
 

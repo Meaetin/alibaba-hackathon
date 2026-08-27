@@ -33,7 +33,7 @@
 import { metersBetween } from "./geo";
 import { MEMBER_RADIUS_SLACK, type ThemedCluster } from "./group";
 import { isRestaurant } from "./taxonomy";
-import { radiusFor } from "./theme";
+import { radiusFor, type DayTheme } from "./theme";
 import type { CandidatePlace } from "./types";
 
 /** Which rung of the ladder a day ended on. `ok` means it never needed one. */
@@ -66,20 +66,6 @@ export interface FeasibilityDeps {
    * says so rather than being replaced by nothing.
    */
   geographicFor?: (dayIndex: number) => ThemedCluster | undefined;
-  /**
-   * `knobs.walkMaxMeters`. Bounds rung 2 by the same reach `groupByTheme` uses,
-   * so a borrowed restaurant is one the traveller could actually reach on the
-   * borrowing day.
-   *
-   * Without this bound the repair undoes the cap: membership refuses a place
-   * five kilometres from the anchor, and then merge hands over one from the
-   * next theme along. The day reads as fixed — it has its two restaurants —
-   * and the packer still spends the morning on transit.
-   *
-   * Optional, and absent means no distance bound, which is what this ladder did
-   * before the cap existed.
-   */
-  walkMaxMeters?: number;
 }
 
 export interface FeasibilityResult {
@@ -135,7 +121,7 @@ export async function repairFeasibility(
     }
 
     // Rung 2 — borrow from the nearest theme that can spare it.
-    const borrowedFrom = borrow(working, index, deps.mealsPerDay, reachOf(cluster, deps));
+    const borrowedFrom = borrow(working, index, deps.mealsPerDay, reachOf(cluster.theme));
     if (borrowedFrom !== undefined) {
       repairs.push({
         dayIndex,
@@ -235,12 +221,19 @@ function pointOf(place: CandidatePlace): { latitude: number; longitude: number }
 
 /**
  * The reach a borrowed place must sit inside, matching `groupByTheme`'s cap so
- * one rule governs both halves. `Infinity` when the caller passed no
- * `walkMaxMeters` — the unbounded behaviour this ladder had before the cap.
+ * one rule governs both halves.
+ *
+ * There is no opt-out. It used to return `Infinity` when the caller passed no
+ * `walkMaxMeters`, which was a way for rung 2 to hand back exactly what
+ * membership had just refused — the day then reads as repaired, with its two
+ * restaurants, while the packer still spends the morning on transit.
+ *
+ * It takes the theme rather than the cluster because the loop above skips a
+ * themeless cluster outright, so "this day has no circle" was a branch nothing
+ * could reach.
  */
-function reachOf(cluster: ThemedCluster, deps: FeasibilityDeps): number {
-  if (deps.walkMaxMeters === undefined || !cluster.theme) return Infinity;
-  return radiusFor(cluster.theme.radiusHint, deps.walkMaxMeters) * MEMBER_RADIUS_SLACK;
+function reachOf(theme: DayTheme): number {
+  return radiusFor(theme.radiusHint) * MEMBER_RADIUS_SLACK;
 }
 
 /**
