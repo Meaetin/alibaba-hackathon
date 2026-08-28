@@ -25,11 +25,11 @@ import {
   INTRO_ILLUSTRATION,
 } from "@/lib/persona/illustrations";
 import type { PersonaResult, TravelArchetypeId } from "@/lib/persona/types";
-import {
-  PREFERENCE_BY_ID,
-  createSavedPreferences,
-  isSavedTravelPreferences,
-} from "@/lib/preferences/registry";
+import { PREFERENCE_BY_ID } from "@/lib/preferences/registry";
+import { fetchTravelPreferences, saveTravelPreferences } from "@/lib/api/preferences";
+import { queryClient } from "@/lib/query/queryClient";
+import { queryKeys } from "@/lib/query/queryKeys";
+import { useQuery } from "@tanstack/react-query";
 import type { SavedTravelPreferences } from "@/lib/preferences/types";
 import {
   getNextRandomBannerIndex,
@@ -47,7 +47,6 @@ const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
 
 const PERSONA_STORAGE_PREFIX = "argo:persona:";
 const BANNER_STORAGE_PREFIX = "argo:profile-banner:";
-const PREFERENCES_STORAGE_PREFIX = "argo:travel-preferences:";
 
 function isStoredPersona(value: unknown): value is PersonaResult {
   if (!value || typeof value !== "object") return false;
@@ -79,8 +78,14 @@ export default function ProfilePage() {
   const [quizOpen, setQuizOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [persona, setPersona] = useState<PersonaResult | null>(null);
-  const [travelPreferences, setTravelPreferences] =
-    useState<SavedTravelPreferences | null>(null);
+  // Server-held, not `localStorage`: preferences follow the person, so the same
+  // account sees the same set on a laptop and a phone.
+  const { data: travelPreferences = null } = useQuery<SavedTravelPreferences | null>({
+    queryKey: queryKeys.travelPreferences(),
+    queryFn: fetchTravelPreferences,
+    enabled: Boolean(userId),
+    staleTime: 5 * 60 * 1000,
+  });
   const [bannerIndex, setBannerIndex] = useState(0);
 
   const displayName =
@@ -117,23 +122,6 @@ export default function ProfilePage() {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(
-        `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
-      );
-      if (!stored) {
-        setTravelPreferences(null);
-        return;
-      }
-      const parsed: unknown = JSON.parse(stored);
-      setTravelPreferences(isSavedTravelPreferences(parsed) ? parsed : null);
-    } catch (error) {
-      console.error("Failed to load the saved travel preferences:", error);
-      setTravelPreferences(null);
-    }
-  }, [avatarHash]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(
         `${BANNER_STORAGE_PREFIX}${avatarHash}`,
       );
       const storedIndex = stored === null ? 0 : Number.parseInt(stored, 10);
@@ -161,46 +149,50 @@ export default function ProfilePage() {
       console.error("Failed to save the travel persona:", error);
     }
 
-    setTravelPreferences((current) => {
-      if (!current) return current;
-      const updated = createSavedPreferences(
-        current.selectedIds,
-        current.confirmedConstraintIds,
-        current.preferredEndTime,
-        result,
-      );
-      try {
-        window.localStorage.setItem(
-          `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
-          JSON.stringify(updated),
-        );
-      } catch (error) {
+    // A retake changes the pace and budget the preference profile derives, so
+    // the same ids have to be re-saved. The server rebuilds the profile from
+    // its own copy of the persona, which is why nothing is recomputed here.
+    if (travelPreferences) {
+      void persistPreferences(travelPreferences).catch((error: unknown) => {
+        // Not worth a toast: the quiz result the traveller just saw is correct,
+        // and the next preferences save will pick the new pace up anyway.
         console.error("Failed to update preferences for the travel persona:", error);
-      }
-      return updated;
-    });
-  };
-
-  const handlePreferencesSave = (next: SavedTravelPreferences) => {
-    setTravelPreferences(next);
-    try {
-      window.localStorage.setItem(
-        `${PREFERENCES_STORAGE_PREFIX}${avatarHash}`,
-        JSON.stringify(next),
-      );
-      showToast({
-        title: "Preferences saved",
-        description: `${next.selectedIds.length} preference${next.selectedIds.length === 1 ? "" : "s"} will shape your recommendations.`,
-        variant: "success",
-      });
-    } catch (error) {
-      console.error("Failed to save the travel preferences:", error);
-      showToast({
-        title: "Preferences couldn't be saved",
-        description: "Please try again.",
-        variant: "error",
       });
     }
+  };
+
+  /** Saves and puts the **server's** answer in the cache, never the sent one —
+   *  an unknown id is dropped on the way in, so the two can differ. */
+  async function persistPreferences(next: {
+    selectedIds: readonly string[];
+    confirmedConstraintIds: readonly string[];
+    preferredEndTime?: string;
+  }): Promise<SavedTravelPreferences> {
+    const stored = await saveTravelPreferences(next);
+    queryClient.setQueryData(queryKeys.travelPreferences(), stored);
+    return stored;
+  }
+
+  const handlePreferencesSave = (next: SavedTravelPreferences) => {
+    persistPreferences(next)
+      .then((stored) => {
+        showToast({
+          title: "Preferences saved",
+          description: `${stored.selectedIds.length} preference${stored.selectedIds.length === 1 ? "" : "s"} will shape your recommendations.`,
+          variant: "success",
+        });
+      })
+      .catch((error: unknown) => {
+        // The dialog has already closed, so the toast is the only place this
+        // can be said. The cache is untouched, so the chips still show the last
+        // set that actually saved rather than one that did not.
+        console.error("Failed to save the travel preferences:", error);
+        showToast({
+          title: "Preferences couldn't be saved",
+          description: "Please try again.",
+          variant: "error",
+        });
+      });
   };
 
   const randomizeBanner = () => {

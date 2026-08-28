@@ -109,6 +109,21 @@ export const personaRouteDeps: {
 };
 
 /**
+ * `GET`/`PUT /api/preferences`. It needs the persona store as well as the user
+ * store: the stored `profile` is **derived** from the picked ids *and* the
+ * traveller's persona, and the server rebuilds it on every write so the two
+ * cannot drift. Same rule `POST /api/plan` follows with `calculatePersona`.
+ */
+export const preferencesRouteDeps: {
+  create: () => { users: UserStore; personas: PersonaStore; now: () => Date };
+} = {
+  create: () => {
+    const db = getDb();
+    return { users: createUserStore(db), personas: createPersonaStore(db), now: () => new Date() };
+  },
+};
+
+/**
  * `POST /api/auth/**`. The clock is injected like every other route's, because a
  * session's expiry has to be as reproducible in a test as a plan's timestamps.
  */

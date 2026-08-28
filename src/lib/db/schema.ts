@@ -33,6 +33,7 @@ import type {
   TravelArchetypeId,
   TravelPersona,
 } from "@/lib/persona/types";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
 import type { OpeningPeriod, PreferenceProfile } from "@/lib/planner/types";
 import type { FunnelStats } from "@/lib/planner/funnel";
 import type { PriceRange } from "@/lib/maps/price-range";
@@ -201,6 +202,21 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   display_name: text("display_name"),
   password_hash: text("password_hash").notNull(),
+  /**
+   * The traveller's saved travel preferences, or null if they have not set any.
+   *
+   * A column on `users` rather than a table of its own: there is exactly one
+   * set per person, nobody wants a history of them, and `users` is already the
+   * per-person row. Same shape of decision as `itineraries.persona` being a
+   * jsonb snapshot rather than a join.
+   *
+   * `selectedIds` inside it is the **source of truth**; `profile` is derived
+   * from it by `createSavedPreferences` and stored beside it for the same
+   * reason `travel_personas` stores both answers and scores — a read wants the
+   * planner-ready shape without re-deriving, and a re-derivation wants the ids.
+   * The server rebuilds `profile` on every write, so the two cannot drift.
+   */
+  preferences: jsonb("preferences").$type<SavedTravelPreferences>(),
   created_at: timestamptz("created_at").notNull().defaultNow(),
   updated_at: timestamptz("updated_at").notNull().defaultNow(),
 });

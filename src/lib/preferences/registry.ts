@@ -121,11 +121,20 @@ export function buildPreferenceProfile(
   };
 }
 
+/**
+ * Builds the stored shape from the ids a traveller picked.
+ *
+ * `now` is a parameter because the server calls this too, and everything
+ * server-side in this codebase takes its clock rather than reading one — the
+ * same rule `rng` and `now` follow through the planner. The browser can leave
+ * it out.
+ */
 export function createSavedPreferences(
   selectedIds: readonly string[],
   confirmedConstraintIds: readonly string[],
   preferredEndTime: string | undefined,
   persona?: PersonaResult | null,
+  now: Date = new Date(),
 ): SavedTravelPreferences {
   const validIds = [...new Set(selectedIds)].filter((id) => PREFERENCE_BY_ID.has(id));
   return {
@@ -133,7 +142,7 @@ export function createSavedPreferences(
     confirmedConstraintIds: [...new Set(confirmedConstraintIds)].filter((id) => validIds.includes(id)),
     preferredEndTime: validIds.includes("early_evenings") ? preferredEndTime : undefined,
     profile: buildPreferenceProfile(validIds, persona),
-    updatedAt: new Date().toISOString(),
+    updatedAt: now.toISOString(),
   };
 }
 

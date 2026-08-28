@@ -26,6 +26,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 
 import { hashToken } from "@/lib/auth/session";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
 
 import type { Database } from "./client";
 import { isUuid } from "./itineraries";
@@ -73,6 +74,20 @@ export interface UserStore {
    * second sign-in from a browser that still holds an old id.
    */
   claimPersona(input: { personaId: string; userId: string; now: Date }): Promise<boolean>;
+
+  /** The traveller's saved preferences, or `undefined` if they have set none. */
+  readPreferences(userId: string): Promise<SavedTravelPreferences | undefined>;
+
+  /**
+   * Replaces them wholesale. There is no merge and no history: a person edits
+   * the set in one dialog and saves the set, so a partial update would be an
+   * operation nothing performs and a second shape to keep true.
+   */
+  writePreferences(input: {
+    userId: string;
+    preferences: SavedTravelPreferences;
+    now: Date;
+  }): Promise<void>;
 }
 
 export function createUserStore(db: Database): UserStore {
@@ -148,6 +163,24 @@ export function createUserStore(db: Database): UserStore {
         .returning({ id: travel_personas.id });
       return claimed.length > 0;
     },
+
+    async readPreferences(userId) {
+      if (!isUuid(userId)) return undefined;
+      const [row] = await db
+        .select({ preferences: users.preferences })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      return row?.preferences ?? undefined;
+    },
+
+    async writePreferences({ userId, preferences, now }) {
+      if (!isUuid(userId)) return;
+      await db
+        .update(users)
+        .set({ preferences, updated_at: now })
+        .where(eq(users.id, userId));
+    },
   };
 }
 
@@ -189,6 +222,7 @@ export function createInMemoryUserStore(seed?: { idFactory?: () => string }): Us
         email,
         display_name,
         password_hash,
+        preferences: null,
         created_at: now,
         updated_at: now,
       };
@@ -234,6 +268,16 @@ export function createInMemoryUserStore(seed?: { idFactory?: () => string }): Us
       for (const owner of personaOwners.values()) if (owner === userId) return false;
       personaOwners.set(personaId, userId);
       return true;
+    },
+
+    async readPreferences(userId) {
+      return rows.get(userId)?.preferences ?? undefined;
+    },
+
+    async writePreferences({ userId, preferences, now }) {
+      const row = rows.get(userId);
+      if (!row) return;
+      rows.set(userId, { ...row, preferences, updated_at: now });
     },
   };
 
