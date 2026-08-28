@@ -572,3 +572,8 @@
 - **Somebody else's trip is a 404, never a 403.** Why: a 403 confirms the id names a real itinerary, which is the one fact an outsider wants. A null owner is also a 404.
 - **The first account claims every ownerless itinerary, guarded inside the SQL.** Why: 37 trips predate accounts, and the Neon HTTP driver has no read-then-write transaction, so `(select count(*) from users) = 1` has to be in the `update` itself. One-shot: delete throwaway test accounts before handing the app over.
 - **A read with no backend returns empty and documents it; a write throws.** Why: an empty list is a true statement, but an upload that silently stores nothing is a lie the traveller finds out about later.
+- **2026-08-28 — travel preferences move from `localStorage` to `users.preferences` (jsonb).** Why: keyed by user id in the browser, they followed a browser rather than a person — two different sets on a laptop and a phone, and lost on clearing site data.
+- **Only the picked ids cross the wire; the server rebuilds the derived profile.** Why: a retuned `buildPreferenceProfile` or a retaken quiz must reach the stored row instead of being frozen at whatever a browser computed. Same rule `POST /api/persona` keeps about `calculatePersona`. A client-sent `profile` is ignored.
+- **An unknown preference id is dropped, not rejected.** Why: a stale id from an older build is a preference that no longer exists — a reason to forget it, not to fail the save and lose the others.
+- **`createSavedPreferences` takes `now`.** Why: everything server-side here takes its clock rather than reading one.
+- **Preferences still do not reach the planner.** `createItineraryRouted` sends `LOCAL_DEMO_PROFILE`. Moving them server-side makes the wiring possible; it is not the wiring.

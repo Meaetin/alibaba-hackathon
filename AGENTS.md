@@ -1485,3 +1485,51 @@ All eight guards in this change are mutation-checked: the two 401 gates, the
 owner check, the one-shot claim, the password length guard, session expiry, the
 logout delete, and the persona being keyed on the user rather than on the id the
 browser sent.
+
+### Travel preferences live on `users.preferences`, and the server owns the derivation
+A jsonb column, not a table: exactly one set per person, no history wanted, and
+`users` is already the per-person row. Same decision as `itineraries.persona`
+being a snapshot rather than a join.
+
+**Only `selectedIds` crosses the wire.** The planner-ready `profile` inside
+`SavedTravelPreferences` is derived by `createSavedPreferences` from the picked
+ids *and* the traveller's persona, and `PUT /api/preferences` rebuilds it on
+every write from its own copy of the persona. So a retuned
+`buildPreferenceProfile`, or a retaken quiz, reaches the stored row instead of
+being frozen at whatever some browser computed on the day. It is the rule
+`POST /api/persona` already keeps about `calculatePersona`, applied a second
+time. A client-sent `profile` is ignored and a test sends one.
+
+An id the registry no longer knows is **dropped, not rejected** — a stale id
+from an older build is a preference that is gone, which is a reason to forget it
+rather than to fail the save and lose the eleven beside it.
+
+**Nothing plans with them yet.** `createItineraryRouted` still sends
+`LOCAL_DEMO_PROFILE`, so `preferences.profile` is computed, stored and read by
+nobody but the profile page's chips. That is the same shape as the Pass C bug
+this file already records — four things written, three rendered nowhere. Moving
+them server-side is what makes the wiring possible; the wiring itself has not
+happened.
+
+### The profile page still keeps two things in `localStorage`, and one is a duplicate
+`argo:profile-banner:` is a cosmetic index and per-browser is defensible.
+
+`argo:persona:` is **not**. It caches a whole `PersonaResult` under the user id
+while `travel_personas` holds the answers server-side, so the profile page can
+show one archetype while the planner uses another — exactly the failure mode
+`src/lib/persona/storage.ts` documents when it explains why the browser holds
+only a pointer: "a cached copy of the scores would quietly out-live a change to
+the scoring tables and there would be no way to tell." `PersonaQuizDialog`
+already POSTs the answers to `/api/persona`; the profile page then writes its
+own second copy. Fixing it needs a `GET /api/persona`, which does not exist.
+
+### PRs merged into a feature branch are not on `main`
+`gh pr view` reports a PR as `MERGED` when it lands in **its own base branch**.
+PR #5 (preferences) targeted `feature/travel-persona` and PR #6 (flights)
+targeted `feature/atlas-flight`; only PR #7 targeted `main`. So for two weeks
+the preferences module was "merged" and absent from every branch anybody worked
+on. Check `baseRefName`, or `git merge-base --is-ancestor`, before assuming a
+merged PR is in the tree.
+
+`feature/atlas-flight` is still unmerged — `/flights`, the seat map and
+`PRODUCT.md` are not on this branch.
