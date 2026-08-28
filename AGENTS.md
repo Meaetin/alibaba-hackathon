@@ -407,6 +407,12 @@ simply stopped appearing in code search, with no warning to anyone. Write the
 escape — `\u0000` inside the template literal — never the byte. To sweep the
 repo, walk `src/` in Python and flag any byte below `0x09`.
 
+It came back. `src/lib/persona/profile.ts` shipped three of them in `0b87bd8` —
+the `SIGNALS_BY_ANSWER` key and its doc comment — so the file that decides a
+traveller's interests was invisible to `rg` for two days. Fixed 2026-08-28. Run
+the sweep after any change that copies a memo key from another module; copying
+the *escape* out of a rendered file gives you the byte.
+
 ### `itineraries.planner_debug` is where the models' own words go
 Two things used to be built and thrown away inside one request: Pass B's
 one-sentence `why` per stop (paid for on the expensive model, read by nobody)
@@ -729,6 +735,273 @@ empty cluster would renumber every day after it.
 library default that changes behaviour silently is a trap, so the product default
 lives in `createItineraryRouted` where somebody can see it.
 
+### A themed circle must ask for food, and must ask for the *nearest* food
+Two changes from one live Bali run. Day three, "Nusa Dua Museum Day", shipped
+**three stops and no lunch**: `validateDay` reported `lost_meal` because the
+nearest place Google calls a restaurant was **8 km away**, in Kuta. All 813
+tests were green.
+
+**`explorePlaces` sent `theme.includedTypes` and nothing else.** A museum day
+asked Google for museums and got them. The city-wide Text Searches never cover
+a resort strip either — "specialty coffee Bali" returns Kuta and Seminyak,
+because that is what is prominent — so the Nearby Search was the only thing that
+could have found Nusa Dua's food, and it was never asked. Every themed anchor
+now gets **two** circles: the premise circle and a meal circle carrying
+`mealSearchTypes(dietary)` from `taxonomy.ts`.
+
+Two circles and not one merged type list, because **a Nearby Search returns at
+most twenty places**. Shared between museums and restaurants that is ten of
+each, and the day needs both.
+
+`mealSearchTypes` deliberately skips the pool-vocabulary half of
+`isSearchableType`. That rule kills types a *model* invented; a constant in our
+own source is not invented, and requiring a cold city's first pool to already
+contain the word `restaurant` is how a day ends up with nothing to eat. It keeps
+the other half — a descriptive-only type still 400s the whole circle — and
+`taxonomy.test.ts` pins every entry against `NON_SEARCHABLE_TYPES` rather than
+filtering at runtime, because silently dropping one would trade a loud 400 for a
+quiet empty circle. A dietary need **widens** the list and never replaces it:
+Google types a vegetarian izakaya `izakaya_restaurant`, so asking only for
+`vegetarian_restaurant` is how a vegetarian gets nowhere to eat rather than
+somewhere to ask. Both directions have a test.
+
+**The meal circle's radius is identical to the premise circle's, and that is a
+decision.** The Bali day failed on types, not distance — its two nearest food
+places were 1.1 km inside a circle that was never asked about food. A wider meal
+circle would also return restaurants beyond `MEMBER_RADIUS_SLACK`, which
+`groupByTheme` then refuses to seat on the day anyway. One variable moves, which
+is what makes its effect measurable.
+
+**`rankPreference` was never set, so Google was ranking by `POPULARITY`.** That
+answers a different question from the one every circle here asks: the twenty
+most prominent places *anywhere in the circle*, not the twenty nearest. On a
+4 km circle round a Nusa Dua museum that is twenty places in Kuta. It is also
+why `feasibility.ts`'s **widen** rung could never fix a thin day — a bigger
+circle ranked by popularity walks further from the anchor, not closer, so
+"search wider" was reliably the wrong instrument. `NEARBY_RANK_PREFERENCE` is
+`DISTANCE` now.
+
+It lives on `NearbySearch` rather than as a bare constant in `runSearch`,
+because `searchCacheKey` has to include it: the same circle ranked two ways is
+two different answers, and a popularity-ranked entry written before this change
+must not serve a distance-ranked request.
+
+**Widening the circle is not the lever, and this is worth knowing before
+reaching for it.** Google's ceiling is 50 km and `NEARBY_MAX_RADIUS_METERS`
+already holds it, but a request returns at most 20 places however big the
+circle. More circles with different type sets is the answer; one bigger circle
+is not.
+
+### `food_court` seats a meal, and the fixtures said otherwise
+Of 20 `food_court` rows in the live store, **12 carry no `restaurant` type at
+all**: `food_court, food, point_of_interest, establishment` and nothing more.
+Satay Street @ Lau Pa Sat, Chinatown Food Street, Kopitiam Food Hall, Hill
+Street Hainanese Curry Rice. Every one is somewhere you eat lunch, and every one
+was invisible to `isRestaurant` — retrieved, scored, ranked, and then unable to
+hold the meal slot it exists to hold. The Bali warung failure at scale.
+
+`singapore-candidates.json` argues the opposite, which is why this is written
+down. All nine of its food courts are the big named hawker centres, and Google
+*does* type those `food_court, market, restaurant` — so both Gate A snapshots
+pass with or without the rule, and **neither fixture can protect it**.
+`taxonomy.test.ts` writes the bare four-type shape out by hand for that reason.
+
+`meal_takeaway` is searched for and deliberately **not** seated: all seven live
+rows carrying it already carry `restaurant`, so promoting it would assert
+something no evidence supports, and a takeaway counter is a weaker claim to a
+seventy-five-minute meal slot than a food hall is. Both directions have a test,
+and a test asserts the general rule — every type in `MEAL_SEARCH_TYPES` must
+either be seatable or be one of the two that hold a `cafe_break`. A search type
+nothing can seat is the warung bug written fresh.
+
+Adding this turned up two **private copies** of the predicate, in
+`funnel.test.ts` and `assign.test.ts`, which is exactly the "fifth copy" its
+doc comment warns about. Both went on asserting the old rule and both still
+passed. They import the real one now.
+
+### "Can this day feed itself" has to mean *this traveller*, and it runs before hydration
+`mealCapacity` counted bare `isRestaurant`, so a vegetarian's cluster of five
+steakhouses read as perfectly feasible. The ladder never fired, nothing was
+widened, nothing was borrowed — and the traveller met the problem at
+`selectMealCandidates` rung 3, "limited vegetarian options, call ahead", after
+every circle had been billed for. **A ladder can only repair a shortage it can
+see.** `mealCapacity(cluster, dietary)` now asks `violatesDietaryNeed`, imported
+from `score.ts` rather than re-derived, so the stage that *counts* meal capacity
+and the stage that later *enforces* it cannot disagree. `borrow` filters the
+same way: lending a vegetarian five steakhouses satisfies the arithmetic and
+feeds nobody. No dietary needs counts exactly as before, which is what keeps
+every other traveller's plan identical.
+
+**Only rung 2 is reachable here, and that is worth knowing before trusting it.**
+`repairFeasibility` runs inside `planThemedDays`, which is pipeline step 2;
+`servesVegetarianFood` arrives with `hydrateShortlist` at step 3. So Google's
+direct boolean is always `undefined` at this point and the count falls to
+`DIETARY_CONFLICT_TYPES` — the type guess. That catches a steakhouse district,
+which is the case that prompted this, and it will miss a place only Google knows
+about. Hydrating earlier is not the fix: hydration is the Atmosphere-tier call
+and it is shortlist-only on purpose.
+
+**The unit tests for this all passed with the pipeline wiring deleted.**
+`feasibility.test.ts` proves the ladder fires once it is *told* who the
+traveller is, and every one of those assertions stayed green when
+`dietary: request.profile.dietary` was removed from `pipeline.ts`. A unit test
+of a function nothing calls with the right argument is not coverage. The
+argument has its own test in `pipeline.test.ts` now — same pool, every
+restaurant turned into a steakhouse, and the vegetarian run must buy a widening
+search the omnivore does not.
+
+### Near AND notable is two circles, because `rankPreference` is one enum
+A themed anchor gets three Nearby Searches: the premise ranked by `DISTANCE`,
+the premise ranked by `POPULARITY`, and the meal circle by `DISTANCE`.
+
+Neither ranking is wrong; they answer different questions. Distance alone never
+returns the famous museum three kilometres out. Popularity alone returned twenty
+places in Kuta for a circle centred in Nusa Dua. The reason to buy both rather
+than pick one is that **which the traveller wants is already a persona
+decision** — `weights.popularity` is signed and `touristTrapPenalty` sets its
+direction, so a deep-immersion traveller wants the obscure place and a
+highlights traveller wants the famous one. Ranking at the Google layer discards
+one tail twenty places before `scorePlace` ever sees it, and no knob downstream
+can get it back. Union first, decide after. Overlap is free — `retrievePlaces`
+dedupes and counts `duplicatesDropped`.
+
+The meal circle stays distance-only: lunch has to be walkable from the rest of
+the day, and among the near ones the scorer can still prefer the popular one.
+
+`nearbyRequest`'s `query` field carries the rank (`nearby:museum@distance`)
+because two circles now differ by nothing else, and a `stats.failures` entry
+reading `nearby:museum` twice names neither of them.
+
+### A ladder that fails silently, and a counter that bills the wrong day
+Two halves of one blind spot, both found on the Bali run and both fixed together.
+
+**`repairs` only ever held rungs that worked.** A repair is pushed when
+`after > before`, so a day that walked all three rungs and fixed nothing left no
+trace whatsoever. Bali's day three did exactly that — zero places to eat,
+widened and found none, no donor within reach, no better geography — and the
+only surviving evidence in the entire run was `validateDay` reporting
+`lost_meal` at the very end. `FeasibilityAttempt` records every day that entered
+the ladder, fixed or not, with the rungs it walked in order. Same rule
+`SchedulingRecord` keeps: "it tried and failed" and "it never ran" are different
+answers and an absent row cannot tell them apart.
+
+The debug page rendered `repairs.length === 0` as **"No day needed the
+feasibility ladder"**, which on that run was false twice over. It reads
+`attempts` now, three-way: `undefined` is an older plan, `[]` is genuinely
+clean, and a non-empty list names each day and whether it is still short.
+
+**`explorePlaces` runs twice and only the first was counted.** The `widen`
+closure kept `wider.places` and dropped `wider.stats`, so
+`stats.explore.billedCalls` reported the opening circles and none of the extra
+searches bought for the days going worst — *the days that cost the most read as
+the cheapest*. Measured on the Kyoto themed fixture: **12 real `searchNearby`
+calls, 9 reported.** Each widen is three circles now rather than one, so the gap
+tripled when the premise/popularity/meal split landed. `mergeRetrievalStats`
+folds them in.
+
+`failures` matters more than the money there. A widening search that 400s — and
+a live Singapore run lost two of three circles to an unsearchable type — was
+discarded with the rest of the stats, so "the ladder tried and found nothing"
+and "the request was rejected" looked identical.
+
+**`groupByTheme`'s `unclaimed` is on the row now**, not just a `console.warn`
+nobody reads after the request ends. It was **87 of 151** on Bali. Note it is
+still only a *count*: the places themselves are discarded, which is what stops
+`validate.ts` reaching them when a day has nothing to eat.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **3**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately.
+
+One assertion here was written worthless and caught by mutation:
+`expect(unclaimed).toBeGreaterThanOrEqual(0)` passes for a dead counter. It
+asserts `> 0` against the Kyoto fixture, where three walkable circles cannot
+cover 86 places.
+
+### A starving day can reach the places no theme would claim
+`groupByTheme` refuses a place further from an anchor than `MEMBER_RADIUS_SLACK`
+allows. That rule is right and it leaves **over half the pool on the floor** —
+45 of 84 located on the Kyoto fixture, 87 of 151 on a live Bali run, every one
+already retrieved and already billed for. Meanwhile `alternatesFor` only ever
+offered the day's *own* cluster, so a themed day whose circle held nothing
+edible shipped `lost_meal` while the restaurants that would have fixed it sat
+unused three streets away.
+
+`GroupResult.unclaimed` is the **places** now, not a count — a count cannot be
+handed to a day that needs somewhere to eat.
+
+Three rules keep this from being the "5.7 km cafe" bug again:
+
+- **Meal-capable only, and this traveller's meals.** Filtered by
+  `mealSlotReason`, the same predicate `validate.ts` enforces — offering a
+  candidate the validator will refuse a moment later is how a repair path
+  silently does nothing.
+- **The containment is structural, not a promise.** `admits` refuses a
+  restaurant for a plain `activity` and `withFill` excludes restaurants
+  outright, so a list of restaurants can reach a meal slot or a `cafe_break`
+  and nothing else. Putting a *sight* in the reserve would have no such guard.
+- **A hard distance cap, deliberately wider than membership.** These places are
+  outside the membership reach by definition, so reusing that bound returns
+  nothing. It is `radiusFor(hint) * MEMBER_RADIUS_SLACK + walkMaxMeters` — the
+  day's own circle plus one hop as far as this traveller travels between stops.
+
+Sorted nearest-first and appended **last**, so the cluster's own ranked
+candidates are always spent first. Reserve entries score `0`: they never
+competed in the funnel, and a borrowed number would rank them against places
+that earned theirs.
+
+**Know how narrow this is before relying on it.** For a `walkable` theme the
+reserve's range (1800–3800 m) sits *inside* the widen rung's circle (4000 m),
+and widen pushes what it finds straight into the cluster without a membership
+check. So on the commonest theme size the reserve only earns its keep when
+widen **fails or comes back thin** — a 400 on an unsearchable type, or the
+20-result cap hiding a restaurant a text search already found. It is a genuine
+backstop for `tight` and `wide` themes, where the widen circle does not cover
+the reserve range, and a backstop for a failed widen everywhere else. That is
+less than it first sounds like, and it is the honest scope.
+
+**`reserve` is a required argument on purpose.** An empty reserve behaves
+exactly like no reserve, so a caller that quietly stopped passing it would keep
+every assertion green — a mutation test confirmed it. Making it a parameter
+turns that into a compile error. A caller with nothing to offer passes
+`NO_MEAL_RESERVE` and says so on the page.
+
+### A dietary need is a phrase, not just a type — and it is asked where the day is
+`includedTypes` is coarse on exactly this question. Google types a great
+vegetarian-friendly izakaya `izakaya_restaurant`, never
+`vegetarian_restaurant`, so a meal circle asking for types finds the places that
+**label** themselves and misses everywhere that simply has good vegetarian food.
+That is the long tail `taxonomy.ts` has always said Text Search is for.
+
+`dietaryBridgeFor(need).queries` already carried the phrases. They were only
+ever fired **city-wide**, by `buildSearchPlan`, where the results cluster
+wherever the city is busiest rather than where any given day actually is. On a
+three-day trip that is one neighbourhood's worth of answers standing in for
+three. Each themed anchor now also gets those phrases, biased to the same circle
+the premise and meal circles use — `textNearRequest` in `retrieval.ts`.
+
+**`locationBias` biases, it does not restrict** — Google may still answer with
+something outside the circle. That is safe rather than sloppy: an anchored find
+too far from the day is refused by `MEMBER_RADIUS_SLACK` at grouping, and the
+meal reserve caps its own reach. The stray result is dropped downstream instead
+of seated.
+
+It is in `searchCacheKey`. The same phrase asked in two neighbourhoods is two
+different answers, and neither may serve the city-wide call `buildSearchPlan`
+already made with the identical `textQuery`.
+
+Two rules on what gets asked, both with a test. **Only a traveller with a need
+pays** — an empty `dietary` fires nothing at all. And **a need with no phrases
+in the bridge fires nothing**, rather than a query we invented: an invented
+query is a billed call returning whatever Google makes of a word we chose.
+
+A negative never goes in one of these. "no seafood" matches seafood
+restaurants; refusals are `DIETARY_CONFLICT_TYPES`' job, after the search.
+
+Note the offline suite proves the **requests** and can prove nothing about the
+answers: `createFakeGoogle` pages through its fixture and ignores `textQuery`,
+`includedTypes`, `rankPreference` and `locationBias` alike. Every circle around
+one anchor comes back identical. Only a live run tests the response layer.
+
 ### Theme infeasibility is discovered after you have paid
 A thin geographic cluster is visible before a cent is spent (`shortfall`); a thin
 theme is only visible after its Nearby Search is billed. `feasibility.ts` is the
@@ -874,6 +1147,56 @@ on a card. All four now render in the detail views (`LocationDetailView` in view
 mode, `LocationDetailPanel` in edit mode), above Google's `editorial_summary` —
 one is written for this traveller, the other is Google's blurb for everyone.
 
+### A day can also run long at the *end*, and `pickVictim` needs blame for that too
+The mirror of the late-lunch rule two sections up, found on a live Singapore
+trip for a cafés-and-nightlife persona: three days that were **offered 9, 8 and
+8 stops and shipped 2, 3 and 2**, with no repair, no failure and no meal missing
+its window. Every survivor was a meal. Nothing in the trip said why.
+
+`blockedBefore` narrows blame only when a *meal* misses its window. A day that
+instead runs past `dayEndMin` set nothing, so `pickVictim` fell back to the
+globally lowest-scored stop — and on a day with a hard anchor in it, that is
+almost always a stop whose removal moves the end of the day by **zero minutes**.
+Dinner re-anchors at 18:00 however early you arrive, so shedding the 9 AM coffee
+cannot bring a 23:15 nightcap home. The day shed its whole morning by score
+before it reached the two bars behind dinner that were the cause.
+
+`stampDay` returns `overrunFrom` now: the index of the last stop that **waited**
+for its window. A stop that waits swallows every spare minute in front of it, so
+blame is that stop and everything after it. Measured on the real day — the
+packer dropped six stops and kept three; dropping the one stop that actually
+caused the overrun keeps all eight others.
+
+Three things worth knowing before touching it:
+
+- **The waiting stop is inside its own blame set.** Dropping it does shorten the
+  tail, because everything after it then stops waiting too.
+- **`blockedBefore` wins when both are set.** A stamp that failed on a meal
+  window never reached the end of the day, so its overrun is not yet a fact.
+  Both are read from the *same* stamp in `fitDay` so they cannot describe
+  different attempts.
+- **Neither Gate A city can see this.** Both fixtures are sight-heavy, so no day
+  ends with a stop behind a waiting anchor. Instrumented, the new narrowing
+  fires on **32 of 53** drops across the two snapshots and changes the victim in
+  **none** of them — the path is well covered and simply agrees there. Neither
+  snapshot moved. A fixture that ships bars after dinner would close the gap.
+
+**Squeezing per segment was considered and rejected.** It changes no outcome.
+When a day eventually fits, `growDay` gives the wasted minutes straight back —
+a morning stop cut for nothing grows into idle time the lunch anchor was going
+to waste anyway, and growth before an anchor never competes with growth after
+it. When a day cannot fit, the squeeze is irrelevant: the search already reaches
+"every ordinary stop on its floor", shrinking never delays anything downstream,
+so if any set of sizes fits then the all-floors set fits. The proportional
+squeeze **cannot miss a feasible day**. What imprecision remains is `growDay`'s
+greedy grow-back within one segment, which is a different function's problem.
+
+One test in `pack.test.ts` was green for the wrong reason and is fixed:
+`'still drops by score when the day merely runs long'` claimed no meal missed
+its window while its dinner arrived at 1245 against a 1200 latest start. The
+fifteen-minute pace buffer on each leg is what hid it — it had been exercising
+`blockedBefore` and would have passed whatever the overrun rule said.
+
 ### A repair can undo the route order, and no fixture catches it
 `validate.ts` swaps a replacement into the failing stop's **index**, which is
 correct for the clock and blind to the map — so a day that left `sequence.ts` in
@@ -888,11 +1211,49 @@ every weekday, and a repair drops stops, so the shipped path is shorter than
 Pass B's either way. The wiring test asserts what it can and says so in a
 comment. A fixture that validates clean would close it.
 
-### Travel is measured now, not guessed — `routes.ts`
-`createStraightLineTravel` divided great-circle metres by 80 m/min and called
-anything under 1200 m a walk. That one threshold decided the **mode** as well as
-the minutes, so a 1035 m leg was a walk and a 1208 m leg was a bus, 173 metres
-apart and neither looked up. Measured against Google on day one of the Singapore
+### Travel: the matrix still exists, it is just no longer the default
+`PipelineDeps.routing` picks between `travel-estimate.ts` (free, a model) and
+`routes.ts` (billed, a measurement), and it defaults to **`"estimate"`**. That
+reverses this repo's usual rule about product defaults living at the caller, on
+purpose: the rule is about choices that change what a traveller gets, and this
+one changes what a run *spends*. A library whose default is to spend money bills
+whoever forgets it is there. `stats.travel.source` says which path answered, and
+is `undefined` when a caller injected `getTravelLeg` and neither ran — "zero
+requests" and "we never asked" are different answers.
+
+The trigger was 29,310 billed elements over a couple of weeks of demo trips. Two
+matrices per day over a day's stops **plus its spares plus six replacements** is
+about 650 elements a day; nothing cached a leg, so every replan of Singapore
+bought the same pairs again. If you turn the matrix back on, cache legs first —
+a `(from, to, mode, weekday)` table is the missing piece, not a smaller `N`.
+
+**The estimator was fitted, not guessed, and the fit is the interesting part.**
+Against 81 legs Google really routed (seven travellers, sixteen complete days,
+recovered from `scripts/output/persona-trips.json` joined to `locations`), the
+old `createStraightLineTravel` understated **53 of them and overstated 3**, and
+understated a whole day's travel by 525 minutes out of 2440. That is not noise:
+the packer believes the day is 22% emptier than it is, fills it, and the
+validator then drops what will not fit — so some of the "offered 8, shipped 2"
+days were this. The replacement is crow-flight × **1.5** (median measured 1.52),
+80 street m/min on foot, and 8 minutes plus 225 street m/min on transit. After:
+3.8 minutes of error per leg against 7.3, 434 m against 844 m, bias gone (18
+over, 19 under), a day's total out by 4% rather than 22%. Fitting on six
+travellers and testing on the seventh held (1.9–6.4 min), so it is not seven
+trips of overfitting.
+
+**What is genuinely lost is the mode.** Whether the bus beats the walk needs a
+timetable and nobody gives those away at city scale, so the choice is a
+threshold again — the exact thing `routes.ts` was written to stop. It agrees
+with Google on 89% of those 81 legs. The threshold is the traveller's own
+`walkMaxMeters`, plus the same `TRANSIT_MIN_SAVING_MINUTES` margin the matrix
+uses, which puts the crossover at 1614 street metres. Importing that margin from
+`routes.ts` rather than redeclaring it is deliberate: a measured leg and an
+estimated one must not disagree about when boarding is worth it.
+
+The rest of this section is about the matrix, and all of it still holds when you
+ask for it.
+
+Measured against Google on day one of the Singapore
 trip: the straight line understated distance by 30–100% every leg (1.0 km real
 1.3, 1.1 real 1.9, 2.2 real 3.0), and 28 of 72 pairs are genuinely faster by
 transit.
@@ -913,7 +1274,7 @@ Caps are per request and transit's is six times tighter: 625 elements walking,
 `MATRIX_ALTERNATES` of a day's replacements go in — the rest fall back and are
 counted rather than hidden.
 
-**Everything degrades to the straight line**, which is how this could fail
+**Everything degrades to the estimator**, which is how this could fail
 invisibly: a trip built entirely on fallbacks is indistinguishable from a routed
 one. `stats.travel.estimated` and `stats.travel.errors` are the only way to
 tell, so the tests assert on counters, not on "a leg came back".
