@@ -1,1 +1,0 @@
-Next.js 15 App Router with Turbopack, React 19, TypeScript strict, Tailwind v4 (CSS-first), TanStack Query, Supabase JS client, @vis.gl/react-google-maps, motion@12, @base-ui/react primitives, Vitest + Vite for testing.

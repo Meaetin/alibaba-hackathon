@@ -1,1 +1,0 @@
-TypeScript with TanStack React Query for unified caching across `api_clients` and `supabase_layer`; Google Maps Platform via `maps`; Supabase client via `supabase_layer`; motion/react animation presets via `motion`; Next.js environment variables (`NEXT_PUBLIC_SITE_URL`) for site-origin configuration.

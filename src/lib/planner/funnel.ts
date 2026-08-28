@@ -15,8 +15,10 @@
  * documented failure path, or a thin city breaks the whole run.
  */
 
+import { DEFAULT_SCORING_KNOBS, type PlannerKnobs, type ScoringKnobs } from "./knobs";
 import type { CandidatePlace, PreferenceProfile } from "./types";
 import type { PlaceCluster } from "./cluster";
+import type { DayTheme } from "./theme";
 import {
   affinity,
   hardFilterReason,
@@ -52,6 +54,23 @@ export interface FunnelOptions {
    * a recorded reason — otherwise they vanish between the two modules.
    */
   unlocated?: readonly CandidatePlace[];
+  /**
+   * The traveller's resolved knobs. Only the scoring subset is read here; the
+   * default is today's constants, so a funnel run without a persona narrows
+   * exactly as it always did.
+   */
+  knobs?: ScoringKnobs;
+  /**
+   * The input clusters are already one per day, in day order — keep them that
+   * way, empties included.
+   *
+   * Off by default, and the default is the old behaviour: geographic clusters
+   * carry no day of their own, so the funnel ranks them and the best
+   * neighbourhood becomes day one. A **themed** cluster carries `theme.dayIndex`,
+   * and re-ranking would put day three's premise on day one. Dropping an empty
+   * one would silently renumber every day after it, which is worse.
+   */
+  dayAligned?: boolean;
 }
 
 export const FUNNEL_DEFAULTS = {
@@ -61,6 +80,8 @@ export const FUNNEL_DEFAULTS = {
   maxPerCuisine: 3,
   mealsPerCluster: 2,
   unlocated: [],
+  knobs: DEFAULT_SCORING_KNOBS,
+  dayAligned: false,
 } as const satisfies Required<FunnelOptions>;
 
 /** Stage names double as the stats keys: a new stage added to `FunnelStages`
@@ -85,6 +106,13 @@ export interface DroppedCandidate {
  */
 export interface ScoredCluster {
   centroid: PlaceCluster["centroid"];
+  /**
+   * What this day is about, when the theme pass named it. Carried through the
+   * funnel untouched so Pass B and Pass C can read a premise the funnel had no
+   * opinion about — absent on the geographic path, which is every trip that
+   * did not ask for themes.
+   */
+  theme?: DayTheme;
   /** Neighborhood name. Still unfilled here — nothing in the deterministic
    *  core knows one; Pass B or a reverse-geocode fills it later. */
   label?: string;
@@ -157,11 +185,12 @@ function roleOf(place: CandidatePlace): (typeof CLUSTER_ROLES)[number] {
 export function scoreCluster(
   places: readonly CandidatePlace[],
   profile: PreferenceProfile,
+  knobs: ScoringKnobs = DEFAULT_SCORING_KNOBS,
 ): number {
   if (places.length === 0) return 0;
 
   const top = places
-    .map((place) => scorePlace(place, profile).score)
+    .map((place) => scorePlace(place, profile, knobs).score)
     .sort((a, b) => b - a)
     .slice(0, CLUSTER_SCORE_TOP_N);
   const base = top.reduce((sum, s) => sum + s, 0) / top.length;
@@ -187,11 +216,11 @@ export function scoreCluster(
  * cluster per day and cannot re-derive it from a flat list.
  */
 export function runFunnel(
-  clusters: readonly PlaceCluster[],
+  clusters: readonly (PlaceCluster & { theme?: DayTheme })[],
   profile: PreferenceProfile,
   options: FunnelOptions = {},
 ): FunnelResult {
-  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated } = {
+  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated, knobs, dayAligned } = {
     ...FUNNEL_DEFAULTS,
     ...options,
   };
@@ -221,7 +250,7 @@ export function runFunnel(
   const cappedByCluster = filteredByCluster.map((places) => {
     const ranked = places
       .map((place) => {
-        const scored = scorePlace(place, profile);
+        const scored = scorePlace(place, profile, knobs);
         scores.set(place.placeId, scored);
         return { place, scored };
       })
@@ -325,7 +354,8 @@ export function runFunnel(
       return {
         centroid: cluster.centroid,
         label: cluster.label,
-        score: scoreCluster(members, profile),
+        ...(cluster.theme ? { theme: cluster.theme } : {}),
+        score: scoreCluster(members, profile, knobs),
         places: members,
         scored: members.map((p) => scores.get(p.placeId)!),
         ...(meals < mealsPerCluster
@@ -335,8 +365,8 @@ export function runFunnel(
           : {}),
       };
     })
-    .filter((c) => c.places.length > 0)
-    .sort((a, b) => b.score - a.score);
+    .filter((c) => dayAligned || c.places.length > 0);
+  if (!dayAligned) scoredClusters.sort((a, b) => b.score - a.score);
 
   return {
     stages: { retrieved, afterFilters, afterClusterCap, afterGlobalCap },
@@ -368,19 +398,51 @@ export const SERENDIPITY_MAX_REVIEWS = 500;
 export function pickSerendipity(
   candidates: readonly CandidatePlace[],
   profile: PreferenceProfile,
+  knobs: PlannerKnobs | ScoringKnobs = DEFAULT_SCORING_KNOBS,
+  maxReviews: number = SERENDIPITY_MAX_REVIEWS,
 ): CandidatePlace | undefined {
   let best: CandidatePlace | undefined;
   let bestScore = -Infinity;
   for (const place of candidates) {
-    if (place.userRatingCount == null || place.userRatingCount >= SERENDIPITY_MAX_REVIEWS) continue;
+    if (place.userRatingCount == null || place.userRatingCount >= maxReviews) continue;
     if (affinity(place, profile.interests) === 0) continue;
-    const { score } = scorePlace(place, profile);
+    const { score } = scorePlace(place, profile, knobs);
     if (score > bestScore) {
       bestScore = score;
       best = place;
     }
   }
   return best;
+}
+
+/**
+ * The trip's wildcards: the best few "great but not famous" places the funnel
+ * shortlisted, one per call to `pickSerendipity` with the previous winners
+ * removed so it cannot return the same place twice.
+ *
+ * `count` is `PlannerKnobs.serendipityPerTrip`, which is **zero without a
+ * persona** — this planner has never shipped a wildcard, and "today's
+ * behaviour" therefore means none. Only an `improvised` traveller asks for one.
+ */
+export function pickSerendipitySlots(
+  candidates: readonly CandidatePlace[],
+  profile: PreferenceProfile,
+  knobs: PlannerKnobs,
+): CandidatePlace[] {
+  const picked: CandidatePlace[] = [];
+  const taken = new Set<string>();
+  for (let i = 0; i < knobs.serendipityPerTrip; i++) {
+    const next = pickSerendipity(
+      candidates.filter((place) => !taken.has(place.placeId)),
+      profile,
+      knobs,
+      knobs.serendipityMaxReviews,
+    );
+    if (!next) break;
+    taken.add(next.placeId);
+    picked.push(next);
+  }
+  return picked;
 }
 
 // ── dietary degradation ladder ───────────────────────────────────────────────
@@ -471,24 +533,31 @@ export interface BudgetWidening {
 export function widenBudget(
   bucket: readonly CandidatePlace[],
   profile: PreferenceProfile,
+  knobs: PlannerKnobs | undefined = undefined,
 ): BudgetWidening {
   const budget = profile.budget;
+  const scoring: ScoringKnobs = knobs ?? DEFAULT_SCORING_KNOBS;
+  // How far the traveller will bend. Absent knobs means the old unbounded walk
+  // to the top of the scale; a `polished` persona stops after one step, which
+  // is the difference between "a bit dearer than I said" and "not what I asked
+  // for at all".
+  const maxSteps = knobs?.budgetWidenSteps ?? MAX_BUDGET;
   if (budget == null) {
     return {
       places: [...bucket],
-      scored: bucket.map((p) => scorePlace(p, profile)),
+      scored: bucket.map((p) => scorePlace(p, profile, scoring)),
       widenedBy: 0,
     };
   }
 
-  for (let widenedBy = 0; budget + widenedBy <= MAX_BUDGET; widenedBy++) {
+  for (let widenedBy = 0; budget + widenedBy <= MAX_BUDGET && widenedBy <= maxSteps; widenedBy++) {
     const effective = budget + widenedBy;
     const survivors = bucket.filter(
       (p) => p.priceLevel == null || p.priceLevel - effective < BUDGET_KILL_STEPS,
     );
     if (survivors.length === 0) continue;
     const scored = survivors.map((place) => {
-      const s = scorePlace(place, profile);
+      const s = scorePlace(place, profile, scoring);
       return widenedBy === 0
         ? s
         : { ...s, reasons: [...s.reasons, `budget widened by ${widenedBy}`] };
@@ -496,7 +565,8 @@ export function widenBudget(
     return { places: survivors, scored, widenedBy };
   }
 
-  // Unreachable with the 0–4 ordinal (at effective budget 4 nothing can be
-  // 2+ steps above), but never fail the day on a future scale change.
-  return { places: [...bucket], scored: bucket.map((p) => scorePlace(p, profile)), widenedBy: 0 };
+  // Reachable now that widening is bounded: a `polished` traveller who allows
+  // one step and finds nothing within it gets the whole bucket back rather than
+  // an empty day. Never fail the day.
+  return { places: [...bucket], scored: bucket.map((p) => scorePlace(p, profile, scoring)), widenedBy: 0 };
 }

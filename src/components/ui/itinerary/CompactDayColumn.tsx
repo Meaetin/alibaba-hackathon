@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { formatDayDate, parseTimeMins } from "./activity-utils";
 import { CompactActivityCard, getActivityCardLayout } from "./CompactActivityCard";
 import { TransportDetailRow } from "./TransportDetailRow";
-import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 interface CompactDayColumnProps {
   day: ItineraryDayDetail;

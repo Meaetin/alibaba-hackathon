@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: app_routes/collections
-title: Collections Routes (List, Detail & Public View)
-scope:
-    - src/app/collections/
-source_files: []
-depends_on: []
-related_to:
-    - path: lib_core/api_clients

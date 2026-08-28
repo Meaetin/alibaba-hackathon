@@ -1,1 +1,0 @@
-Next.js App Router client components, Framer Motion (`motion/react`) for layout animations, Lucide icons, Supabase client for direct DB writes, React Query for caching/invalidation, and a custom job queue pattern over `createJob`/`retryJob`/`detachJob`.

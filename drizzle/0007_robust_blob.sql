@@ -1,0 +1,1 @@
+DROP TABLE "enrichment_batches" CASCADE;

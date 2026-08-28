@@ -5,7 +5,9 @@ import {
   resolveVisitDuration,
   DEFAULT_VISIT_MINUTES,
   PACE_MULTIPLIERS,
+  VISIT_STEP_MINUTES,
   type VisitDuration,
+  MAX_LIFT_MINUTES,
 } from './duration'
 
 function makePlace(overrides: Partial<CandidatePlace> = {}): CandidatePlace {
@@ -63,13 +65,34 @@ describe('type heuristics', () => {
 describe('pace multipliers', () => {
   const museum = makePlace({ types: ['museum'] })
 
+  // The products land on the step grid, not on the exact multiplier: 90 × 1.2
+  // is 108 and 90 × 0.85 is 76.5, and both are rounded to the nearest five.
+  // Nothing measured a museum to the minute in the first place — 90 is a
+  // constant in a table — so the grid throws away precision that was never
+  // there and buys a start time a person can read.
   it.each([
-    ['relaxed', Math.round(90 * 1.2)],
+    ['relaxed', 110],
     ['balanced', 90],
-    ['packed', Math.round(90 * 0.85)],
-  ] as const)('%s applies ×%f to preferred', (pace, expected) => {
+    ['packed', 75],
+  ] as const)('%s applies ×%f to preferred, rounded to the step grid', (pace, expected) => {
     const d = resolveVisitDuration(museum, undefined, pace)
     expect(d.preferred).toBe(expected)
+    expect(d.preferred % VISIT_STEP_MINUTES).toBe(0)
+  })
+
+  it('puts every bound on the step grid, whichever rung answered', () => {
+    const rungs = [
+      resolveVisitDuration(makePlace({ stayDuration: 37 }), undefined, 'balanced'),
+      resolveVisitDuration(makePlace(), { avgVisitMinutes: [23, 71] }, 'balanced'),
+      resolveVisitDuration(museum, undefined, 'packed'),
+      resolveVisitDuration(makePlace({ types: ['unknown_type'] }), undefined, 'relaxed'),
+    ]
+    for (const d of rungs) {
+      expect(d.min % VISIT_STEP_MINUTES).toBe(0)
+      expect(d.preferred % VISIT_STEP_MINUTES).toBe(0)
+      expect(d.max % VISIT_STEP_MINUTES).toBe(0)
+      expectSane(d)
+    }
   })
 
   it('multiplies preferred only — min and max are identical across paces', () => {
@@ -116,5 +139,48 @@ describe('fallback', () => {
     const d = resolveVisitDuration(makePlace({ types: [] }), undefined, 'balanced')
     expect(d.preferred).toBe(DEFAULT_VISIT_MINUTES)
     expectSane(d)
+  })
+})
+
+describe('the ceiling is capped, not multiplied', () => {
+  // The rule that stops a relaxed day over-committing before it starts. The old
+  // ceiling was preferred * 1.5, which grew fastest exactly where it hurt most.
+  it('never lifts a visit more than MAX_LIFT_MINUTES above preferred', () => {
+    for (const stay of [15, 23, 45, 60, 83, 120, 135, 165, 195, 300]) {
+      const { preferred, max } = resolveVisitDuration(
+        { placeId: 'p', name: 'p', types: [], stayDuration: stay },
+        undefined,
+        'balanced',
+      )
+      expect(max - preferred, `stay ${stay}`).toBeLessThanOrEqual(MAX_LIFT_MINUTES)
+      expect(max, `stay ${stay}`).toBeGreaterThanOrEqual(preferred)
+    }
+  })
+
+  it('shortens the long tail and leaves short visits alone', () => {
+    const long = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [], stayDuration: 195 },
+      undefined,
+      'balanced',
+    )
+    // 195 * 1.5 was 293. The gallery that ate a Singapore day.
+    expect(long.max).toBeLessThan(293)
+
+    const short = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [], stayDuration: 45 },
+      undefined,
+      'balanced',
+    )
+    expect(short.max).toBe(70) // unchanged: 45 * 1.5 rounds to the same step
+  })
+
+  it('caps a model-authored range too', () => {
+    // "90 to 300 minutes" must not buy a five-hour stop no other rung could.
+    const { preferred, max } = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [] },
+      { avgVisitMinutes: [90, 300] },
+      'balanced',
+    )
+    expect(max - preferred).toBeLessThanOrEqual(MAX_LIFT_MINUTES)
   })
 })

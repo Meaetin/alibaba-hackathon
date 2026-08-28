@@ -34,14 +34,16 @@ import { queryKeys } from "@/lib/query/queryKeys";
 
 import { useNavbarVisibility } from "@/contexts/NavbarVisibilityContext";
 import { useNavbarFilter } from "@/contexts/NavbarFilterContext";
-import { createClient } from "@/lib/supabase/client";
 import { useRecordView } from "@/hooks/useRecordView";
-import { useItineraryRealtime } from "@/hooks/useItineraryRealtime";
 import { useItineraryDetailQuery } from "@/hooks/queries/useItineraryDetailQuery";
-import { useCollaboratorProfilesQuery } from "@/hooks/queries/useCollaboratorProfilesQuery";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
-import { getItineraryDetail } from "@/lib/supabase/queries/home";
-import type { ItineraryDetail, ItineraryDayDetail, ItineraryActivityDetail, ActivityLocation } from "@/lib/supabase/queries/home";
+import { fetchItineraryDetail } from "@/lib/api/itineraries";
+import type {
+  ItineraryDetail,
+  ItineraryDayDetail,
+  ItineraryActivityDetail,
+  ActivityLocationDetail as ActivityLocation,
+} from "@/lib/db/itinerary-detail";
 import type { MapLocation, MapPolylineSegment } from "@/components/ui/map/MapContainer";
 import { MapSearchBar } from "@/components/ui/itinerary/MapSearchBar";
 import { MAP_SEARCH_CHIPS, placeNeedsDetails, toPlaceDetailsPayload, type PlaceDetailsPayload, type PlaceSearchRequest, type PlaceSearchResult } from "@/lib/maps/place-search";
@@ -50,7 +52,6 @@ import { resolveGoogleMapsUrl } from "@/lib/api/locations";
 import { locationRowToPlaceSearchResult } from "@/lib/maps/location-row";
 import type { PlaceDetailsFetcher, PlaceSearchRunner } from "@/components/ui/map/GoogleMapDetail";
 import { createCollection, getCollections, getCollection, type CollectionWithRole, type CollectionWithLocations, type Location } from "@/lib/api/collections";
-import { addLocationsToCollection } from "@/lib/supabase/queries";
 import { updateItinerary, moveActivity, createActivity, deleteActivity, deleteItinerary, optimizeDayRoute, previewDayLegs, setActivityTravelMode, type CascadedActivity } from "@/lib/api/itineraries";
 import {
   DragOverlay,
@@ -62,18 +63,17 @@ import {
 import type { DragStartEvent, DragEndEvent, Over } from "@dnd-kit/core";
 import { Kanban, type KanbanDropTarget } from "@/components/ui/primitives/Kanban";
 import type { LodgingFormData } from "@/components/ui/detail-views/LodgingForm";
-import { InviteModal, type SharingState } from "@/components/ui/modals/InviteModal";
 import { LocationDetailView } from "@/components/ui/detail-views/LocationDetailView";
 import { extractFlightsFromPDF, getFlights, createFlight, type ExtractedFlight } from "@/lib/api/flights";
-import { extractLodgingsFromPDF, getLodgings, createLodging } from "@/lib/api/lodgings";
-import { uploadAttachment, listAttachments, deleteAttachment, getAttachmentSignedUrl, type ItineraryAttachmentSummary } from "@/lib/api/attachments";
+import { getLodgings } from "@/lib/api/lodgings";
+import { uploadAttachment, deleteAttachment, getAttachmentSignedUrl, type ItineraryAttachmentSummary } from "@/lib/api/attachments";
 import { FilePillHeader } from "@/components/ui/detail-views/FilePillHeader";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
 import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";
 import type { LodgingCardProps } from "@/components/ui/detail-views/LodgingCard";
 import { ItineraryQuickView } from "@/components/ui/itinerary/ItineraryQuickView";
 import { useNavigationLoading } from "@/contexts/NavigationLoadingContext";
-import { buildLodgingMap, minsToHHMM, parseTimeMins, isRealActivity, sameWallTime } from "@/components/ui/itinerary/activity-utils";
+import { minsToHHMM, parseTimeMins, isRealActivity, sameWallTime } from "@/components/ui/itinerary/activity-utils";
 import { ItineraryPageHeader } from "@/components/ui/itinerary/ItineraryPageHeader";
 import { ItineraryMapSection } from "@/components/ui/itinerary/ItineraryMapSection";
 import { type ItineraryTab } from "@/components/ui/itinerary/ItineraryTabBar";
@@ -135,10 +135,9 @@ function mergeServerDaysPreservingPending(
     serverActs: ItineraryActivityDetail[],
   ) =>
     serverActs.some((s) => {
-      // Authoritative match: the client token threaded through the optimistic add,
-      // the POST, the DB row, and the realtime echo. Deterministic even when the
-      // server rewrote name/start_time (the only signal a custom add otherwise has).
-      if (temp.correlation_id && s.correlation_id) return s.correlation_id === temp.correlation_id;
+      // `correlation_id` used to carry a client token from an optimistic add
+      // through the POST to the realtime echo. There is no POST now, so the
+      // match falls to the ids the row actually has.
       if (temp.location_id && s.location_id) return s.location_id === temp.location_id;
       if (temp.place_id && s.place_id) return s.place_id === temp.place_id;
       return s.name === temp.name && s.start_time === temp.start_time;
@@ -191,12 +190,12 @@ function searchPlaceToActivityLocationFields(place: PlaceSearchResult): Partial<
     primary_type: place.primaryType ?? null,
     categories: place.types ?? null,
     business_status: place.businessStatus ?? null,
-    website_uri: place.website ?? null,
-    national_phone_number: place.phone ?? null,
-    google_maps_links: place.googleMapsLinks ?? null,
-    regular_opening_hours: hasHours
-      ? { periods: place.openingHoursPeriods, weekdayDescriptions: place.openingHours }
-      : null,
+    // Website, phone and the Maps links are not columns in `locations`, so a
+    // searched place cannot carry them into a saved activity either.
+    regular_opening_hours:
+      hasHours && place.openingHours?.length
+        ? { weekdayDescriptions: place.openingHours }
+        : null,
     ...(place.photoStorageUrls?.length ? { photo_urls: place.photoStorageUrls } : {}),
   };
 }
@@ -233,19 +232,30 @@ function activityToDetailLocation(activity: ItineraryActivityDetail) {
   return {
     name: activity.name,
     images: loc?.photo_urls ?? (activity.photo_url ? [activity.photo_url] : []),
-    description: loc?.location_context ?? "",
+    description: loc?.editorial_summary ?? "",
     address: loc?.formatted_address ?? "",
     openingHoursLines: weekdayDescriptionsFrom(loc?.regular_opening_hours),
-    phone: loc?.international_phone_number ?? "",
-    website: loc?.website_uri ?? "",
+    // Phone and website are not columns in `locations`.
+    phone: "",
+    website: "",
     stayDurationMinutes: loc?.stay_duration ?? null,
     priceRange: loc?.price_range ?? null,
     primaryType: loc?.primary_type ?? "",
     latitude: loc?.latitude ?? 0,
     longitude: loc?.longitude ?? 0,
     googleMapsUri: loc?.google_maps_uri ?? null,
+    placeId: activity.place_id,
+    stopContent: activity.content ?? null,
   };
 }
+
+/**
+ * The planner has no timezone. `hours.ts` takes an injected weekday and nothing
+ * in the pipeline derives one, so every stored minute is UTC and every reader
+ * on this page already defaulted to it. Named once here rather than repeated as
+ * `?? "UTC"` at twenty call sites.
+ */
+const ITINERARY_TIMEZONE = "UTC";
 
 export default function ItineraryDetailPage() {
   const prefersReducedMotion = useReducedMotion();
@@ -287,17 +297,8 @@ export default function ItineraryDetailPage() {
     }
   }, [isLoading, stopLoading]);
 
-  const userIds = useMemo(
-    () =>
-      itinerary
-        ? Array.from(
-            new Set([itinerary.owner_id, ...itinerary.collaborators.map((c) => c.user_id)]),
-          )
-        : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [itinerary?.owner_id, itinerary?.collaborators],
-  );
-  const { data: collaboratorProfiles = [] } = useCollaboratorProfilesQuery(userIds);
+  // Collaborators are gone with auth: there is no `user_itinerary` table and no
+  // owner to seed the list from.
   // Prevents the dateRange effect from firing during the initial data load
   const dateRangeInitialized = useRef(false);
   // Last range that passed the 30-day cap, used to roll back a rejected change
@@ -363,8 +364,7 @@ export default function ItineraryDetailPage() {
   const [collections, setCollections] = useState<CollectionWithRole[]>([]);
   const [collectionsLoading, setCollectionsLoading] = useState(false);
   const [selectedCollection] = useState<CollectionWithLocations | null>(null);
-  const [itineraryCollection, setItineraryCollection] = useState<CollectionWithLocations | null>(null);
-  const [, setItineraryCollectionLoading] = useState(false);
+  const [itineraryCollection] = useState<CollectionWithLocations | null>(null);
 
   // Collections offered in the location detail-view "Add to" picker.
   const detailSaveMenuCollections = useMemo(
@@ -386,8 +386,9 @@ export default function ItineraryDetailPage() {
       const locId = detailActivity?.location?.id;
       if (!locId) return;
       try {
-        const supabase = createClient();
-        const { error } = await addLocationsToCollection(supabase, targetCollectionId, [locId]);
+        // Collections have no store in this build; the table this wrote to left
+        // with Supabase. Failing loudly beats a success toast over no write.
+        const error = new Error("Collections are not available in this build.");
         if (error) throw error;
         const target = collections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added to ${target?.name ?? "collection"}` });
@@ -443,16 +444,16 @@ export default function ItineraryDetailPage() {
   // Keyed by IATA code. Populated from the `locations` table (which the backend
   // upserts during flight processing) and used to render airport markers + route
   // polylines on the edit-mode map.
-  const [airportLocations, setAirportLocations] = useState<Map<string, { name: string; latitude: number; longitude: number; address?: string }>>(new Map());
+  // Read-only, and permanently empty: the lookup that filled it is gone (see
+  // the note in the flights effect below). Kept as state rather than a bare
+  // constant so restoring the fetch is one line, not a re-plumbing.
+  const [airportLocations] = useState<Map<string, { name: string; latitude: number; longitude: number; address?: string }>>(new Map());
   const [showLodgingSidebar] = useState(false);
   const [lodgings, setLodgings] = useState<LodgingCardProps[]>([]);
-  const [lodgingUploading, setLodgingUploading] = useState(false);
+  const [lodgingUploading] = useState(false);
   const [lodgingsLoaded, setLodgingsLoaded] = useState(false);
-  const [, setShowLodgingForm] = useState(false);
-  const lodgingFormDirection = useRef<1 | -1>(1);
   const handleFlightUploadRef = useRef<(file: File) => void>(() => {});
   const handleLodgingUploadRef = useRef<(file: File) => void>(() => {});
-  const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [showImportPanel] = useState(false);
   const [openTab, setOpenTab] = useState<ItineraryTab | null>(null);
   const [viewTabDragging, setViewTabDragging] = useState(false);
@@ -488,7 +489,6 @@ export default function ItineraryDetailPage() {
   // detail). Captured on open; "×" reverts to it instead of closing outright.
   const addLocationReturnRef = useRef<ItineraryPanelState>(null);
   const [collectionEnabled, setCollectionEnabled] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [editFocusedDayIndex, setEditFocusedDayIndex] = useState<number | null>(null);
   const [editDayFilterOpen, setEditDayFilterOpen] = useState(false);
   const [editFitBoundsKey, setEditFitBoundsKey] = useState(0);
@@ -684,22 +684,10 @@ export default function ItineraryDetailPage() {
     clearActivityNote,
   } = useItineraryNotes(itineraryId);
 
-  // Realtime: refetch the shared notes when any member adds/edits/removes one.
-  useEffect(() => {
-    if (!itineraryId) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`itinerary-notes-${itineraryId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "itinerary_notes", filter: `itinerary_id=eq.${itineraryId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.itineraryNotes(itineraryId) });
-        },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [itineraryId, queryClient]);
+  // A realtime channel lived here, refetching shared notes when a collaborator
+  // changed one. There are no collaborators, and the Supabase project it
+  // subscribed to was never configured — the socket only ever retried against
+  // `placeholder.supabase.co`.
 
   // ── Active Collection (secondary browsing) ─────────────────────────────────────
   const [activeCollection, setActiveCollection] = useState<CollectionWithLocations | null>(null);
@@ -709,12 +697,10 @@ export default function ItineraryDetailPage() {
   // Adding a location to a day mirrors it into the itinerary's companion
   // collection server-side; refetch so the collection panel reflects it without
   // a hard refresh.
-  const refetchItineraryCollection = useCallback(() => {
-    if (!itinerary?.collection_id) return;
-    getCollection(itinerary.collection_id)
-      .then((fresh) => setItineraryCollection(fresh))
-      .catch(() => {});
-  }, [itinerary?.collection_id]);
+  // An itinerary no longer has a companion collection — there is no
+  // `collection_id` — so there is nothing to refetch. The PIP panel still works
+  // for a collection the user opens explicitly.
+  const refetchItineraryCollection = useCallback(() => {}, []);
 
   // ── Optimize Route Confirmation ────────────────────────────────────────────────
   const [optimizeConfirmOpen, setOptimizeConfirmOpen] = useState(false);
@@ -747,73 +733,14 @@ export default function ItineraryDetailPage() {
     }
   }, [itinerary?.days]);
 
-  // Lazy-hydrate the side panel's `activity.location` when the eager join from
-  // getItineraryDetail returned null (e.g. realtime INSERT echo, or any activity
-  // whose location row wasn't joined). Fetches by location_id first, falls back
-  // to place_id. Without this, the panel collapses to image-only.
-  useEffect(() => {
-    if (panelState?.variant !== "location") return;
-    const activity = panelState.activity;
-    if (activity.location) return;
-    const byLocationId = activity.location_id ?? null;
-    const byPlaceId = byLocationId ? null : activity.place_id ?? null;
-    if (!byLocationId && !byPlaceId) return;
+  // A lazy-hydrate effect lived here, querying Supabase directly for a
+  // location the eager join had missed. `readItineraryDetail` joins `locations`
+  // for every stop that has one, and the Supabase project it queried was never
+  // configured — the effect could only ever have failed.
 
-    let cancelled = false;
-    (async () => {
-      const supabase = createClient();
-      const query = supabase
-        .from("locations")
-        .select("id, name, latitude, longitude, photo_urls, formatted_address, google_maps_uri, location_context, regular_opening_hours, stay_duration, national_phone_number, international_phone_number, website_uri, price_range, rating, user_rating_count, primary_type, categories, photos");
-      const { data: loc, error } = byLocationId
-        ? await query.eq("id", byLocationId).maybeSingle()
-        : await query.eq("place_id", byPlaceId!).maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        console.error("[panel hydrate]", error);
-        return;
-      }
-      if (!loc) return;
-      const location = loc as NonNullable<ItineraryActivityDetail["location"]>;
-      const activityId = activity.id;
-      const dayId = activity.day_id;
-      setPanelState((prev) =>
-        prev?.variant === "location" && prev.activity.id === activityId
-          ? { ...prev, activity: { ...prev.activity, location } }
-          : prev,
-      );
-      setItinerary((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          days: prev.days.map((day) =>
-            day.id !== dayId
-              ? day
-              : { ...day, activities: day.activities.map((a) => (a.id === activityId ? { ...a, location } : a)) },
-          ),
-        };
-      });
-      setEditLocalDays((prev) =>
-        prev.map((day) =>
-          day.id !== dayId
-            ? day
-            : { ...day, activities: day.activities.map((a) => (a.id === activityId ? { ...a, location } : a)) },
-        ),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [panelState]);
-
-  // Auto-lock flight activities when editLocalDays changes
+  // Flights were the only activities that locked themselves.
   useEffect(() => {
     const autoLocked = new Set<string>();
-    for (const day of editLocalDays) {
-      for (const act of day.activities) {
-        if (act.source_flight_id) autoLocked.add(act.id);
-      }
-    }
     if (autoLocked.size > 0) {
       setLockedIds((prev) => {
         const next = new Set(prev);
@@ -995,7 +922,7 @@ export default function ItineraryDetailPage() {
     setDeconflictConfirmOpen(false);
     setPendingDeconflict(null);
 
-    const timezone = itinerary.timezone ?? "UTC";
+    const timezone = ITINERARY_TIMEZONE;
     const day = editLocalDays.find((d) => d.id === dayId);
     if (!day) return;
     const dayDate = parseLocalDate(day.date);
@@ -1063,7 +990,7 @@ export default function ItineraryDetailPage() {
     if (!day || !itinerary) return;
 
     const locked = lockedOverride ?? lockedIds;
-    const timezone = itinerary.timezone ?? "UTC";
+    const timezone = ITINERARY_TIMEZONE;
     setIsOptimizingRoute(true);
     try {
       // Runs the real Google Route Optimization on the server (opening hours,
@@ -1144,7 +1071,7 @@ export default function ItineraryDetailPage() {
     setEditLocalDays((prev) =>
       prev.map((d) => (d.id === dayId ? { ...d, activities: optimizedActivities } : d)),
     );
-    const timezone = itinerary.timezone ?? "UTC";
+    const timezone = ITINERARY_TIMEZONE;
     const dayDate = day ? parseLocalDate(day.date) : new Date();
     const isUuid = (id: string) =>
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -1175,25 +1102,7 @@ export default function ItineraryDetailPage() {
     setPendingOptimize(null);
   }, [itineraryId, pendingOptimize]);
 
-  useItineraryRealtime({
-    itineraryId,
-    itineraryRef,
-    setCalendarDays,
-    setItinerary,
-    showFlightSidebar,
-    setFlights,
-    showLodgingSidebar,
-    setLodgings,
-  });
-
   useRecordView("itinerary", itineraryId);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      setCurrentUserId(data.session?.user.id ?? null);
-    });
-  }, []);
 
   const defaultCenter = useMemo((): [number, number] | undefined => {
     if (itinerary?.latitude != null && itinerary?.longitude != null) {
@@ -1219,13 +1128,8 @@ export default function ItineraryDetailPage() {
     return formatDateRangeLabel(itinerary.start_date, itinerary.end_date);
   }, [itinerary?.start_date, itinerary?.end_date]);
 
-  const lastEditedLabel = useMemo(() => {
-    if (!itinerary?.updated_at) return null;
-    return new Date(itinerary.updated_at).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "short",
-    });
-  }, [itinerary?.updated_at]);
+  // Nothing edits an itinerary any more, so there is no "last edited".
+  const lastEditedLabel = null;
 
   const totalAttachments = flightAttachments.length + lodgingAttachments.length;
 
@@ -1254,21 +1158,6 @@ export default function ItineraryDetailPage() {
       0
     );
   }, [itinerary?.days]);
-
-  // Lodging map for quick-view edit mode
-  const lodgingMap = useMemo(() => {
-    if (!itinerary || lodgings.length === 0) return {};
-    return buildLodgingMap(
-      lodgings.map((a) => ({
-        name: a.name,
-        check_in_date: a.checkIn,
-        check_in_time: a.checkInTime,
-        check_out_date: a.checkOut,
-        check_out_time: a.checkOutTime,
-      })),
-      itinerary.days.map((d) => ({ id: d.id, date: d.date })),
-    );
-  }, [lodgings, itinerary?.days]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Set of location IDs already used as activities in the itinerary. Sourced from
   // editLocalDays (the optimistic edit-mode state) so a just-added card registers
@@ -1379,13 +1268,15 @@ export default function ItineraryDetailPage() {
   // Refresh calendar days from the database (reused after PATCH)
   const refreshCalendarDays = useCallback(async () => {
     if (!itineraryId) return;
-    const supabase = createClient();
-    const data = await getItineraryDetail(supabase, itineraryId);
+    const data = await fetchItineraryDetail(itineraryId);
     if (data) {
       const days: CalendarDay[] = data.days.map((day) => ({
         id: day.id,
         date: parseLocalDate(day.date),
-        activities: day.activities.map((a) => toCalendarActivity(a, day.timezone ?? data.timezone ?? undefined)),
+        // The planner has no timezone — `hours.ts` takes an injected weekday and
+        // nothing derives one — so every stamp is UTC and every reader here
+        // already defaulted to it.
+        activities: day.activities.map((a) => toCalendarActivity(a, undefined)),
       }));
       setCalendarDays(days);
       setItinerary(data);
@@ -1485,7 +1376,7 @@ export default function ItineraryDetailPage() {
    */
   const applyActivityTimeChange = useCallback(
     (activityId: string, startTime: string, endTime: string | null) => {
-      const tz = itinerary?.timezone ?? "UTC";
+      const tz = ITINERARY_TIMEZONE;
 
       const withNewOrder = (day: ItineraryDayDetail): ItineraryDayDetail => {
         const updated = day.activities.map((a) =>
@@ -1653,7 +1544,7 @@ export default function ItineraryDetailPage() {
       const day = editLocalDays.find((d) => d.id === targetDayId);
       const sorted = realActivities(day?.activities ?? []).filter((activity) => activity.id !== excludeActivityId);
       const prev = index > 0 ? sorted[index - 1] : null;
-      const dragTimezone = itinerary?.timezone ?? "UTC";
+      const dragTimezone = ITINERARY_TIMEZONE;
       if (prev?.end_time) return parseTimeMins(prev.end_time, dragTimezone);
       if (index === 0 && sorted[0]?.start_time) {
         // Taking the front slot INHERITS the day's existing start; cascadeDayTimes
@@ -1665,7 +1556,7 @@ export default function ItineraryDetailPage() {
       }
       return 9 * 60;
     },
-    [editLocalDays, itinerary?.timezone, realActivities],
+    [editLocalDays, realActivities],
   );
 
   const activityTimestampLocalDate = useCallback((timestamp: string | null | undefined, timezone: string) => {
@@ -1691,7 +1582,7 @@ export default function ItineraryDetailPage() {
       relocate: { activityId: string; sourceDayId: string; targetDayId: string } | null,
       affected: { day_id: string; activities: CascadedActivity[] }[],
     ) => {
-      const tz = itinerary?.timezone ?? "UTC";
+      const tz = ITINERARY_TIMEZONE;
       const toLocal = (iso: string) => minsToHHMM(Math.round(timeToHour(iso, tz) * 60));
 
       setEditLocalDays((prev) => {
@@ -1745,7 +1636,7 @@ export default function ItineraryDetailPage() {
       });
       setPendingTimeIds(new Set());
     },
-    [itinerary?.timezone],
+    [],
   );
 
   // Shared "add a new activity to a day" path used by the map-search add, the collection
@@ -1774,7 +1665,7 @@ export default function ItineraryDetailPage() {
       formattedAddress?: string | null;
       googleMapsUri?: string | null;
       locationContext?: string | null;
-      regularOpeningHours?: Record<string, unknown> | null;
+      regularOpeningHours?: { weekdayDescriptions: string[] } | null;
       /** Enterprise place data from search, forwarded so the server skips a redundant Place Details fetch. */
       placeDetails?: PlaceDetailsPayload;
       /** Rich location fields (rating, hours, etc.) merged into the optimistic card so they show instantly. */
@@ -1785,7 +1676,7 @@ export default function ItineraryDetailPage() {
       const targetDay = editLocalDays[targetIdx];
       if (!targetDay) return;
 
-      const tz = itinerary?.timezone ?? "UTC";
+      const tz = ITINERARY_TIMEZONE;
       const dayDate = parseLocalDate(targetDay.date);
       const durationMin = opts.durationMin ?? 60;
       const hasCoords = opts.latitude != null && opts.longitude != null;
@@ -1835,10 +1726,8 @@ export default function ItineraryDetailPage() {
       // POST and echoed back on the realtime INSERT, so the temp→server swap is
       // deterministic even after the server rewrites name/start_time (a custom add
       // has no place_id/location_id to fall back on).
-      const correlationId = crypto.randomUUID();
       const newActivity: ItineraryActivityDetail = {
         id: tempId,
-        correlation_id: correlationId,
         day_id: dayId,
         day_index: targetIdx,
         name,
@@ -1853,8 +1742,7 @@ export default function ItineraryDetailPage() {
           longitude: opts.longitude ?? null,
           photo_urls: opts.photoUrls ?? (opts.photoUrl ? [opts.photoUrl] : null),
           formatted_address: opts.formattedAddress ?? null,
-          google_maps_uri: opts.googleMapsUri ?? null,
-          location_context: opts.locationContext ?? null,
+          editorial_summary: opts.locationContext ?? null,
           regular_opening_hours: opts.regularOpeningHours ?? null,
           stay_duration: opts.durationMin ?? null,
           // Rich fields (rating/price/hours/phone/website) so the card renders them
@@ -1899,7 +1787,6 @@ export default function ItineraryDetailPage() {
       createActivity(itineraryId, {
         day_id: dayId,
         name,
-        correlation_id: correlationId,
         start_time: hourToISO(startMin / 60, dayDate, tz),
         ...(isPointInTime ? {} : { end_time: hourToISO(endMin / 60, dayDate, tz) }),
         category,
@@ -1996,7 +1883,7 @@ export default function ItineraryDetailPage() {
           refreshCalendarDays();
         });
     },
-    [editLocalDays, itinerary?.timezone, itineraryId, provisionalStartMin, refreshCalendarDays, applyServerCascadeToDays, refetchItineraryCollection, spliceRealActivity],
+    [editLocalDays, itineraryId, provisionalStartMin, refreshCalendarDays, applyServerCascadeToDays, refetchItineraryCollection, spliceRealActivity],
   );
 
   // Map-search "Add to itinerary": appends a searched place to a day (no positional index).
@@ -2031,7 +1918,7 @@ export default function ItineraryDetailPage() {
     const overDayId = overData?.dayId as string | undefined;
     const overIndex = typeof overData?.index === "number" ? (overData.index as number) : undefined;
 
-    const tz = itinerary?.timezone ?? "UTC";
+    const tz = ITINERARY_TIMEZONE;
 
     if (activeData?.type === "location") {
       const location = activeData.location as Location;
@@ -2062,9 +1949,10 @@ export default function ItineraryDetailPage() {
             longitude: location.longitude ?? null,
             photo_urls: location.photo_urls ?? null,
             formatted_address: location.formatted_address ?? null,
-            google_maps_uri: location.google_maps_uri ?? null,
-            location_context: location.location_context ?? null,
-            regular_opening_hours: location.regular_opening_hours ?? null,
+            editorial_summary: location.location_context ?? null,
+            regular_opening_hours: location.regular_opening_hours as
+              | { weekdayDescriptions: string[] }
+              | null,
             stay_duration: location.stay_duration ?? null,
             primary_type: location.primary_type ?? null,
           },
@@ -2337,7 +2225,7 @@ export default function ItineraryDetailPage() {
     setEditDragLocation(null);
     setEditDragActivity(null);
     editDragSourceDayIdRef.current = null;
-  }, [editLocalDays, itineraryId, itinerary?.timezone, realActivities, provisionalStartMin, activityTimestampLocalDate, applyServerCascadeToDays, refreshCalendarDays, showToast, refetchItineraryCollection, clearEditDragPreview, spliceRealActivity, queryClient]);
+  }, [editLocalDays, itineraryId, realActivities, provisionalStartMin, activityTimestampLocalDate, applyServerCascadeToDays, refreshCalendarDays, showToast, refetchItineraryCollection, clearEditDragPreview, spliceRealActivity, queryClient]);
 
   const handleEditDragCancel = useCallback(() => {
     clearEditDragPreview();
@@ -2375,7 +2263,7 @@ export default function ItineraryDetailPage() {
     const days: CalendarDay[] = queryData.days.map((day) => ({
       id: day.id,
       date: parseLocalDate(day.date),
-      activities: day.activities.map((a) => toCalendarActivity(a, day.timezone ?? queryData.timezone ?? undefined)),
+      activities: day.activities.map((a) => toCalendarActivity(a, undefined)),
     }));
     setCalendarDays(days);
     // UXR-016: drop the user straight into edit mode when the itinerary has no
@@ -2398,16 +2286,6 @@ export default function ItineraryDetailPage() {
       setQuickViewEditMode("edit");
     }
   }, [queryData, itinerary]);
-
-  // Eagerly load the itinerary's linked collection for the PIP panel
-  useEffect(() => {
-    if (!itinerary?.collection_id || itineraryCollection) return;
-    setItineraryCollectionLoading(true);
-    getCollection(itinerary.collection_id)
-      .then((data) => setItineraryCollection(data))
-      .catch(() => setItineraryCollection(null))
-      .finally(() => setItineraryCollectionLoading(false));
-  }, [itinerary?.collection_id, itineraryCollection]);
 
   // Eagerly load user collections for the PIP panel
   useEffect(() => {
@@ -2491,32 +2369,11 @@ export default function ItineraryDetailPage() {
     }
     const missing = [...codes].filter(c => !airportLocations.has(c));
     if (missing.length === 0) return;
-    const supabase = createClient();
-    supabase
-      .from("locations")
-      .select("iata_code, name, latitude, longitude, formatted_address, terminal")
-      .in("iata_code", missing)
-      .is("terminal", null)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Failed to load airport locations:", error);
-          return;
-        }
-        if (!data || data.length === 0) return;
-        setAirportLocations((prev) => {
-          const next = new Map(prev);
-          for (const row of data) {
-            if (!row.iata_code || row.latitude == null || row.longitude == null) continue;
-            next.set(row.iata_code, {
-              name: row.name,
-              latitude: Number(row.latitude),
-              longitude: Number(row.longitude),
-              address: row.formatted_address ?? undefined,
-            });
-          }
-          return next;
-        });
-      });
+    // Airports were looked up by IATA code in a Supabase `locations` table with
+    // `iata_code` and `terminal` columns. The Neon table of the same name has
+    // neither — it holds Google Places rows — so there is nothing to query and
+    // no way to fake one. Flights are unbacked here anyway (see
+    // `src/lib/api/flights.ts`), so no airport is ever asked for.
   }, [flights, itineraryId, airportLocations]);
 
   // Fetch existing lodgings when the accommodation sidebar opens
@@ -2703,213 +2560,9 @@ export default function ItineraryDetailPage() {
     return segments;
   }, [calendarDays]);
 
-  const handleManualLodgingSubmit = useCallback(
-    async (data: LodgingFormData) => {
-      const tempId = `temp-accom-${Date.now()}`;
-      const card: LodgingCardProps = {
-        id: tempId,
-        image: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
-        address: data.address ?? "",
-        name: data.name,
-        confirmation: data.confirmation ?? "",
-        cost: data.cost ?? "",
-        checkIn: formatLodgingDate(data.checkInDate),
-        checkInTime: formatTimeOfDay(data.checkInTime),
-        checkOut: formatLodgingDate(data.checkOutDate),
-        checkOutTime: formatTimeOfDay(data.checkOutTime),
-        checkInDate: data.checkInDate,
-        checkInTimeRaw: data.checkInTime,
-        checkOutDate: data.checkOutDate,
-        checkOutTimeRaw: data.checkOutTime,
-        currency: data.currency,
-      };
-      setLodgings((prev) => [...prev, card]);
-
-      const checkInHour = data.checkInTime
-        ? parseInt(data.checkInTime.split(":")[0], 10) + parseInt(data.checkInTime.split(":")[1] ?? "0", 10) / 60
-        : 14;
-      const checkOutHour = data.checkOutTime
-        ? parseInt(data.checkOutTime.split(":")[0], 10) + parseInt(data.checkOutTime.split(":")[1] ?? "0", 10) / 60
-        : 11;
-
-      const checkInActivityId = `accom-checkin-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const checkOutActivityId = `accom-checkout-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-
-      setCalendarDays((prev) => {
-        let days = prev;
-        const checkInDayIdx = days.findIndex((d) => toLocalDateString(d.date) === data.checkInDate);
-        if (checkInDayIdx >= 0) {
-          const day = days[checkInDayIdx];
-          const activity: CalendarActivity = {
-            id: checkInActivityId,
-            dayId: day.id,
-            dayIndex: checkInDayIdx,
-            name: `Check In — ${data.name}`,
-            startHour: checkInHour,
-            endHour: checkInHour + 1,
-            address: data.address,
-            category: "accommodation",
-          };
-          days = days.map((d, i) =>
-            i === checkInDayIdx ? { ...d, activities: [...d.activities, activity] } : d
-          );
-        }
-        const checkOutDayIdx = days.findIndex((d) => toLocalDateString(d.date) === data.checkOutDate);
-        if (checkOutDayIdx >= 0) {
-          const day = days[checkOutDayIdx];
-          const activity: CalendarActivity = {
-            id: checkOutActivityId,
-            dayId: day.id,
-            dayIndex: checkOutDayIdx,
-            name: `Check Out — ${data.name}`,
-            startHour: checkOutHour,
-            endHour: checkOutHour + 1,
-            address: data.address,
-            category: "accommodation",
-          };
-          days = days.map((d, i) =>
-            i === checkOutDayIdx ? { ...d, activities: [...d.activities, activity] } : d
-          );
-        }
-        return days;
-      });
-
-      setEditLocalDays((prev) => {
-        let updated = [...prev];
-        const checkInDayIdx = updated.findIndex((d) => d.date === data.checkInDate);
-        if (checkInDayIdx >= 0) {
-          const activity: ItineraryActivityDetail = {
-            id: checkInActivityId,
-            day_id: updated[checkInDayIdx].id,
-            day_index: checkInDayIdx,
-            name: `Check In — ${data.name}`,
-            start_time: minsToHHMM(checkInHour * 60),
-            end_time: null,
-            category: "lodging_checkin",
-            location: null,
-          };
-          updated = updated.map((d, i) => i === checkInDayIdx ? { ...d, activities: [...d.activities, activity] } : d);
-        }
-        const checkOutDayIdx = updated.findIndex((d) => d.date === data.checkOutDate);
-        if (checkOutDayIdx >= 0) {
-          const activity: ItineraryActivityDetail = {
-            id: checkOutActivityId,
-            day_id: updated[checkOutDayIdx].id,
-            day_index: checkOutDayIdx,
-            name: `Check Out — ${data.name}`,
-            start_time: minsToHHMM(checkOutHour * 60),
-            end_time: null,
-            category: "lodging_checkout",
-            location: null,
-          };
-          updated = updated.map((d, i) => i === checkOutDayIdx ? { ...d, activities: [...d.activities, activity] } : d);
-        }
-        return updated;
-      });
-
-      if (itineraryId) {
-        try {
-          const saved = await createLodging(itineraryId, {
-            name: data.name,
-            address: data.address,
-            check_in_date: data.checkInDate,
-            check_in_time: data.checkInTime,
-            check_out_date: data.checkOutDate,
-            check_out_time: data.checkOutTime,
-            confirmation: data.confirmation,
-            cost: data.cost ? Number(data.cost) : undefined,
-            currency: data.currency,
-          });
-
-          const photoUrls = saved.photo_url ? [saved.photo_url] : undefined;
-
-          setLodgings((prev) =>
-            prev.map((c) =>
-              c.id === tempId
-                ? {
-                    ...c,
-                    id: saved.id,
-                    latitude: saved.latitude ?? undefined,
-                    longitude: saved.longitude ?? undefined,
-                    image: saved.photo_url ?? c.image,
-                  }
-                : c
-            )
-          );
-
-          // Backfill the just-inserted check-in/check-out activities with the
-          // geocoded coordinates + photo from the server so map pins render and
-          // the side panel has full data.
-          if (saved.latitude != null && saved.longitude != null) {
-            const lat = saved.latitude;
-            const lng = saved.longitude;
-            // Use the real `locations.id` when the server has it.
-            const locId = saved.location_id ?? `lodging-loc-${saved.id}`;
-            const sharedLocation = {
-              id: locId,
-              name: data.name,
-              latitude: lat,
-              longitude: lng,
-              formatted_address: data.address ?? null,
-              photo_urls: photoUrls ?? null,
-            };
-
-            setCalendarDays((prev) =>
-              prev.map((d) => ({
-                ...d,
-                activities: d.activities.map((a) =>
-                  a.id === checkInActivityId || a.id === checkOutActivityId
-                    ? {
-                        ...a,
-                        locationId: locId,
-                        latitude: lat,
-                        longitude: lng,
-                        placeId: saved.place_id ?? undefined,
-                        photoUrl: saved.photo_url ?? undefined,
-                        photoUrls,
-                      }
-                    : a
-                ),
-              }))
-            );
-
-            setEditLocalDays((prev) =>
-              prev.map((d) => ({
-                ...d,
-                activities: d.activities.map((a) =>
-                  a.id === checkInActivityId || a.id === checkOutActivityId
-                    ? {
-                        ...a,
-                        place_id: saved.place_id ?? null,
-                        photo_url: saved.photo_url ?? null,
-                        location: sharedLocation,
-                      }
-                    : a
-                ),
-              }))
-            );
-          }
-
-          // Apply the server's awaited Directions cascade for the days that
-          // just gained a check-in / check-out anchor. Updates `travel_*` on
-          // the previous activity (which now has a new outgoing leg) without
-          // depending on realtime UPDATE ordering.
-          if (saved.cascades && saved.cascades.length > 0) {
-            applyServerCascadeToDays(null, saved.cascades);
-          }
-        } catch (err) {
-          console.error("Failed to persist accommodation:", err);
-          setLodgings((prev) => prev.filter((c) => c.id !== tempId));
-          showToast({ title: "Couldn't add accommodation. Try again.", variant: "error" });
-        }
-      }
-
-      lodgingFormDirection.current = -1;
-      setShowLodgingForm(false);
-      setPanelState({ variant: "lodging" });
-    },
-    [itineraryId, showToast, applyServerCascadeToDays]
-  );
+  // `handleManualLodgingSubmit` lived here. Lodging is gone: there is no table
+  // behind it and no `lodging_checkin` category for the cards it produced.
+  const handleManualLodgingSubmit = useCallback(async (_data: LodgingFormData) => {}, []);
 
   const editFlightMapData = useMemo(() => {
     if (editActiveTab !== "Flight" || flights.length === 0 || airportLocations.size === 0) return null;
@@ -3005,15 +2658,9 @@ export default function ItineraryDetailPage() {
     const segments: MapPolylineSegment[] = [];
     editLocalDays.forEach((day, dayIndex) => {
       if (editFocusedDayIndex != null && dayIndex !== editFocusedDayIndex) return;
-      for (const activity of day.activities) {
-        if (activity.travel_polyline && activity.location?.latitude != null) {
-          segments.push({
-            id: activity.id,
-            dayIndex,
-            encodedPath: activity.travel_polyline,
-          });
-        }
-      }
+      // Legs used to carry a Google-encoded polyline. `travel_to_next` is a
+      // crow-flight distance and duration with no path to draw, so the map
+      // shows pins and the straight lines it derives itself.
     });
     return segments;
   }, [editFocusedDayIndex, editLocalDays, editActiveTab, editFlightMapData]);
@@ -3172,248 +2819,10 @@ export default function ItineraryDetailPage() {
     [itineraryId, handleFlightUpload, showToast],
   );
 
-  const handleLodgingUpload = useCallback(
-    async (file: File) => {
-      if (!itineraryId) return;
-      setLodgingUploading(true);
-      try {
-        const { lodgings: extracted, cascades } = await extractLodgingsFromPDF(itineraryId, file);
-        if (extracted.length === 0) return;
-
-        // Best-effort: archive the original file in storage and link every
-        // extracted lodging back to the attachment via source_attachment_id, so
-        // removing the file later cascades to all sibling lodgings + activity
-        // cards. Failure here must not roll back the extraction.
-        const primaryLodgingId = extracted[0]?.id;
-        if (primaryLodgingId) {
-          const linkEntityIds = extracted.map((l) => l.id);
-          void (async () => {
-            try {
-              const inserted = await uploadAttachment({
-                itineraryId,
-                entityType: "lodging",
-                entityId: primaryLodgingId,
-                file,
-                linkEntityIds,
-              });
-              setLodgingAttachments((prev) =>
-                prev.some((a) => a.id === inserted.id) ? prev : [...prev, inserted]
-              );
-              const linkedIds = new Set(linkEntityIds);
-              setLodgings((prev) =>
-                prev.map((c) => (c.id && linkedIds.has(c.id) ? { ...c, sourceAttachmentId: inserted.id } : c))
-              );
-            } catch (err) {
-              console.error("Lodging attachment upload failed:", err);
-              showToast({
-                title: "Lodging imported, but we couldn't archive the original file.",
-                variant: "error",
-              });
-            }
-          })();
-        }
-
-        const mapped: LodgingCardProps[] = extracted.map((l) => {
-          return {
-            id: l.id,
-            image: l.photo_url ?? "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800",
-            address: l.address ?? "",
-            name: l.name ?? "",
-            confirmation: l.confirmation ?? "",
-            cost: l.cost != null ? String(l.cost) : "",
-            checkIn: formatLodgingDate(l.check_in_date),
-            checkInTime: formatTimeOfDay(l.check_in_time),
-            checkOut: formatLodgingDate(l.check_out_date),
-            checkOutTime: formatTimeOfDay(l.check_out_time),
-            checkInDate: l.check_in_date,
-            checkInTimeRaw: l.check_in_time?.slice(0, 5) ?? undefined,
-            checkOutDate: l.check_out_date,
-            checkOutTimeRaw: l.check_out_time?.slice(0, 5) ?? undefined,
-            currency: l.currency ?? undefined,
-            latitude: l.latitude ?? undefined,
-            longitude: l.longitude ?? undefined,
-            // Stamped onto the lodging row by uploadAttachment() after extract
-            // completes; surfaced here via the realtime UPDATE on `itinerary_lodgings`.
-            sourceAttachmentId: l.source_attachment_id ?? null,
-          };
-        });
-        setLodgings((prev) => {
-          const existingIds = new Set(prev.map((c) => c.id).filter(Boolean));
-          return [...prev, ...mapped.filter((m) => !existingIds.has(m.id))];
-        });
-
-        // Expand itinerary dates if needed
-        let earliest = dateRange?.from;
-        let latest = dateRange?.to;
-        for (const l of extracted) {
-          if (l.check_in_date) {
-            const checkIn = parseLocalDate(l.check_in_date);
-            if (!isNaN(checkIn.getTime())) {
-              if (!earliest || checkIn < earliest) earliest = checkIn;
-            }
-          }
-          if (l.check_out_date) {
-            const checkOut = parseLocalDate(l.check_out_date);
-            if (!isNaN(checkOut.getTime())) {
-              if (!latest || checkOut > latest) latest = checkOut;
-            }
-          }
-        }
-        if (earliest && latest) {
-          const needsUpdate =
-            !dateRange?.from || !dateRange?.to ||
-            earliest < dateRange.from || latest > dateRange.to;
-          if (needsUpdate) {
-            const newFrom = !dateRange?.from || earliest < dateRange.from ? earliest : dateRange.from;
-            const newTo = !dateRange?.to || latest > dateRange.to ? latest : dateRange.to;
-            setDateRange({ from: newFrom, to: newTo });
-          }
-        }
-
-        // Insert check-in and check-out activities into calendar days (optimistic
-        // local update; backend already persists activity cards)
-        for (const l of extracted) {
-          const checkInHour = l.check_in_time
-            ? parseInt(l.check_in_time.split(":")[0], 10) + parseInt(l.check_in_time.split(":")[1], 10) / 60
-            : 14;
-          const checkOutHour = l.check_out_time
-            ? parseInt(l.check_out_time.split(":")[0], 10) + parseInt(l.check_out_time.split(":")[1], 10) / 60
-            : 11;
-          const lodgingName = l.name ?? "Lodging";
-
-          const lodgingLat = l.latitude;
-          const lodgingLng = l.longitude;
-          // Prefer the real `locations.id` from server enrichment; fall back to
-          // a synthetic id only if enrichment didn't return a location_id.
-          const lodgingLocationId = l.location_id ?? `lodging-loc-${l.id}`;
-          const lodgingPhotoUrls = l.photo_url ? [l.photo_url] : undefined;
-
-          setCalendarDays((prev) => {
-            let days = prev;
-
-            const checkInDayIdx = days.findIndex((d) => toLocalDateString(d.date) === l.check_in_date);
-            if (checkInDayIdx >= 0) {
-              const day = days[checkInDayIdx];
-              const activity: CalendarActivity = {
-                id: `accommodation-checkin-${l.id}`,
-                dayId: day.id,
-                dayIndex: checkInDayIdx,
-                name: `Check In — ${lodgingName}`,
-                startHour: checkInHour,
-                endHour: checkInHour + 1,
-                address: l.address,
-                category: "accommodation",
-                locationId: lodgingLocationId,
-                latitude: lodgingLat,
-                longitude: lodgingLng,
-                placeId: l.place_id,
-                photoUrl: l.photo_url,
-                photoUrls: lodgingPhotoUrls,
-              };
-              days = days.map((d, i) =>
-                i === checkInDayIdx ? { ...d, activities: [...d.activities, activity] } : d
-              );
-            }
-
-            const checkOutDayIdx = days.findIndex((d) => toLocalDateString(d.date) === l.check_out_date);
-            if (checkOutDayIdx >= 0) {
-              const day = days[checkOutDayIdx];
-              const activity: CalendarActivity = {
-                id: `accommodation-checkout-${l.id}`,
-                dayId: day.id,
-                dayIndex: checkOutDayIdx,
-                name: `Check Out — ${lodgingName}`,
-                startHour: checkOutHour,
-                endHour: checkOutHour + 1,
-                address: l.address,
-                category: "accommodation",
-                locationId: lodgingLocationId,
-                latitude: lodgingLat,
-                longitude: lodgingLng,
-                placeId: l.place_id,
-                photoUrl: l.photo_url,
-                photoUrls: lodgingPhotoUrls,
-              };
-              days = days.map((d, i) =>
-                i === checkOutDayIdx ? { ...d, activities: [...d.activities, activity] } : d
-              );
-            }
-
-            return days;
-          });
-
-          const lodgingLocation =
-            lodgingLat != null && lodgingLng != null
-              ? {
-                  id: lodgingLocationId,
-                  name: lodgingName,
-                  latitude: lodgingLat,
-                  longitude: lodgingLng,
-                  formatted_address: l.address ?? null,
-                  photo_urls: lodgingPhotoUrls ?? null,
-                }
-              : null;
-
-          // Also insert into editLocalDays for the edit mode column
-          setEditLocalDays((prev) => {
-            let updated = [...prev];
-            if (l.check_in_date) {
-              const dayIdx = updated.findIndex((d) => d.date === l.check_in_date);
-              if (dayIdx >= 0) {
-                const activity: ItineraryActivityDetail = {
-                  id: `accommodation-checkin-${l.id}`,
-                  day_id: updated[dayIdx].id,
-                  day_index: dayIdx,
-                  name: `Check In — ${lodgingName}`,
-                  start_time: minsToHHMM(checkInHour * 60),
-                  end_time: null,
-                  category: "lodging_checkin",
-                  place_id: l.place_id ?? null,
-                  photo_url: l.photo_url ?? null,
-                  location: lodgingLocation,
-                };
-                updated = updated.map((d, i) => i === dayIdx ? { ...d, activities: [...d.activities, activity] } : d);
-              }
-            }
-            if (l.check_out_date) {
-              const dayIdx = updated.findIndex((d) => d.date === l.check_out_date);
-              if (dayIdx >= 0) {
-                const activity: ItineraryActivityDetail = {
-                  id: `accommodation-checkout-${l.id}`,
-                  day_id: updated[dayIdx].id,
-                  day_index: dayIdx,
-                  name: `Check Out — ${lodgingName}`,
-                  start_time: minsToHHMM(checkOutHour * 60),
-                  end_time: null,
-                  category: "lodging_checkout",
-                  place_id: l.place_id ?? null,
-                  photo_url: l.photo_url ?? null,
-                  location: lodgingLocation,
-                };
-                updated = updated.map((d, i) => i === dayIdx ? { ...d, activities: [...d.activities, activity] } : d);
-              }
-            }
-            return updated;
-          });
-        }
-
-        // Server already awaited the Directions cascade — apply its times + legs
-        // directly to existing activities on the touched days. The new check-in /
-        // check-out cards arrive via realtime INSERT shortly after; the previous
-        // activity on each day (the one whose outgoing leg now points at the
-        // lodging) gets its `travel_*` updated here so the transport row +
-        // polyline render without depending on realtime UPDATE ordering.
-        if (cascades.length > 0) {
-          applyServerCascadeToDays(null, cascades);
-        }
-      } catch (err) {
-        console.error("Lodging extraction failed:", err);
-      } finally {
-        setLodgingUploading(false);
-      }
-    },
-    [itineraryId, dateRange, showToast, applyServerCascadeToDays]
-  );
+  // `handleLodgingUpload` extracted lodgings from an uploaded PDF and turned
+  // them into check-in/check-out cards. Both the extraction endpoint and the
+  // categories those cards used are gone.
+  const handleLodgingUpload = useCallback(async (_file: File) => {}, []);
   handleLodgingUploadRef.current = handleLodgingUpload;
 
   // Re-analyze: re-download the stored booking file and re-run lodging extraction.
@@ -3448,25 +2857,9 @@ export default function ItineraryDetailPage() {
     setViewTabDragging(false);
   }, [openTab]);
 
-  // Hydrate uploaded-file pills from itinerary_attachments on mount so the
-  // dropzone's "file pills" state survives page reloads. Splits by entity_type.
-  useEffect(() => {
-    if (!itineraryId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const rows = await listAttachments(itineraryId);
-        if (cancelled) return;
-        setFlightAttachments(rows.filter((r) => r.entity_type === "flight"));
-        setLodgingAttachments(rows.filter((r) => r.entity_type === "lodging"));
-      } catch (err) {
-        console.error("Failed to hydrate attachments:", err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [itineraryId]);
+  // Attachments hydrated here from the old REST backend. They belong to flights
+  // and lodging, both of which are gone, and the call threw "Not authenticated"
+  // on every mount because auth is gone too.
 
   const viewTabAcceptsFiles = openTab === "Flight" || openTab === "Lodging";
 
@@ -3663,15 +3056,13 @@ export default function ItineraryDetailPage() {
         bannerUrl={bannerUrl}
         name={itinerary.name}
         region={itinerary.region ?? null}
-        country={itinerary.country}
+        country={itinerary.country ?? ""}
         dateLabel={dateLabel}
+        overview={itinerary.overview}
         totalSpots={totalSpots}
         totalDays={itinerary.days.length}
         totalAttachments={totalAttachments}
         lastEdited={lastEditedLabel}
-        collaboratorProfiles={collaboratorProfiles}
-        collaborators={itinerary.collaborators}
-        ownerId={itinerary.owner_id}
         viewMode={quickViewEditMode}
         onViewModeChange={(mode) => {
           if (isPhone) return;
@@ -3691,7 +3082,6 @@ export default function ItineraryDetailPage() {
             });
           }
         }}
-        onInviteClick={() => setInviteModalOpen(true)}
         onDelete={() => setDeleteItineraryConfirmOpen(true)}
         activeTab={editActiveTab}
         onTabClick={(tab) => {
@@ -3882,7 +3272,7 @@ export default function ItineraryDetailPage() {
                   selectedLocationId={panelState?.variant === "location" ? panelState.activity.location?.id ?? null : null}
                   isCollectionActive={panelState?.variant === "collection"}
                   isDragActive={editDragLocation != null || editDragActivity != null}
-                  timezone={itinerary?.timezone ?? "UTC"}
+                  timezone={ITINERARY_TIMEZONE}
                   pendingTimeIds={pendingTimeIds}
                   preserveActivityOrder={editPreviewDays != null && editDragActivity != null}
                   activityNotePreviews={activityNotePreviews}
@@ -4009,7 +3399,6 @@ export default function ItineraryDetailPage() {
                     prev?.variant === "lodging-form" ? { variant: "lodging" } : { variant: "lodging-form" }
                   )}
                   isAddingLodging={panelState?.variant === "lodging-form"}
-                  lodgingMap={lodgingMap}
                   onActivityTimeChange={applyActivityTimeChange}
                   onActivityOptimize={handleOptimizeActivity}
                   onDayScroll={(dayIndex) => {
@@ -4066,8 +3455,7 @@ export default function ItineraryDetailPage() {
                       photoUrl: loc.photo_urls?.[0] ?? null,
                       photoUrls: loc.photo_urls,
                       formattedAddress: loc.formatted_address,
-                      googleMapsUri: loc.google_maps_uri,
-                      locationContext: loc.location_context,
+                      locationContext: loc.editorial_summary,
                       regularOpeningHours: loc.regular_opening_hours,
                     });
                   }}
@@ -4146,7 +3534,7 @@ export default function ItineraryDetailPage() {
                     if (panelState?.variant !== "location") return;
                     const act = panelState.activity;
                     if (act.day_id === targetDayId) return;
-                    const tz = itinerary?.timezone ?? "UTC";
+                    const tz = ITINERARY_TIMEZONE;
                     setEditLocalDays((prev) => {
                       let updated = prev.map((d) =>
                         d.id === act.day_id
@@ -4209,7 +3597,7 @@ export default function ItineraryDetailPage() {
                         name: location.name,
                         start_time: null,
                         end_time: null,
-                        category: location.location_type ?? "",
+                        category: "poi",
                         photo_url: location.photo_urls?.[0] ?? null,
                         location: {
                           id: location.id,
@@ -4218,9 +3606,10 @@ export default function ItineraryDetailPage() {
                           longitude: location.longitude ?? null,
                           photo_urls: location.photo_urls ?? null,
                           formatted_address: location.formatted_address ?? null,
-                          google_maps_uri: location.google_maps_uri ?? null,
-                          location_context: location.location_context ?? null,
-                          regular_opening_hours: location.regular_opening_hours ?? null,
+                          editorial_summary: location.location_context ?? null,
+                          regular_opening_hours: location.regular_opening_hours as
+                            | { weekdayDescriptions: string[] }
+                            | null,
                           stay_duration: location.stay_duration ?? null,
                           primary_type: location.primary_type ?? null,
                         },
@@ -4352,7 +3741,7 @@ export default function ItineraryDetailPage() {
                   onPlaceSearch={handlePlaceSearch}
                   onResolveMapsLink={handleResolveMapsLink}
                   itineraryId={itineraryId}
-                  timezone={itinerary?.timezone ?? undefined}
+                  timezone={ITINERARY_TIMEZONE}
                   itineraryStartDate={dateRange?.from ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, "0")}-${String(dateRange.from.getDate()).padStart(2, "0")}` : undefined}
                   itineraryEndDate={dateRange?.to ? `${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth() + 1).padStart(2, "0")}-${String(dateRange.to.getDate()).padStart(2, "0")}` : undefined}
                   onFlightFormSubmit={async (data, expandDates) => {
@@ -4415,11 +3804,9 @@ export default function ItineraryDetailPage() {
                   onFlightDelete={async (flightId) => {
                     if (!itineraryId) return;
                     try {
-                      const token = await (await import("@/lib/supabase/client")).createClient().auth.getSession().then(s => s.data.session?.access_token);
-                      if (!token) return;
                       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
                         method: "DELETE",
-                        headers: { Authorization: `Bearer ${token}` },
+                        credentials: 'same-origin',
                       });
                       setFlights(prev => prev.filter(f => f.id !== flightId));
                       const isFlightActivity = (a: { id: string; source_flight_id?: string | null }) =>
@@ -4433,11 +3820,10 @@ export default function ItineraryDetailPage() {
                   onFlightEditSubmit={async (flightId, data, expandDates) => {
                     if (!itineraryId) return;
                     try {
-                      const token = await (await import("@/lib/supabase/client")).createClient().auth.getSession().then(s => s.data.session?.access_token);
-                      if (!token) return;
                       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
                         method: "PATCH",
-                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "same-origin",
                         body: JSON.stringify({
                           flight_number: data.flightNumber,
                           airline: data.airline,
@@ -4560,7 +3946,7 @@ export default function ItineraryDetailPage() {
                   activity={editDragActivity}
                   layout={getActivityCardLayout(editDragActivity, { editable: true })}
                   selected={false}
-                  timezone={itinerary?.timezone ?? "UTC"}
+                  timezone={ITINERARY_TIMEZONE}
                   activityNotePreview={activityNotePreviews.get(editDragActivity.id) ?? null}
                   readOnlyNote
                 />
@@ -4794,41 +4180,6 @@ export default function ItineraryDetailPage() {
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
-
-      {/* Invite Modal */}
-      {itinerary && (
-        <InviteModal
-          open={inviteModalOpen}
-          onOpenChange={setInviteModalOpen}
-          entityType="itinerary"
-          entityId={itineraryId}
-          entityName={itinerary.name}
-          targetSummary={{
-            imageUrl: bannerUrl,
-            locationLabel: itinerary.region
-              ? `${itinerary.region}, ${itinerary.country}`
-              : itinerary.country,
-            detailLabel: dateLabel,
-          }}
-          isPublic={itinerary.is_public}
-          publicToken={itinerary.public_token}
-          inviteToken={itinerary.invite_token}
-          inviteTokenExpiresAt={itinerary.invite_token_expires_at}
-          userRole={currentUserId && currentUserId === itinerary.owner_id ? "owner" : "collaborator"}
-          onSharingChange={(updates: SharingState) => {
-            setItinerary((prev) => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                ...(updates.isPublic !== undefined && { is_public: updates.isPublic }),
-                ...(updates.publicToken !== undefined && { public_token: updates.publicToken }),
-                ...(updates.inviteToken !== undefined && { invite_token: updates.inviteToken }),
-                ...(updates.inviteTokenExpiresAt !== undefined && { invite_token_expires_at: updates.inviteTokenExpiresAt }),
-              };
-            });
-          }}
-        />
-      )}
       {/* Deconflict Confirmation Dialog */}
       {/* Delete Itinerary Confirmation */}
       <ConfirmActionDialog
@@ -4876,7 +4227,7 @@ export default function ItineraryDetailPage() {
                   activity={c.activity}
                   newStart={c.newStart}
                   newEnd={c.newEnd}
-                  timezone={itinerary?.timezone ?? "UTC"}
+                  timezone={ITINERARY_TIMEZONE}
                 />
               ),
             })),
@@ -4889,7 +4240,7 @@ export default function ItineraryDetailPage() {
                   newStart={a.start_time ?? ""}
                   newEnd={a.end_time ?? ""}
                   locked
-                  timezone={itinerary?.timezone ?? "UTC"}
+                  timezone={ITINERARY_TIMEZONE}
                 />
               ),
             })),
@@ -4927,7 +4278,7 @@ export default function ItineraryDetailPage() {
                   activity={activity}
                   newStart={newStart}
                   newEnd={newEnd}
-                  timezone={itinerary?.timezone ?? "UTC"}
+                  timezone={ITINERARY_TIMEZONE}
                   badge={
                     <div className="size-6 rounded-md bg-surface-muted flex items-center justify-center shrink-0">
                       <span className="type-body-3 font-semibold text-content-secondary">{newIndex + 1}</span>

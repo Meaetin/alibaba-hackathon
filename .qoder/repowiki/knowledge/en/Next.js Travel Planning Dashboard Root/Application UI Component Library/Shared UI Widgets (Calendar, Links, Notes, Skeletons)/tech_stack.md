@@ -1,1 +1,0 @@
-React server/client components (`"use client"`), Tailwind CSS with CSS custom property motion tokens, `lucide-react` icons, `class-variance-authority` for variant-driven styling, and shadcn-style primitives from `@/components/ui/primitives`.

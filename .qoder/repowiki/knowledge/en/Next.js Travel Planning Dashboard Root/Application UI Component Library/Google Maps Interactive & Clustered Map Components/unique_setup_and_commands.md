@@ -1,1 +1,0 @@
-Requires `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and optionally `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT` / `_DARK` environment variables at build time; all heavy map components are wrapped in `next/dynamic({ ssr: false })` so they only execute in the browser after first render.

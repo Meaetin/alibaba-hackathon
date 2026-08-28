@@ -1,1 +1,0 @@
-React Server Components with `"use client"` directives; Next.js `next/navigation`; motion-based animations via `motion/react` with `useReducedMotion` accessibility; `class-variance-authority` for variant-driven styling; `@base-ui/react/popover` for anchored popups; Supabase client for auth/profile; React Query (`queryClient`, `queryKeys`) for cache invalidation.

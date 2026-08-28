@@ -10,7 +10,17 @@ const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta
 
 export default tseslint.config(
   {
-    ignores: [".next/**", "node_modules/**", "drizzle/**", "scripts/output/**", "next-env.d.ts"],
+    // `.claude/worktrees/**` holds temporary git worktrees for background
+    // agents — a second checkout of this same repo. Linting it double-counts
+    // every file and reports another agent's work-in-progress as our errors.
+    ignores: [
+      ".next/**",
+      "node_modules/**",
+      "drizzle/**",
+      "scripts/output/**",
+      ".claude/**",
+      "next-env.d.ts",
+    ],
   },
   // `next/core-web-vitals` carries the React Hooks rules, which are the reason
   // this config exists: 160-odd components, and nothing else checks a dep array.

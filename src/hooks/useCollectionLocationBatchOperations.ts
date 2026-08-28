@@ -1,20 +1,17 @@
 "use client";
 
 import { useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { generateItinerary } from "@/lib/api/itineraries";
-import { addLocationsToCollection } from "@/lib/supabase/queries";
+import { createItineraryRouted } from "@/lib/api/itineraries";
+import type { QueueJob } from "@/lib/jobs/types";
 
 interface UseCollectionLocationBatchOperationsOptions {
   source: "links" | "collections";
-  collectionId?: string;
   onRefresh?: () => void;
-  onJobCreated?: (job: { id: string }) => void;
+  onJobCreated?: (job: QueueJob) => void;
 }
 
 export function useCollectionLocationBatchOperations({
   source,
-  collectionId,
   onRefresh,
   onJobCreated,
 }: UseCollectionLocationBatchOperationsOptions) {
@@ -22,18 +19,14 @@ export function useCollectionLocationBatchOperations({
     async (
       destinationId: string,
       locationIds: string[],
-      backingCollectionId?: string,
+      _backingCollectionId?: string,
     ) => {
       if (locationIds.length === 0) return;
-      const supabase = createClient();
-      const targetId = backingCollectionId ?? destinationId;
-      const { error } = await addLocationsToCollection(
-        supabase,
-        targetId,
-        locationIds,
-      );
-      if (error) throw error;
-      onRefresh?.();
+      // Collections have no store in this build — the table this wrote to left
+      // with Supabase. It throws rather than resolving quietly: the caller
+      // shows a success toast, and "added to collection" over a write that did
+      // not happen is worse than a plain error the traveller can see.
+      throw new Error("Collections are not available in this build.");
     },
     [onRefresh],
   );
@@ -50,23 +43,22 @@ export function useCollectionLocationBatchOperations({
       longitude?: number,
       aiFillGaps: boolean = true,
     ) => {
-      if (source === "collections" && collectionId) {
-      }
-      const job = await generateItinerary({
-        title: title ?? "New Itinerary",
-        location_ids: locationIds,
-        aiFillGaps,
-        start_date: startDate,
-        total_days: totalDays,
+      const result = await createItineraryRouted({
+        source: source === "collections" ? "collection_detail" : "link_detail",
+        tripName: title ?? "New Itinerary",
+        selectedLocationIds: locationIds,
+        aiRecommendations: aiFillGaps,
+        startDate,
+        totalDays,
         country,
         region,
         latitude,
         longitude,
       });
-      onJobCreated?.(job);
-      return job;
+      if (result.kind === "planning") onJobCreated?.(result.job);
+      return result;
     },
-    [source, collectionId, onJobCreated],
+    [source, onJobCreated],
   );
 
   return {

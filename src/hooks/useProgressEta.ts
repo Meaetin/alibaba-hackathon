@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { QueueJob } from "./useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
 
 /**
  * Human phrasing for the time left on an itinerary-planning job.
@@ -34,7 +34,7 @@ export function useProgressEta(job: QueueJob): { label: string | null; isOverrun
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (job.status !== "processing" && job.status !== "pending" && job.status !== "queued") return;
+    if (job.status !== "processing" && job.status !== "queued") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [job.status]);

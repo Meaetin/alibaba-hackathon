@@ -8,6 +8,7 @@ import { ItineraryCard } from "@/components/ui";
 import { CreateCard } from "@/components/ui/dashboard/CreateCard";
 import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
+import type { NewItinerarySubmission } from "@/components/ui/modals/NewItineraryModal";
 import { ConfirmDeleteModal } from "@/components/ui/modals/ConfirmDeleteModal";
 import {
   createItineraryRouted,
@@ -15,18 +16,19 @@ import {
   deleteItinerary,
   type ItineraryWithRole,
 } from "@/lib/api/itineraries";
-import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/contexts/ToastContext";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
-import { useJobsQueue, type QueueJob } from "@/hooks/useJobsQueue";
+import { useJobsQueue } from "@/hooks/useJobsQueue";
+import type { QueueJob } from "@/lib/jobs/types";
+import { announcePlanningJob } from "@/lib/jobs/events";
 import { ItineraryQueueCardItem } from "@/components/ui/itinerary/ItineraryQueueCardItem";
 import { detachJob, retryJob } from "@/lib/api/client";
 import { useItinerariesQuery } from "@/hooks/queries/useItinerariesQuery";
 import { useItineraryUsageQuery } from "@/hooks/queries/useItineraryUsageQuery";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
-import { getItineraryDetail } from "@/lib/supabase/queries/home";
+import { fetchItineraryDetail } from "@/lib/api/itineraries";
 import { useNavigationLoading } from "@/contexts/NavigationLoadingContext";
 
 const itineraryGradient = "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)";
@@ -103,9 +105,9 @@ export default function ItinerariesPage() {
   // cards at the head of the grid (with live stage + ETA), then hand their slot to
   // the real itinerary card when the job lands.
   //
-  // The "Itinerary ready" toast is deliberately NOT raised here — the global
-  // ItineraryJobNotifier owns it, and toasting in both places showed it twice.
-  const { jobs: planningJobs, removeJob, upsertJob } = useJobsQueue(userId, {
+  // The "Itinerary ready" toast is deliberately NOT raised here — MainLayout's
+  // persistent local queue owns it, and toasting in both places shows it twice.
+  const { jobs: planningJobs, removeJob, upsertJob } = useJobsQueue({
     type: "itinerary-planning",
     onJobCompleted: (job) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
@@ -118,7 +120,7 @@ export default function ItinerariesPage() {
       }
     },
     // Failure is surfaced by the queue card (error copy + Try Again) and the
-    // global notifier's toast — a third announcement here made it fire twice.
+    // layout queue's toast — a third announcement here shows it twice.
   });
 
   // Hand off to the canonical row once it loads (same key → no remount).
@@ -173,10 +175,7 @@ export default function ItinerariesPage() {
   const handleItineraryHover = useCallback((id: string) => {
     queryClient.prefetchQuery({
       queryKey: queryKeys.itineraryDetail(id),
-      queryFn: () => {
-        const supabase = createClient();
-        return getItineraryDetail(supabase, id);
-      },
+      queryFn: () => fetchItineraryDetail(id),
       staleTime: 5 * 60 * 1000,
     });
   }, []);
@@ -201,7 +200,7 @@ export default function ItinerariesPage() {
   // The itineraries page is a no-selection entry point: locations are never
   // pre-selected here, so only the AI toggle matters — on → AI-only plan (2a),
   // off → blank itinerary (2b).
-  const handleCreateItinerary = async ({ tripName, country, region, latitude, longitude, startDate, totalDays, endDate, aiRecommendations }: { tripName: string; country?: string; region?: string; latitude?: number; longitude?: number; startDate?: string; totalDays?: number; endDate?: string; aiRecommendations: boolean }) => {
+  const handleCreateItinerary = async ({ tripName, country, region, latitude, longitude, startDate, totalDays, endDate, aiRecommendations, pace }: NewItinerarySubmission) => {
     if (!tripName || !country || !startDate || !totalDays) return;
     setIsCreating(true);
     try {
@@ -211,6 +210,7 @@ export default function ItinerariesPage() {
         startDate, endDate, totalDays,
         selectedLocationIds: [],
         aiRecommendations,
+        pace,
       });
       setIsCreateModalOpen(false);
       setNewItineraryName("");
@@ -218,6 +218,8 @@ export default function ItinerariesPage() {
       // AI-only itinerary → async job; the itinerary-planning queue above
       // refreshes the list and toasts a "View" link on completion.
       if (result.kind === "planning") {
+        upsertJob(result.job);
+        announcePlanningJob(result.job);
         showToast({ title: "Generating itinerary…", variant: "success" });
         return;
       }

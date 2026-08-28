@@ -1,1 +1,0 @@
-React Server/Client components (`"use client"`) built on Next.js (`next/link`, `next/navigation`), Tailwind CSS via `@/lib/utils` `cn`, lucide-react icons, and shared primitives from `@/components/ui/primitives` (Button, CategoryBadge, Tooltip).

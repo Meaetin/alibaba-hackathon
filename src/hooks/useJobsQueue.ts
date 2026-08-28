@@ -1,36 +1,61 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { queryOptions, useQueries, useQueryClient } from "@tanstack/react-query";
+import type { QueueJob } from "@/lib/jobs/types";
 
-export interface QueueJob {
-  id: string;
-  user_id: string;
-  type: string;
-  status: "pending" | "queued" | "processing" | "completed" | "failed" | "cancelled";
-  payload: Record<string, unknown> | null;
-  result?: Record<string, unknown>;
-  error?: string;
-  content_id?: string;
-  progress?: {
-    step: number;
-    label: string;
-    fired_at: string;
-    thumbnail?: string;
-    /** Itinerary-planning only: worker-computed percentage, authoritative when present. */
-    percent?: number;
-    stage?: string;
-    eta_seconds?: number;
-    done?: number;
-    total?: number;
-    /** Percentage this stage ends at + its expected duration, for gap-filling. */
-    next_percent?: number;
-    stage_ms?: number;
-  } | null;
-  detached: boolean;
-  created_at: string;
-  updated_at: string;
-  completed_at?: string;
+export type { QueueJob } from "@/lib/jobs/types";
+
+const POLL_INTERVAL_MS = 2000;
+
+function isTerminal(status: QueueJob["status"] | undefined): boolean {
+  return status === "completed" || status === "failed";
+}
+
+/** Carries the HTTP status so a 404 can stop polling while a 500 keeps trying. */
+class JobFetchError extends Error {
+  status: number;
+
+  constructor(status: number) {
+    super(`Job request failed with status ${status}`);
+    this.name = "JobFetchError";
+    this.status = status;
+  }
+}
+
+async function fetchJob(jobId: string): Promise<QueueJob> {
+  const res = await fetch(`/api/jobs/${jobId}`);
+  if (!res.ok) throw new JobFetchError(res.status);
+  return (await res.json()) as QueueJob;
+}
+
+function jobQueryKey(jobId: string) {
+  return ["job", jobId] as const;
+}
+
+function jobQueryOptions(jobId: string) {
+  return queryOptions({
+    queryKey: jobQueryKey(jobId),
+    queryFn: () => fetchJob(jobId),
+    // The shared client sets a five-minute staleTime; a job row is stale the
+    // instant it is read.
+    staleTime: 0,
+    // A retry ladder would fire extra requests between poll ticks and blur the
+    // one thing this hook has to get right — how often it hits the server.
+    retry: false,
+    // `upsertJob` has already written the caller's row into the cache, so the
+    // mount fetch would only duplicate the first interval tick — and for a job
+    // seeded in a terminal state it would be a request we never wanted at all.
+    refetchOnMount: false,
+    refetchInterval: (query) => {
+      if (isTerminal(query.state.data?.status)) return false;
+      // A job id that does not exist will never start existing. Anything else
+      // (a 500, a dropped connection) is worth another try.
+      const error = query.state.error;
+      if (error instanceof JobFetchError && error.status === 404) return false;
+      return POLL_INTERVAL_MS;
+    },
+  });
 }
 
 // Failed jobs pin to the front so errors are always visible; within each
@@ -42,254 +67,145 @@ function compareQueueJobs(a: QueueJob, b: QueueJob): number {
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
-export function useJobsQueue(
-  userId: string | null,
-  {
-    type,
-    onJobCompleted,
-    onJobFailed,
-    onJobRejected,
-  }: {
-    type?: string;
-    onJobCompleted?: (job: QueueJob) => void;
-    onJobFailed?: (job: QueueJob) => void;
-    onJobRejected?: (job: QueueJob) => void;
-  } = {}
-) {
-  const [jobs, setJobs] = useState<QueueJob[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [connectionError, setConnectionError] = useState(false);
+/**
+ * Tracks in-flight background jobs by polling `GET /api/jobs/:id` once every
+ * two seconds per job, stopping the moment a job reaches `completed` or
+ * `failed`.
+ *
+ * **The queue does not survive a page reload.** The set of job ids being watched
+ * lives in React state, seeded only by `upsertJob`. The realtime version could
+ * rebuild the list from Supabase by querying `jobs` for the signed-in user, but
+ * auth was removed from this app, so there is no user to query by and no
+ * server-side list endpoint to replace it. Reload the page mid-plan and the
+ * queue card disappears; the job itself keeps running and the itinerary still
+ * lands in the list when it finishes.
+ *
+ * `isLoading` is therefore effectively always `false`. `upsertJob` hands the
+ * hook a complete row, so there is no initial list to fetch and nothing to wait
+ * on. It stays in the return value because the five pages destructure it.
+ */
+export function useJobsQueue({
+  type,
+  onJobCompleted,
+  onJobFailed,
+  onJobRejected,
+}: {
+  type?: string;
+  onJobCompleted?: (job: QueueJob) => void;
+  onJobFailed?: (job: QueueJob) => void;
+  onJobRejected?: (job: QueueJob) => void;
+} = {}) {
+  // The subscription list. It changes only through upsertJob/removeJob, never
+  // from a poll result, so the set of running queries stays stable while polling.
+  // The rows themselves live in the query cache, not here.
+  const [trackedIds, setTrackedIds] = useState<string[]>([]);
+
   const onJobCompletedRef = useRef(onJobCompleted);
   onJobCompletedRef.current = onJobCompleted;
   const onJobFailedRef = useRef(onJobFailed);
   onJobFailedRef.current = onJobFailed;
   const onJobRejectedRef = useRef(onJobRejected);
   onJobRejectedRef.current = onJobRejected;
-  // Tracks last known status per job to detect transitions (not repeated updates)
-  const jobStatusesRef = useRef<Map<string, QueueJob["status"]>>(new Map());
-  // Unique per hook instance. realtime-js dedupes channels by topic, so two
-  // useJobsQueue calls with the same userId (e.g. the home page runs one for
-  // content-analysis and one for itinerary-planning) would otherwise share a
-  // single channel — the second .on('postgres_changes') then lands on an
-  // already-subscribed channel and throws. A per-instance suffix keeps them
-  // independent. Colons from useId() are stripped to keep the topic clean.
-  const instanceId = useId().replace(/[^a-zA-Z0-9]/g, "");
+
+  // Last status seen per job, so the terminal callbacks fire on the transition
+  // and not on every poll that repeats the same answer.
+  const lastStatusRef = useRef<Map<string, QueueJob["status"]>>(new Map());
+  const completedForCleanupRef = useRef<string[]>([]);
+
+  const queryClient = useQueryClient();
+
+  const results = useQueries({
+    queries: trackedIds.map((jobId) => jobQueryOptions(jobId)),
+  });
+
+  // `upsertJob` writes the caller's row into the cache before the query mounts,
+  // so `result.data` is populated from the first render — there is no pending
+  // window to fall back over.
+  const jobs = useMemo(() => {
+    const list: QueueJob[] = [];
+    for (const result of results) {
+      const job = result.data;
+      if (!job) continue;
+      if (type && job.type !== type) continue;
+      list.push(job);
+    }
+    return list.sort(compareQueueJobs);
+  }, [results, type]);
+
+  const connectionError = results.some((result) => result.isError);
+  const isLoading = results.some((result) => result.isPending);
 
   useEffect(() => {
-    if (!userId) {
-      setIsLoading(false);
-      return;
-    }
-
-    let mounted = true;
-    const supabase = createClient();
-
-    const oneDayAgo = () => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-    // Fires the terminal-transition callbacks for a job we last saw in flight.
-    // Shared by the realtime handler and the reconciliation pass so a job that
-    // finishes while we're disconnected produces the same effects.
-    const emitTransition = (job: QueueJob, prevStatus?: QueueJob["status"]) => {
-      if (job.status === prevStatus) return;
+    const completed: string[] = [];
+    for (const job of jobs) {
+      const previous = lastStatusRef.current.get(job.id);
+      if (previous === job.status) continue;
+      lastStatusRef.current.set(job.id, job.status);
       if (job.status === "failed") {
         onJobFailedRef.current?.(job);
       } else if (job.status === "completed") {
-        if ((job.result as Record<string, unknown>)?.is_rejected) {
+        if ((job.result as Record<string, unknown> | null)?.is_rejected) {
           onJobRejectedRef.current?.(job);
         } else {
           onJobCompletedRef.current?.(job);
         }
+        completed.push(job.id);
       }
-    };
+    }
+    if (completed.length > 0) {
+      completedForCleanupRef.current.push(...completed);
+      setTrackedIds((previous) => previous.filter((id) => !completed.includes(id)));
+    }
+  }, [jobs]);
 
-    // postgres_changes has no replay: a message that lands while the tab is
-    // backgrounded, asleep or briefly offline is gone for good, leaving the
-    // queue card stuck mid-progress forever. Re-read the rows we still believe
-    // are running and settle them by hand.
-    const reconcile = async () => {
-      const tracked = [...jobStatusesRef.current.entries()]
-        .filter(([, status]) => ["queued", "pending", "processing"].includes(status))
-        .map(([id]) => id);
-      if (tracked.length === 0) return;
+  // TanStack Query warns that removing an actively observed query causes a
+  // hard loading state. `trackedIds` changes first; this effect runs after the
+  // next render, when `useQueries` no longer observes the completed rows.
+  useEffect(() => {
+    if (completedForCleanupRef.current.length === 0) return;
+    const completed = completedForCleanupRef.current.splice(0);
+    for (const jobId of completed) {
+      lastStatusRef.current.delete(jobId);
+      queryClient.removeQueries({ queryKey: jobQueryKey(jobId), exact: true });
+    }
+  }, [queryClient, trackedIds]);
 
-      const { data } = await supabase.from("jobs").select("*").in("id", tracked);
-      if (!mounted || !data) return;
+  useEffect(() => {
+    if (!connectionError) return;
+    console.error("useJobsQueue: a tracked job could not be fetched");
+  }, [connectionError]);
 
-      for (const row of data as QueueJob[]) {
-        if (type && row.type !== type) continue;
-        const prev = jobStatusesRef.current.get(row.id);
-        if (row.status === prev) continue;
-        jobStatusesRef.current.set(row.id, row.status);
-        emitTransition(row, prev);
-        setJobs((current) => {
-          const stillVisible =
-            (["queued", "pending", "processing"].includes(row.status) ||
-              (row.status === "failed" &&
-                Date.now() - new Date(row.updated_at).getTime() < 24 * 60 * 60 * 1000)) &&
-            !row.detached;
-          if (!stillVisible) return current.filter((j) => j.id !== row.id);
-          return current
-            .map((j) => (j.id === row.id ? { ...j, ...row } : j))
-            .sort(compareQueueJobs);
-        });
+  /** Stops polling this id and drops its card. */
+  const removeJob = useCallback((jobId: string) => {
+    lastStatusRef.current.delete(jobId);
+    setTrackedIds((previous) => previous.filter((id) => id !== jobId));
+  }, []);
+
+  /**
+   * Starts tracking a job, or replaces the row we hold for one already tracked.
+   * This is the only way an id enters the queue. Seeding records the job's
+   * current status without firing a callback, so handing back a row that is
+   * already `completed` does not re-announce it.
+   */
+  const upsertJob = useCallback(
+    (job: QueueJob) => {
+      lastStatusRef.current.set(job.id, job.status);
+      if (job.status === "completed") {
+        completedForCleanupRef.current.push(job.id);
+        setTrackedIds((previous) => previous.filter((id) => id !== job.id));
+        return;
       }
-    };
-
-    // Initial fetch — include failed (under 1 day old) so users can see and retry them
-    let query = supabase
-      .from("jobs")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("detached", false);
-
-    if (type) query = query.eq("type", type);
-
-    query
-      .or(
-        `status.in.(queued,pending,processing),and(status.eq.failed,updated_at.gte.${oneDayAgo()})`
-      )
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        if (mounted) {
-          const fetched = ((data as QueueJob[]) ?? []).sort(compareQueueJobs);
-          fetched.forEach((j) => jobStatusesRef.current.set(j.id, j.status));
-          setJobs(fetched);
-          setIsLoading(false);
-        }
-      });
-
-    // A tab returning to the foreground is the common case for a missed update.
-    const handleVisibility = () => {
-      if (document.visibilityState === "visible") void reconcile();
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    // Realtime subscription
-    const channel = supabase
-      .channel(`jobs_queue_${userId}_${instanceId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "jobs",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          if (!mounted) return;
-          setConnectionError(false);
-
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-
-          if (eventType === "INSERT") {
-            const job = newRecord as QueueJob;
-            const isTypeMatch = !type || job.type === type;
-            if (isTypeMatch) {
-              jobStatusesRef.current.set(job.id, job.status);
-            }
-            const isRecentFailed =
-              job.status === "failed" &&
-              Date.now() - new Date(job.updated_at).getTime() < 24 * 60 * 60 * 1000;
-            if (
-              isTypeMatch &&
-              (["queued", "pending", "processing"].includes(job.status) || isRecentFailed) &&
-              !job.detached
-            ) {
-              setJobs((prev) => [...prev, job].sort(compareQueueJobs));
-            }
-          }
-
-          if (eventType === "UPDATE") {
-            const job = newRecord as QueueJob;
-            const isTypeMatch = !type || job.type === type;
-            const isRecentFailed =
-              job.status === "failed" &&
-              Date.now() - new Date(job.updated_at).getTime() < 24 * 60 * 60 * 1000;
-            const isVisible =
-              isTypeMatch &&
-              (["queued", "pending", "processing"].includes(job.status) || isRecentFailed) &&
-              !job.detached;
-
-            const prevStatus = jobStatusesRef.current.get(job.id);
-            if (isTypeMatch) {
-              jobStatusesRef.current.set(job.id, job.status);
-            }
-
-            if (isTypeMatch) emitTransition(job, prevStatus);
-
-            setJobs((prev) => {
-              if (!isVisible) {
-                return prev.filter((j) => j.id !== job.id);
-              }
-              const exists = prev.some((j) => j.id === job.id);
-              if (exists) {
-                // Re-sort so a job transitioning to failed jumps to the front
-                return prev
-                  .map((j) =>
-                    j.id === job.id
-                      ? {
-                          ...j,
-                          ...job,
-                          payload: job.payload ?? j.payload,
-                          progress: job.progress ?? j.progress,
-                        }
-                      : j
-                  )
-                  .sort(compareQueueJobs);
-              }
-              return [...prev, job].sort(compareQueueJobs);
-            });
-          }
-
-          if (eventType === "DELETE") {
-            const id = (oldRecord as { id: string }).id;
-            setJobs((prev) => prev.filter((j) => j.id !== id));
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (!mounted) return;
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          setConnectionError(true);
-        } else if (status === "SUBSCRIBED") {
-          setConnectionError(false);
-          // Covers the reconnect case, where we were subscribed, dropped, and
-          // came back without ever seeing the updates in between.
-          void reconcile();
-        }
-      });
-
-    return () => {
-      mounted = false;
-      document.removeEventListener("visibilitychange", handleVisibility);
-      supabase.removeChannel(channel);
-    };
-  }, [userId, instanceId, type]);
-
-  const removeJob = (jobId: string) => {
-    jobStatusesRef.current.delete(jobId);
-    setJobs((prev) => prev.filter((j) => j.id !== jobId));
-  };
-
-  // Optimistically merge a job into the queue (e.g. the row returned by the
-  // retry endpoint) so the card reflects the new status immediately instead of
-  // waiting on the realtime UPDATE, which can lag or drop.
-  const upsertJob = (job: QueueJob) => {
-    jobStatusesRef.current.set(job.id, job.status);
-    setJobs((prev) => {
-      const exists = prev.some((j) => j.id === job.id);
-      if (exists) {
-        return prev
-          .map((j) =>
-            j.id === job.id
-              ? { ...j, ...job, payload: job.payload ?? j.payload, progress: job.progress ?? j.progress }
-              : j
-          )
-          .sort(compareQueueJobs);
-      }
-      return [...prev, job].sort(compareQueueJobs);
-    });
-  };
+      // Write straight into the cache so a re-seed (the retry endpoint handing
+      // back a reset row) shows immediately instead of waiting for the next poll.
+      queryClient.setQueryData(jobQueryKey(job.id), (previous: QueueJob | undefined) =>
+        previous ? { ...previous, ...job } : job,
+      );
+      setTrackedIds((previous) =>
+        previous.includes(job.id) ? previous : [...previous, job.id],
+      );
+    },
+    [queryClient],
+  );
 
   return { jobs, isLoading, connectionError, removeJob, upsertJob };
 }

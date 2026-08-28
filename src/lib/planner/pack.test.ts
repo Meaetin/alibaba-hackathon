@@ -12,10 +12,13 @@
 import { describe, it, expect } from 'vitest'
 
 import type { CandidatePlace, Pace } from './types'
-import type { VisitDuration } from './duration'
+import { VISIT_STEP_MINUTES, type VisitDuration } from './duration'
 import {
   DAY_END_MIN,
   DAY_SKELETON,
+  DAY_START_MIN,
+  hhmm,
+  MEAL_MAX_MINUTES,
   PACE_PLANS,
   WALK_MAX_METERS,
   packDay,
@@ -78,6 +81,27 @@ const segmentFor = (day: PackedDay, name: string) =>
 const lengthOf = (s: { startMin: number; endMin: number }) => s.endMin - s.startMin
 const droppedIds = (day: PackedDay) => day.dropped.map((d) => d.placeId)
 
+/**
+ * Every boundary in the day sits on the step grid.
+ *
+ * This is what "9:00 AM – 9:43 AM" was: 43 minutes was never anyone's estimate
+ * of Merlion Park, it was a 40-minute floor plus the three spare minutes the
+ * wall clock had left over after the growth pass.
+ *
+ * Three things hold the grid, and mutating any one of them turns these red:
+ * quantized durations, travel legs rounded up, and a squeeze that surrenders
+ * whole steps. The growth pass stepping by five is **not** one of them — with
+ * the other three in place the room a stop can grow into is already a multiple
+ * of the step, so growing by single minutes reaches the same answer. That line
+ * is a speed win and this test deliberately does not claim otherwise.
+ */
+function expectOnStepGrid(day: PackedDay) {
+  for (const s of day.segments) {
+    expect(s.startMin % VISIT_STEP_MINUTES, `${s.kind} starts off-grid at ${s.startMin}`).toBe(0)
+    expect(s.endMin % VISIT_STEP_MINUTES, `${s.kind} ends off-grid at ${s.endMin}`).toBe(0)
+  }
+}
+
 function expectContiguous(day: PackedDay) {
   for (const s of day.segments) {
     expect(s.endMin, `zero or negative-length segment at ${s.startMin}`).toBeGreaterThan(s.startMin)
@@ -100,12 +124,17 @@ const typicalDay = (): PackDayInput => ({
 })
 
 /** Over budget at preferred sizes, but shrinking alone brings it home. */
+// The pressure has to come from the activities. Meals are capped at
+// `MEAL_MAX_MINUTES` now, so a fixture that overloaded the day with two
+// two-hour lunches gets those ninety minutes handed straight back and the
+// museum never needs to shrink — which is the cap working, not the packer
+// failing.
 const overShrinkable = (): PackDayInput => ({
   assignments: [
-    assign('temple', 'activity', 0.9, dur(90, 180, 240)),
-    assign('tofu_lunch', 'lunch', 0.8, dur(60, 90, 120)),
+    assign('temple', 'activity', 0.9, dur(105, 210, 280)),
+    assign('tofu_lunch', 'lunch', 0.8, dur(45, 70, 75)),
     assign('museum', 'activity', 0.95, dur(120, 270, 330)),
-    assign('izakaya', 'dinner', 0.75, dur(60, 90, 120)),
+    assign('izakaya', 'dinner', 0.75, dur(45, 70, 75)),
   ],
   flex: [flex('gallery', 0.55, dur(30, 60, 90))],
 })
@@ -245,13 +274,16 @@ describe('over budget', () => {
   })
 
   it('drops flex picks next — real assignments untouched', () => {
-    // No slack anywhere (min === preferred), so shrinking cannot help.
+    // No slack anywhere (min === preferred), so shrinking cannot help. Meals
+    // sit exactly at `MEAL_MAX_MINUTES` so the cap has nothing to give back —
+    // the thirty minutes they used to carry are in the museum instead, which
+    // keeps the day's total, and so the test's premise, unchanged.
     const input: PackDayInput = {
       assignments: [
         assign('temple', 'activity', 0.9, dur(120)),
-        assign('tofu_lunch', 'lunch', 0.8, dur(90)),
-        assign('museum', 'activity', 0.95, dur(240)),
-        assign('izakaya', 'dinner', 0.75, dur(90)),
+        assign('tofu_lunch', 'lunch', 0.8, dur(75)),
+        assign('museum', 'activity', 0.95, dur(270)),
+        assign('izakaya', 'dinner', 0.75, dur(75)),
         assign('night_walk', 'activity', 0.8, dur(60)),
       ],
       flex: [flex('gallery', 0.55, dur(60))],
@@ -302,6 +334,104 @@ describe('over budget', () => {
 
 // ── under budget ─────────────────────────────────────────────────────────────
 
+describe('a meal that missed its window', () => {
+  /**
+   * Nothing has slack, so the shrink ladder cannot help and the packer must
+   * drop. Lunch cannot start until 14:00 because of the one stop in front of
+   * it; the cheap gallery sits after lunch and is the lowest-scored thing in
+   * the day.
+   */
+  const lateLunch = (): PackDayInput => ({
+    assignments: [
+      assign('long_morning', 'activity', 0.9, dur(300, 300, 300)),
+      assign('tofu_lunch', 'lunch', 0.8, dur(45, 45, 45)),
+      assign('cheap_gallery', 'activity', 0.1, dur(30, 30, 30)),
+      assign('izakaya', 'dinner', 0.75, dur(60, 60, 60)),
+    ],
+  })
+
+  it('drops the stop in front of the meal, not the cheapest one behind it', () => {
+    const day = packDay(lateLunch(), 'balanced', NO_TRAVEL)
+
+    // Only `long_morning` can move lunch earlier. Dropping the gallery costs a
+    // stop and leaves lunch exactly as late as it was, which is how one missed
+    // window used to cost a whole afternoon.
+    expect(droppedIds(day)).toEqual(['ChIJ_long_morning'])
+    expect(segmentFor(day, 'cheap_gallery')).toBeDefined()
+    expect(segmentFor(day, 'tofu_lunch')!.startMin).toBeLessThanOrEqual(DAY_SKELETON[0].window[1])
+    expectContiguous(day)
+  })
+
+  it('still drops by score when the day runs long and nothing waited', () => {
+    // Every stop is reached after its window has already opened, so no stop
+    // absorbed any slack and there is nothing to narrow blame to. The ordinary
+    // worst-first rule stands, and one cut is enough.
+    //
+    // This test was written asserting the same thing about a day whose dinner
+    // *did* miss its window — so it exercised the `blockedBefore` path while
+    // its comment claimed the opposite, and would have passed whatever the
+    // overrun rule said. The fifteen-minute pace buffer on each leg is what
+    // made the difference invisible.
+    const day = packDay(
+      {
+        assignments: [
+          assign('temple', 'activity', 0.9, dur(200, 200, 200)),
+          assign('tofu_lunch', 'lunch', 0.8, dur(45, 45, 45)),
+          assign('cheap_gallery', 'activity', 0.1, dur(150, 150, 150)),
+          assign('museum', 'activity', 0.95, dur(150, 150, 150)),
+          assign('izakaya', 'dinner', 0.75, dur(60, 60, 60)),
+          assign('night_walk', 'activity', 0.5, dur(60, 60, 60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+    expect(droppedIds(day)).toEqual(['ChIJ_cheap_gallery'])
+    expect(segmentFor(day, 'museum')).toBeDefined()
+    expect(segmentFor(day, 'night_walk')).toBeDefined()
+    expectContiguous(day)
+  })
+
+  /**
+   * The mirror of a late lunch, and the reason `overrunFrom` exists.
+   *
+   * Lunch and dinner both wait for their windows here, so every minute the
+   * morning gives up is a minute the day idles away instead. Only the two bars
+   * behind dinner can move the end of the day — and they are the two
+   * best-scored activities, so a worst-first cut over the whole day reaches
+   * them last, after it has shed the entire morning for nothing.
+   *
+   * Measured on a live Singapore trip for a cafés-and-nightlife persona: nine
+   * offered, two shipped, and the only stop whose removal helped was the last
+   * one dropped. Every duration is fixed so the shrink ladder cannot dilute it.
+   */
+  it('drops from behind the anchor that waited, not the morning in front of it', () => {
+    const day = packDay(
+      {
+        assignments: [
+          assign('coffee_1', 'activity', 0.62, dur(45, 45, 45)),
+          assign('coffee_2', 'activity', 0.64, dur(45, 45, 45)),
+          assign('hawker_lunch', 'lunch', 0.68, dur(75, 75, 75)),
+          assign('bakery_bun', 'activity', 0.6, dur(30, 30, 30)),
+          assign('cocktail_dinner', 'dinner', 0.79, dur(75, 75, 75)),
+          assign('rooftop_bar', 'activity', 0.76, dur(60, 60, 60)),
+          assign('nightcap_bar', 'activity', 0.74, dur(60, 60, 60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+
+    // One cut, and it is the stop that was actually keeping the day open.
+    expect(droppedIds(day)).toEqual(['ChIJ_nightcap_bar'])
+    for (const name of ['coffee_1', 'coffee_2', 'bakery_bun', 'rooftop_bar']) {
+      expect(segmentFor(day, name), `${name} cannot move the end of the day`).toBeDefined()
+    }
+    expect(segmentFor(day, 'hawker_lunch')!.startMin).toBe(DAY_SKELETON[0].window[0])
+    expectContiguous(day)
+  })
+})
+
 describe('under budget', () => {
   it('stretches durations toward max first', () => {
     const day = packDay(typicalDay(), 'balanced', NO_TRAVEL)
@@ -324,6 +454,127 @@ describe('under budget', () => {
     expect(cafe!.startMin).toBeGreaterThanOrEqual(w0)
     expect(cafe!.endMin).toBeLessThanOrEqual(w1)
     expectContiguous(day)
+  })
+})
+
+// ── the cafe a traveller was actually given ──────────────────────────────────
+
+/**
+ * The morning this packer used to throw away.
+ *
+ * Pass B is told in `assign.ts` that "a role says what a stop is, never when it
+ * is", so it tags a coffee shop `cafe_break` because it is one and puts it
+ * first because that is when you drink coffee. `stampDay` then read the role as
+ * a time and refused to seat it before 15:30. Measured on a live Ubud trip:
+ * nine dropped stops across three days, every one of them in front of lunch,
+ * and not one stop after lunch dropped on any day.
+ *
+ * Neither Gate A fixture contains a single assigned `cafe_break`, so both
+ * snapshots pass whatever this rule says. That is exactly why these tests are
+ * written by hand.
+ */
+describe('an assigned cafe break', () => {
+  const morningCafes = (): PackDayInput => ({
+    assignments: [
+      assign('coffee', 'cafe_break', 0.5, dur(45), ['coffee_shop']),
+      assign('bakery', 'cafe_break', 0.4, dur(45), ['cafe']),
+      assign('warung', 'lunch', 0.9, dur(60)),
+      assign('temple', 'activity', 0.8, dur(90)),
+      assign('bar', 'dinner', 0.7, dur(60)),
+    ],
+  })
+
+  it('starts when you arrive, instead of waiting for the afternoon', () => {
+    const day = packDay(morningCafes(), 'balanced', NO_TRAVEL)
+    const [cafeOpens] = DAY_SKELETON.find((slot) => slot.role === 'cafe_break')!.window
+    expect(segmentFor(day, 'coffee')!.startMin).toBe(DAY_START_MIN)
+    expect(segmentFor(day, 'bakery')!.startMin).toBeLessThan(cafeOpens)
+  })
+
+  // The whole point. Both cafes used to be dropped — not because the day was
+  // full but because they made lunch impossible by sitting in front of it and
+  // refusing to happen before 15:30.
+  it('does not cost the day its morning', () => {
+    const day = packDay(morningCafes(), 'balanced', NO_TRAVEL)
+    expect(day.dropped).toEqual([])
+    expect(activities(day)).toHaveLength(5)
+    // And lunch is still a lunch: only meals kept their windows.
+    const [opens, latest] = DAY_SKELETON.find((slot) => slot.role === 'lunch')!.window
+    const lunch = segmentFor(day, 'warung')!
+    expect(lunch.startMin).toBeGreaterThanOrEqual(opens)
+    expect(lunch.startMin).toBeLessThanOrEqual(latest)
+  })
+
+  it('still lets an afternoon cafe be an afternoon cafe', () => {
+    // Nothing forces it late any more, so this asserts the ordinary case is
+    // unharmed: a cafe placed after lunch simply runs after lunch.
+    const day = packDay(
+      {
+        assignments: [
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('coffee', 'cafe_break', 0.5, dur(45), ['coffee_shop']),
+          assign('bar', 'dinner', 0.7, dur(60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+    expect(day.dropped).toEqual([])
+    expect(segmentFor(day, 'coffee')!.startMin).toBeGreaterThan(segmentFor(day, 'warung')!.startMin)
+  })
+})
+
+// ── why a stop was cut ───────────────────────────────────────────────────────
+
+/**
+ * The packer drops for two unrelated reasons and used to say the same sentence
+ * about both. On the live Ubud trip "over budget — no room left in the day" was
+ * printed under days that ended at 19:15 with a 21:00 limit and a
+ * two-and-a-half-hour hole in the morning.
+ */
+describe('the reason a stop was dropped', () => {
+  it('names the meal, and the time it had to start by, when a meal was blocked', () => {
+    // Two long mornings in front of lunch, and a slow leg between every pair:
+    // lunch cannot reach 13:30 however much the visits are squeezed.
+    const day = packDay(
+      {
+        assignments: [
+          assign('longA', 'activity', 0.3, dur(180)),
+          assign('longB', 'activity', 0.2, dur(180)),
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('bar', 'dinner', 0.7, dur(60)),
+        ],
+      },
+      'balanced',
+      travel(30, 3000),
+    )
+    const [, latest] = DAY_SKELETON.find((slot) => slot.role === 'lunch')!.window
+    expect(day.dropped.length).toBeGreaterThan(0)
+    for (const cut of day.dropped) {
+      expect(cut.reason).toContain('lunch could not start by')
+      expect(cut.reason).toContain(hhmm(latest))
+      expect(cut.reason).not.toContain('over budget')
+    }
+  })
+
+  it('still says over budget when the day genuinely runs long', () => {
+    // Lunch and dinner both seated in their windows; it is the tail that does
+    // not fit, so nothing is blocked and the old sentence is the true one.
+    const day = packDay(
+      {
+        assignments: [
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('a1', 'activity', 0.8, dur(120)),
+          assign('bar', 'dinner', 0.7, dur(60)),
+          assign('a2', 'activity', 0.4, dur(180)),
+          assign('a3', 'activity', 0.3, dur(180)),
+        ],
+      },
+      'balanced',
+      travel(20, 2000),
+    )
+    expect(day.dropped.length).toBeGreaterThan(0)
+    for (const cut of day.dropped) expect(cut.reason).toBe('over budget — no room left in the day')
   })
 })
 
@@ -408,5 +659,97 @@ describe('pace', () => {
       const firstLeg = travels(day)[0]
       expect(lengthOf(firstLeg), `${pace} buffer`).toBe(PACE_PLANS[pace].bufferMin)
     }
+  })
+})
+
+describe('the step grid', () => {
+  // Odd travel legs and odd durations on purpose: the inputs here are exactly
+  // the shapes that used to leak a stray minute into the clock.
+  const awkward = (): PackDayInput => ({
+    assignments: [
+      assign('temple', 'activity', 0.9, dur(43, 61, 97)),
+      assign('tofu_lunch', 'lunch', 0.8, dur(37, 64, 91)),
+      assign('museum', 'activity', 0.85, dur(58, 77, 133)),
+      assign('izakaya', 'dinner', 0.75, dur(52, 73, 88)),
+    ],
+    flex: [flex('gallery', 0.55, dur(29, 43, 71))],
+  })
+
+  it.each(['relaxed', 'balanced', 'packed'] as const)(
+    'stamps every start and end on a five-minute mark at %s pace',
+    (pace) => {
+      const day = packDay(awkward(), pace, travel(13, 1035))
+      expectOnStepGrid(day)
+      expectContiguous(day)
+    },
+  )
+
+  it('rounds a travel leg up, never down', () => {
+    // Erring long is the only safe direction: a schedule that has you arriving
+    // before the route allows costs the stop it promised.
+    const day = packDay(typicalDay(), 'balanced', travel(13, 1035))
+    const leg = travels(day)[0]
+    // 13 minutes rounds to 15, plus balanced's 15-minute buffer.
+    expect(lengthOf(leg)).toBe(30)
+  })
+
+  it('keeps a leg that is already on the grid exactly as long as it was', () => {
+    const day = packDay(typicalDay(), 'balanced', travel(10, 800))
+    expect(lengthOf(travels(day)[0])).toBe(25) // 10 + 15
+  })
+
+  it('still fits and still drops on the grid when the day is over budget', () => {
+    const day = packDay(overShrinkable(), 'balanced', travel(18, 1400))
+    expectOnStepGrid(day)
+    expectContiguous(day)
+  })
+})
+
+describe('a meal is capped, not elastic upwards', () => {
+  // The live failure: a restaurant whose stay_duration said 135 minutes was
+  // planned at its ceiling and a Singapore day stamped lunch 11:30–14:55.
+  const withLongLunch = (): PackDayInput => ({
+    assignments: [
+      assign('temple', 'activity', 0.9, dur(60, 60, 60)),
+      assign('long_lunch', 'lunch', 0.8, dur(90, 160, 205)),
+    ],
+  })
+
+  it('holds a meal to MEAL_MAX_MINUTES when no persona says otherwise', () => {
+    const day = packDay(withLongLunch(), 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'long_lunch')!)).toBeLessThanOrEqual(MEAL_MAX_MINUTES)
+  })
+
+  it('lets the persona move the ceiling in both directions', () => {
+    const knobs = (mealMinutes: number) => ({
+      visitDurationBias: 'max' as const,
+      walkMaxMeters: 1200,
+      mealMinutes,
+    })
+    const group = packDay(withLongLunch(), 'relaxed', NO_TRAVEL, knobs(95))
+    const solo = packDay(withLongLunch(), 'relaxed', NO_TRAVEL, knobs(60))
+    expect(lengthOf(segmentFor(group, 'long_lunch')!)).toBeLessThanOrEqual(95)
+    expect(lengthOf(segmentFor(solo, 'long_lunch')!)).toBeLessThanOrEqual(60)
+    expect(lengthOf(segmentFor(group, 'long_lunch')!)).toBeGreaterThan(
+      lengthOf(segmentFor(solo, 'long_lunch')!),
+    )
+  })
+
+  it('caps only meals — an activity of the same length is untouched', () => {
+    const input: PackDayInput = {
+      assignments: [assign('gallery', 'activity', 0.9, dur(90, 160, 205))],
+    }
+    const day = packDay(input, 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'gallery')!)).toBeGreaterThan(MEAL_MAX_MINUTES)
+  })
+
+  it('keeps min at or below the new ceiling', () => {
+    // A range whose floor sits above the cap would leave the packer squeezing
+    // against bounds that contradict each other — worse than the long lunch.
+    const input: PackDayInput = {
+      assignments: [assign('banquet', 'lunch', 0.8, dur(180, 200, 240))],
+    }
+    const day = packDay(input, 'relaxed', NO_TRAVEL)
+    expect(lengthOf(segmentFor(day, 'banquet')!)).toBeLessThanOrEqual(MEAL_MAX_MINUTES)
   })
 })

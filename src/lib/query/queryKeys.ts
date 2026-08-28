@@ -1,4 +1,10 @@
 export const queryKeys = {
+  /** The signed-in user. No id in the key — the cookie decides who that is. */
+  currentUser: () => ["currentUser"] as const,
+  /** The signed-in traveller's saved preferences. No id — the cookie decides. */
+  travelPreferences: () => ["travelPreferences"] as const,
+  /** The signed-in traveller's persona. No id — the cookie decides. */
+  persona: () => ["persona"] as const,
   linkUsage: (userId: string) => ["linkUsage", userId] as const,
   itineraryUsage: (userId: string) => ["itineraryUsage", userId] as const,
   profile: (userId: string) => ["profile", userId] as const,

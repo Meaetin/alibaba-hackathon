@@ -1,6 +1,0 @@
-- Each component declares a `cva`-based variant map at the top of the file with `variants`, `compoundVariants`, and `defaultVariants`, then applies them via `cn('component-root', variants({...}), className)`.
-- Components are marked with the `'use client'` directive and wrap Base UI primitives rather than implementing DOM/accessibility logic themselves.
-- Public props are typed by intersecting `VariantProps<typeof *Variants>` with the underlying Base UI prop types (e.g. `ComponentProps<typeof MenuPrimitive.Item>`) and exporting a dedicated `*Props` interface.
-- Multi-part components follow a Root/Trigger/Content split (e.g. Menu, Popover, Sheet) where the root holds state and child components render Base UI sub-elements with their own variant classes.
-- Components use `forwardRef` and set `displayName` so they appear correctly in React DevTools, and merge user `className` through the shared `cn` helper.
-- Icon placement is modeled as an `icon` variant axis (`none` | `leading` | `trailing` | `both`) that drives asymmetric padding via compound variants, consistently applied across Button, Input, Menu, and related components.

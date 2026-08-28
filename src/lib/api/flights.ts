@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/client'
 import { unwrap, ensureOk } from './client'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -35,18 +34,17 @@ export interface ExtractedFlight {
   updated_at: string
 }
 
-async function getAuthToken(): Promise<string> {
-  const supabase = createClient()
-  const { data, error } = await supabase.auth.getSession()
-  if (error || !data.session) throw new Error('Not authenticated')
-  return data.session.access_token
-}
+/**
+ * These calls go to the old REST backend on `NEXT_PUBLIC_API_URL`, which is
+ * gone, so they fail whatever they send. The Supabase bearer token they used
+ * to carry is gone with it; the session is an httpOnly cookie now and the
+ * browser attaches it for same-origin requests without being asked.
+ */
 
 export async function extractFlightsFromPDF(
   itineraryId: string,
   file: File
 ): Promise<ExtractedFlight[]> {
-  const token = await getAuthToken()
   const formData = new FormData()
   formData.append('file', file)
 
@@ -54,7 +52,7 @@ export async function extractFlightsFromPDF(
     `${API_URL}/api/itineraries/${itineraryId}/flights/extract`,
     {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
       body: formData,
     }
   )
@@ -90,14 +88,12 @@ export async function createFlight(
     status?: string
   }
 ) {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/flights`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(flight),
     }
@@ -109,10 +105,9 @@ export async function createFlight(
 }
 
 export async function getFlights(itineraryId: string) {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/flights`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { credentials: 'same-origin' }
   )
 
   return unwrap(res, 'Failed to fetch flights')

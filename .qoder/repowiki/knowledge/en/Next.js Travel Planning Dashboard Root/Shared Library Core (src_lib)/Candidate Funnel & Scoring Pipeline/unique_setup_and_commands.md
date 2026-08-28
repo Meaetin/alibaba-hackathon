@@ -1,1 +1,0 @@
-Tests are driven by deterministic RNG injection via an `rng: () => number` parameter (see `__tests__/rng.ts`) so k-means++ runs are reproducible; snapshot tests live under `__tests__/__snapshots__/gate-a.test.ts.snap`.

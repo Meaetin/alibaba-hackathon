@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+"use client";
+
+import { useCurrentUserQuery } from "./queries/useCurrentUserQuery";
 
 /**
- * Resolves the current authenticated user's id from the Supabase session.
- * Returns null until the session loads (or when signed out).
+ * The signed-in user's id, or `null` while it is loading and when signed out.
+ *
+ * The signature is unchanged from the Supabase version this replaces, which is
+ * why its nine call sites did not move. The body is different in one way that
+ * matters: this shares a single TanStack query with every other caller, where
+ * the old hook ran its own `useEffect` and asked again on every mount.
+ *
+ * It still cannot tell "loading" from "signed out" — both are `null` — because
+ * the components reading it only ever use the id to enable a query. Anything
+ * that needs the difference, like a redirect, must read `useCurrentUserQuery`
+ * directly and look at `isLoading`.
  */
 export function useSessionUserId(): string | null {
-  const [userId, setUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      setUserId(data.session?.user.id ?? null);
-    });
-  }, []);
-
-  return userId;
+  return useCurrentUserQuery().data?.id ?? null;
 }

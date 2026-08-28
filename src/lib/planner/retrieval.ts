@@ -39,6 +39,7 @@ import type { CandidatePlace, OpeningPeriod, PreferenceProfile } from "./types";
 // ── the wire ─────────────────────────────────────────────────────────────────
 
 const PLACES_SEARCH_TEXT_URL = "https://places.googleapis.com/v1/places:searchText";
+const PLACES_SEARCH_NEARBY_URL = "https://places.googleapis.com/v1/places:searchNearby";
 const PLACES_DETAILS_BASE_URL = "https://places.googleapis.com/v1/places";
 
 /**
@@ -64,6 +65,7 @@ export const SEARCH_FIELD_MASK = [
   "places.priceRange",
   "places.regularOpeningHours",
   "places.businessStatus",
+  "places.googleMapsUri", // Pro — the mask is already Enterprise, so this is free
   "places.photos", // resource NAMES only — resolving to an image is a separate SKU
 ].join(",");
 
@@ -95,17 +97,185 @@ export type { FetchLike } from "./http";
 
 // ── what a search is ─────────────────────────────────────────────────────────
 
+/** Google's hard ceiling on a Nearby Search circle. */
+export const NEARBY_MAX_RADIUS_METERS = 50_000;
+
+/**
+ * Places types Google **returns** but will not **filter** on.
+ *
+ * The API splits its types into two tables: Table A is searchable, Table B is
+ * only ever descriptive. Both arrive in `places.types`, which makes this trap
+ * invisible from the data — a live Singapore run saw `food` and
+ * `place_of_worship` on real places, proposed them as `includedTypes`, and
+ * Google answered **400 for the whole request**. Not "ignored that type": the
+ * entire circle was lost, twice out of three searches.
+ *
+ * So "this city has places of that type" is necessary and not sufficient, and
+ * this list is the rest of it. Google owns the list, so it can grow; anything
+ * missed still costs only its own circle, which the feasibility ladder can
+ * widen around.
+ */
+export const NON_SEARCHABLE_TYPES: ReadonlySet<string> = new Set([
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "country",
+  "establishment",
+  "finance",
+  "floor",
+  "food",
+  "general_contractor",
+  "geocode",
+  "health",
+  "intersection",
+  "landmark",
+  "natural_feature",
+  "neighborhood",
+  "place_of_worship",
+  "plus_code",
+  "point_of_interest",
+  "political",
+  "post_box",
+  "postal_code",
+  "premise",
+  "room",
+  "route",
+  "street_address",
+  "street_number",
+  "sublocality",
+  "sublocality_level_1",
+  "subpremise",
+  "town_square",
+]);
+
+/**
+ * A circle to search inside, for `places:searchNearby`.
+ *
+ * The coordinates come from a place that is already in the pool, never from a
+ * model and never from a geocoder — which is what makes an anchor cost nothing
+ * and be impossible to hallucinate.
+ */
+export interface NearbySearch {
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  /** Places types to return. Empty means "whatever is there". */
+  includedTypes: readonly string[];
+  /**
+   * How Google orders the twenty places it will return.
+   *
+   * It is on the request rather than a constant because it is part of what was
+   * asked, and `searchCacheKey` has to say so — a circle ranked by popularity
+   * and the same circle ranked by distance are different searches with the same
+   * centre, and one must not serve the other out of the cache.
+   */
+  rankPreference: NearbyRankPreference;
+}
+
+export type NearbyRankPreference = "DISTANCE" | "POPULARITY";
+
+/**
+ * Distance, and not Google's default.
+ *
+ * Every circle we search is centred on a theme's anchor, and the question being
+ * asked is always "what is near this place". Google defaults to `POPULARITY`,
+ * which answers a different question: the twenty most prominent places
+ * *anywhere in the circle*. On a 4 km circle round a museum in Nusa Dua that is
+ * twenty places in Kuta, 8 km away — the anchor's own neighbourhood never
+ * appears, and widening the circle makes it worse rather than better. It is
+ * also why `feasibility.ts`'s widen rung could not fix a day with nothing to
+ * eat: a bigger circle ranked by popularity walks further from the anchor.
+ */
+export const NEARBY_RANK_PREFERENCE: NearbyRankPreference = "DISTANCE";
+
 /**
  * One billable search. Cache identity also includes the page size supplied to
  * `searchCacheKey`; a five-result pre-warm must not satisfy a twenty-result run.
+ *
+ * Two endpoints, one type, on purpose. A nearby search wants exactly the same
+ * cache, the same location persistence, the same dedupe and the same stats as a
+ * text search, and a second copy of `retrievePlaces` to get them would be a
+ * second place for the "publish the cache entry only after the rows land" rule
+ * to be forgotten.
  */
 export interface SearchRequest {
   city: string;
-  /** Text query with `{city}` already interpolated. */
+  /** Text query with `{city}` already interpolated. Ignored when `nearby` is set. */
   query: string;
   /** Optional single Places type filter. Narrows the long tail Text Search
    *  catches; most plan rows leave it unset. */
   includedType?: string;
+  /** Present ⇒ this is a Nearby Search around a circle, not a Text Search. */
+  nearby?: NearbySearch;
+  /**
+   * A circle a **Text Search** leans toward. Ignored when `nearby` is set —
+   * they are different endpoints and a nearby circle is already a restriction.
+   *
+   * Bias, not restriction: Google may still return something outside it. That
+   * is safe here and not sloppiness — `MEMBER_RADIUS_SLACK` refuses a place too
+   * far from an anchor to join its day, and the meal reserve caps its own
+   * reach, so a stray distant result is dropped downstream rather than seated.
+   */
+  locationBias?: { latitude: number; longitude: number; radiusMeters: number };
+}
+
+/**
+ * A Text Search leaning on a circle — how a *phrase* gets asked near a place.
+ *
+ * `includedTypes` is coarse by design: Google types a great vegetarian-friendly
+ * izakaya `izakaya_restaurant`, never `vegetarian_restaurant`, so a meal circle
+ * asking for types finds the places that *label* themselves and misses the long
+ * tail. `dietaryBridgeFor` already carries the phrases that catch it — they were
+ * only ever fired city-wide, which for a three-day trip means the results
+ * cluster wherever the city is busiest and not where the traveller will be.
+ *
+ * A negative never belongs in one of these. "no seafood" matches seafood
+ * restaurants; refusals are `DIETARY_CONFLICT_TYPES`' job, after the search.
+ */
+export function textNearRequest(
+  city: string,
+  query: string,
+  centre: { latitude: number; longitude: number },
+  radiusMeters: number,
+): SearchRequest {
+  return {
+    city,
+    query,
+    locationBias: {
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
+    },
+  };
+}
+
+/**
+ * A nearby search as a `SearchRequest`. The radius is clamped to Google's
+ * ceiling here rather than at the call site, because the call site is deriving
+ * it from a persona knob and a model's word for "wide".
+ */
+export function nearbyRequest(
+  city: string,
+  /** A place already in the pool. Its coordinates are the circle's centre. */
+  centre: { latitude: number; longitude: number },
+  radiusMeters: number,
+  includedTypes: readonly string[],
+  rankPreference: NearbyRankPreference = NEARBY_RANK_PREFERENCE,
+): SearchRequest {
+  return {
+    city,
+    // Not a query, and deliberately not empty: this string is what a failure in
+    // `stats.failures` is identified by, and "" tells nobody anything. The rank
+    // is in it because two circles now differ by nothing else, and a failure
+    // reading `nearby:museum` twice names neither of them.
+    query: `nearby:${includedTypes.join("+") || "any"}@${rankPreference.toLowerCase()}`,
+    nearby: {
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
+      includedTypes: [...includedTypes].sort(),
+      rankPreference,
+    },
+  };
 }
 
 /**
@@ -124,6 +294,25 @@ export function searchCacheKey(
     normalizeKeyPart(request.query),
     request.includedType ?? "",
     String(pageSize),
+    // A circle is part of what was asked. Two themes anchored on different
+    // places produce different searches and must not share one cache entry.
+    request.nearby
+      ? [
+          request.nearby.latitude.toFixed(5),
+          request.nearby.longitude.toFixed(5),
+          String(request.nearby.radiusMeters),
+          [...request.nearby.includedTypes].sort().join("+"),
+          request.nearby.rankPreference,
+        ].join(",")
+      : "",
+    // The same phrase asked in two neighbourhoods is two different answers.
+    request.locationBias
+      ? [
+          request.locationBias.latitude.toFixed(5),
+          request.locationBias.longitude.toFixed(5),
+          String(request.locationBias.radiusMeters),
+        ].join(",")
+      : "",
   ];
   return createHash("sha256").update(parts.join("|")).digest("hex");
 }
@@ -136,10 +325,28 @@ function normalizeKeyPart(value: string): string {
  * The taxonomy bridge, applied: ~2 text queries per interest plus a row per
  * known dietary need. Deduped by cache key, because a query shared by two
  * interests must be billed once.
+ *
+ * `near` is where the traveller is actually staying. Without it every query is
+ * the city's name and nothing else, and Google answers with whatever is most
+ * prominent *anywhere under that name* — which for "Bali" is an island 150 km
+ * across, and for "specialty coffee Bali" is Kuta and Seminyak whether or not
+ * the traveller is going anywhere near them.
+ *
+ * A bias, not a restriction: Google may still answer with something outside the
+ * circle, and that is fine because `withinReach` in `pipeline.ts` drops it
+ * before it can become a day. Same division of labour the anchored dietary
+ * phrases already keep — the circle shapes the answer, a later stage enforces
+ * it.
+ *
+ * **Omitting `near` must produce exactly what this function produced before it
+ * existed**, request for request and cache key for cache key. A pre-warmed
+ * city's rows are worth real money and a stray `locationBias` on every text
+ * search would orphan all of them. `retrieval.test.ts` pins it.
  */
 export function buildSearchPlan(
   profile: Pick<PreferenceProfile, "interests" | "dietary">,
   city: string,
+  near?: { latitude: number; longitude: number; radiusMeters: number },
 ): SearchRequest[] {
   const queries = [
     ...profile.interests.flatMap((interest) => queriesFor(interest, city)),
@@ -148,7 +355,11 @@ export function buildSearchPlan(
         dietaryBridgeFor(need)?.queries.map((q) => q.replaceAll("{city}", city)) ?? [],
     ),
   ];
-  return dedupeRequests(queries.map((query) => ({ city, query })));
+  return dedupeRequests(
+    queries.map((query) =>
+      near ? textNearRequest(city, query, near, near.radiusMeters) : { city, query },
+    ),
+  );
 }
 
 function dedupeRequests(requests: readonly SearchRequest[]): SearchRequest[] {
@@ -195,6 +406,9 @@ export interface RetrievedPlace extends CandidatePlace {
   city: string;
   formattedAddress?: string;
   priceRange?: PriceRange;
+  /** Google's canonical link for the place. Undefined for anything retrieved
+   *  before the field joined `SEARCH_FIELD_MASK`. */
+  googleMapsUri?: string;
   /** Up to 5. Null means the shortlist hydration has not run; `[]` means it
    *  ran and Google returned no reviews. */
   reviewSnippets: ReviewSnippet[] | null;
@@ -375,6 +589,39 @@ export interface RetrievalResult {
 }
 
 /**
+ * Adds a second run's counters to a first's.
+ *
+ * Exists because a themed plan searches Google **twice**: once for every
+ * theme's circles, and again inside the feasibility ladder's `widen` rung for
+ * each day that cannot feed itself. The second call's stats used to be dropped
+ * on the floor, so `stats.explore.billedCalls` reported the opening circles and
+ * none of the extra searches bought for the days that went worst — the days
+ * that cost the most read as the cheapest. Measured on the Kyoto themed
+ * fixture: 12 real `searchNearby` calls, 9 reported.
+ *
+ * `failures` matters more than the money. A widening search that 400s — and a
+ * live Singapore run lost two of three circles to an unsearchable type — was
+ * discarded with everything else, so "the ladder tried and found nothing" and
+ * "the request was rejected" looked identical. They need different fixes.
+ */
+export function mergeRetrievalStats(
+  first: RetrievalStats,
+  second: RetrievalStats,
+): RetrievalStats {
+  return {
+    requested: first.requested + second.requested,
+    unique: first.unique + second.unique,
+    cacheHits: first.cacheHits + second.cacheHits,
+    cacheMisses: first.cacheMisses + second.cacheMisses,
+    billedCalls: first.billedCalls + second.billedCalls,
+    seen: first.seen + second.seen,
+    duplicatesDropped: first.duplicatesDropped + second.duplicatesDropped,
+    missingFromStore: first.missingFromStore + second.missingFromStore,
+    failures: [...first.failures, ...second.failures],
+  };
+}
+
+/**
  * Runs a search plan. Requests sharing a cache key are collapsed first, so an
  * identical (city, query, includedType) triple is billed at most once per run
  * even before the cache is consulted.
@@ -434,7 +681,7 @@ export async function retrievePlaces(
     deps.concurrency ?? DEFAULT_CONCURRENCY,
     async ({ request }): Promise<{ places?: RetrievedPlace[]; failure?: SearchFailure }> => {
       try {
-        const raw = await searchText(request, { doFetch, apiKey: deps.apiKey, pageSize });
+        const raw = await runSearch(request, { doFetch, apiKey: deps.apiKey, pageSize });
         return { places: raw.map((place) => normalizePlace(place, request.city, now)) };
       } catch (error) {
         return { failure: { request, message: messageOf(error) } };
@@ -639,14 +886,55 @@ async function fetchShortlistDetails(
   };
 }
 
-async function searchText(
+/**
+ * One search, either endpoint.
+ *
+ * **`SEARCH_FIELD_MASK` for both, and that is the cost argument.** Google sets
+ * the SKU tier from the highest-tier field in the mask, per call — so a single
+ * Atmosphere field added for a nearby search would bump the tier on every
+ * nearby call in every plan. The Atmosphere tier is bought once, later, on the
+ * ~60-place shortlist. Never here.
+ */
+async function runSearch(
   request: SearchRequest,
   ctx: { doFetch: FetchLike; apiKey: string; pageSize: number },
 ): Promise<RawPlace[]> {
-  const body: Record<string, unknown> = { textQuery: request.query, pageSize: ctx.pageSize };
-  if (request.includedType) body.includedType = request.includedType;
+  const nearby = request.nearby;
+  const url = nearby ? PLACES_SEARCH_NEARBY_URL : PLACES_SEARCH_TEXT_URL;
+  const body: Record<string, unknown> = nearby
+    ? {
+        maxResultCount: ctx.pageSize,
+        rankPreference: nearby.rankPreference,
+        ...(nearby.includedTypes.length > 0
+          ? { includedTypes: [...nearby.includedTypes] }
+          : {}),
+        locationRestriction: {
+          circle: {
+            center: { latitude: nearby.latitude, longitude: nearby.longitude },
+            radius: nearby.radiusMeters,
+          },
+        },
+      }
+    : {
+        textQuery: request.query,
+        pageSize: ctx.pageSize,
+        ...(request.includedType ? { includedType: request.includedType } : {}),
+        ...(request.locationBias
+          ? {
+              locationBias: {
+                circle: {
+                  center: {
+                    latitude: request.locationBias.latitude,
+                    longitude: request.locationBias.longitude,
+                  },
+                  radius: request.locationBias.radiusMeters,
+                },
+              },
+            }
+          : {}),
+      };
 
-  const response = await ctx.doFetch(PLACES_SEARCH_TEXT_URL, {
+  const response = await ctx.doFetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -680,6 +968,7 @@ interface RawPlace {
   priceRange?: unknown;
   regularOpeningHours?: { periods?: OpeningPeriod[] };
   businessStatus?: string;
+  googleMapsUri?: string;
   photos?: { name?: string }[];
 }
 
@@ -711,6 +1000,7 @@ function normalizePlace(raw: RawPlace, city: string, now: Date): RetrievedPlace 
     priceLevel: toPriceLevelOrdinal(raw.priceLevel),
     priceRange: toPriceRange(raw.priceRange),
     businessStatus: raw.businessStatus,
+    googleMapsUri: raw.googleMapsUri,
     openingPeriods: raw.regularOpeningHours?.periods,
     reviewSnippets: null,
     shortlistHydratedAt: null,

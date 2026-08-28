@@ -26,7 +26,7 @@ import { PanelFooterCTA } from "@/components/ui/detail-views/PanelFooterCTA";
 import { ConfirmActionDialog } from "@/components/ui/modals/ConfirmActionDialog";
 import { FlightForm, type FlightFormData } from "@/components/ui/detail-views/FlightForm";
 import { LodgingForm, type LodgingFormData } from "@/components/ui/detail-views/LodgingForm";
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import type { ActivityNote, ActivityAttachment, DayActivityMarker } from "./LocationDetailPanel";
 import type { ActivityNoteCard } from "@/components/ui/notes/InlineNoteEditor";
 import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";

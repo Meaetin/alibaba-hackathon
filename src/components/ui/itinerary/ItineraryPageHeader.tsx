@@ -9,35 +9,22 @@ import { ItineraryHeader } from "./ItineraryHeader";
 import { ItineraryControls, type ItineraryViewMode } from "./ItineraryControls";
 import type { ItineraryTab } from "./ItineraryTabBar";
 
-interface CollaboratorProfile {
-  id: string;
-  display_name?: string | null;
-  email?: string | null;
-  avatar_url?: string | null;
-}
-
-interface Collaborator {
-  user_id: string;
-  role: string;
-}
-
 interface ItineraryPageHeaderProps {
   bannerUrl: string | null;
   name: string;
   region: string | null;
   country: string;
   dateLabel: string;
+  /** One line naming what each day is about, built from the theme premises the
+   *  planner already wrote. Null for a trip planned by geography. */
+  overview?: string | null;
   totalSpots: number;
   totalDays: number;
   totalAttachments: number;
   lastEdited?: string | null;
-  collaboratorProfiles: CollaboratorProfile[];
-  collaborators: Collaborator[];
-  ownerId: string;
   /** View/edit mode — controlled by the page (single source of truth). */
   viewMode: ItineraryViewMode;
   onViewModeChange: (mode: ItineraryViewMode) => void;
-  onInviteClick: () => void;
   onDelete: () => void;
   /** Active edit-mode tab + handler — the tab strip replaces the pills in edit mode. */
   activeTab?: ItineraryTab;
@@ -59,16 +46,13 @@ export function ItineraryPageHeader({
   region,
   country,
   dateLabel,
+  overview,
   totalSpots,
   totalDays,
   totalAttachments,
   lastEdited,
-  collaboratorProfiles,
-  collaborators,
-  ownerId,
   viewMode,
   onViewModeChange,
-  onInviteClick,
   onDelete,
   activeTab,
   onTabClick,
@@ -115,18 +99,24 @@ export function ItineraryPageHeader({
         }
       />
 
+      {/* Overview — the day premises, in the planner's own words */}
+      {overview && (
+        <p
+          data-region="itinerary-detail-overview"
+          className="itinerary-page-overview type-body-2 text-content-secondary"
+        >
+          {overview}
+        </p>
+      )}
+
       {/* Controls Row */}
       <ItineraryControls
         totalSpots={totalSpots}
         totalDays={totalDays}
         totalAttachments={totalAttachments}
         lastEdited={lastEdited}
-        collaboratorProfiles={collaboratorProfiles}
-        collaborators={collaborators}
-        ownerId={ownerId}
         viewMode={viewMode}
         onViewModeChange={onViewModeChange}
-        onInviteClick={onInviteClick}
         activeTab={activeTab}
         onTabClick={onTabClick}
         controlsRef={controlsRef}

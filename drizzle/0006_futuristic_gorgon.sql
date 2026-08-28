@@ -1,0 +1,1 @@
+ALTER TABLE "enrichment_batches" ADD COLUMN "usage" jsonb;

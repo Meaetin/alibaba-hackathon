@@ -1,11 +1,11 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Car, Footprints, MapPin, type LucideIcon } from "lucide-react";
+import { Car, Footprints, MapPin, TrainFront, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 
-type TransportMode = "drive" | "walk";
+type TransportMode = "drive" | "walk" | "transit";
 
 // Edit-mode mode buttons (Figma `1373:5661`): walk · drive, each a bordered
 // icon button.
@@ -17,6 +17,7 @@ const MODE_BUTTONS: { mode: TransportMode; Icon: LucideIcon; label: string }[] =
 const transportIconMap: Record<string, LucideIcon> = {
   drive: Car,
   walk: Footprints,
+  transit: TrainFront,
 };
 
 function resolveTransportIcon(mode?: string): LucideIcon {

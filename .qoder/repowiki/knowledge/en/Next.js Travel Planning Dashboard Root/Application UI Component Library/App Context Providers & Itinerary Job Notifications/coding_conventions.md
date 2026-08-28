@@ -1,3 +1,0 @@
-- Root-level providers are implemented as thin wrapper components that accept `{ children }` and render a single third-party provider around them.
-- Realtime subscriptions are created inside `useEffect` hooks and cleaned up by returning an unsubscribe/remove callback to avoid leaks.
-- Supabase Realtime channels are named with a unique suffix combining userId and a React `useId()`-derived instance id to prevent duplicate channel subscription errors on re-mount.

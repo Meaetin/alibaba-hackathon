@@ -9,7 +9,7 @@ import { Calendar } from "@/components/ui/primitives/Calendar";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/primitives/Popover";
 import { ConfirmActionDialog } from "@/components/ui/modals/ConfirmActionDialog";
 import { useToast } from "@/contexts/ToastContext";
-import type { ItineraryDayDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryDayDetail } from "@/lib/db/itinerary-detail";
 
 interface EditDaySelectorProps {
   days: ItineraryDayDetail[];

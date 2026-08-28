@@ -1,1 +1,0 @@
-Reusable React components for authentication forms (buttons, inputs, password requirements) and an animated striped background decorator used across auth pages.

@@ -1,0 +1,308 @@
+/**
+ * The planner's diagnostic record — what the models said, and what we refused.
+ *
+ * Everything in here used to be built and then dropped inside a single request.
+ * Pass B writes one sentence per stop explaining its pick and nothing read it;
+ * `resolveDay` composes a plain-English reason for every id it rejects and the
+ * reason died in an array. Both are exactly what you want at 2am when a day
+ * comes back thin, so both get a column: `itineraries.planner_debug`.
+ *
+ * Two rules for this module.
+ *
+ * **It is diagnostics, never content.** No card renders any of it. A field here
+ * may go stale, may be absent on an older row, and may be reshaped without a
+ * migration — the column is `jsonb` and `version` says which shape it is.
+ *
+ * **It depends on nothing.** No imports from `pipeline.ts`, `assign.ts` or
+ * `narrate.ts`, because those import *this*, and because `src/lib/db/schema.ts`
+ * pulls `PlannerDebug` in to type the column. Per-stage counters deliberately
+ * do not live here: they are already durable on `jobs.result.stats`, and a
+ * second copy is a second thing to keep true.
+ */
+
+/** Bumped when the shape below changes. Read it before trusting an old row. */
+export const PLANNER_DEBUG_VERSION = 4;
+
+/**
+ * One stop, and why Pass B put it there.
+ *
+ * The model is asked for this sentence in the same call that does the
+ * assignment, so it costs nothing extra to keep and everything to regenerate.
+ */
+export interface AssignmentRationale {
+  dayIndex: number;
+  placeId: string;
+  /** A stop in the day, or one of the spare picks the packer may surrender. */
+  kind: "assignment" | "flex";
+  why: string;
+}
+
+/**
+ * One day the theme pass could not name, and why it fell back to geography.
+ *
+ * Shaped here rather than imported from `theme.ts` for the rule at the top of
+ * this file: this module depends on nothing, because `src/lib/db/schema.ts`
+ * pulls `PlannerDebug` in to type a column.
+ */
+export interface ThemeFallback {
+  dayIndex: number;
+  /** The id the model named, when it named one that does not exist. */
+  anchorPlaceId?: string;
+  reason: string;
+}
+
+/**
+ * How a themed day that could not feed itself was repaired.
+ *
+ * Recorded because a repair that silently shrinks a list is the failure mode
+ * this project already knows about. `rung` says which step of the ladder ran;
+ * `after` still short of the target is a real outcome, not a missing field.
+ */
+export interface ThemeRepair {
+  dayIndex: number;
+  rung: "widened" | "merged" | "geographic";
+  before: number;
+  after: number;
+  reason: string;
+}
+
+/**
+ * One day that needed the feasibility ladder — **including the ones it could
+ * not fix**.
+ *
+ * `ThemeRepair` records only rungs that worked, because a repair is pushed when
+ * `after > before`. So a day that walked all three and fixed nothing left no
+ * trace at all. A live Bali day did exactly that: nothing to eat, widened and
+ * found none, no donor within reach, no better geography — and the only
+ * surviving evidence anywhere in the run was `validateDay` reporting
+ * `lost_meal` at the very end.
+ *
+ * Every day that entered the ladder is listed, fixed or not. Same rule
+ * `SchedulingRecord` keeps and the same reason: "it tried and failed" and "it
+ * never ran" are different answers, and an absent row cannot tell them apart.
+ */
+export interface ThemeAttempt {
+  dayIndex: number;
+  /** Places that could seat a meal when the day entered the ladder. */
+  before: number;
+  /** And when it left. Below `needed` means it is shipping short. */
+  after: number;
+  needed: number;
+  /** Rungs walked, in order. A rung that changed nothing is still listed. */
+  tried: ("widened" | "merged" | "geographic")[];
+  unfixed: boolean;
+}
+
+/**
+ * What reordering one day's route cost and saved, in travel minutes.
+ *
+ * Pass B orders a day without ever seeing a coordinate, so `beforeMinutes` is
+ * the price of that blindness and `savedMinutes` is what the geometry was
+ * worth. `reordered: false` with a non-zero `beforeMinutes` is the good case —
+ * the day was already walked in its shortest order.
+ */
+export interface SequencingRecord {
+  dayIndex: number;
+  beforeMinutes: number;
+  afterMinutes: number;
+  savedMinutes: number;
+  reordered: boolean;
+  /** Straight-line metres of the returned order. What a reader recognises. */
+  meters: number;
+}
+
+/**
+ * What the validator did to one day, and what it could not fix.
+ *
+ * The gap this closes: a live Singapore run produced a day with **zero** stops.
+ * Pass B had filled it, `sequenceDay` had routed it (4.4 km, 86 minutes), and
+ * then `validateDay` emptied it — and the only surviving trace was
+ * `scheduling.failedDays: 1` buried in `jobs.result.stats`, which says how many
+ * days went wrong and nothing about which, or why. Every field below was
+ * already computed on `DayValidation` and thrown away when the request ended.
+ *
+ * `scheduled: 0` is the case worth grepping for: the day exists in
+ * `itinerary_days`, it has a date and an area name, and there is nothing in it.
+ *
+ * Shapes are redeclared rather than imported from `validate.ts`, for the rule at
+ * the top of this file — this module depends on nothing, because
+ * `src/lib/db/schema.ts` pulls `PlannerDebug` in to type a column.
+ */
+export interface SchedulingRepair {
+  /** `closed`, `meal_slot` or `lost_meal` — `ValidationRule` in `validate.ts`. */
+  rule: string;
+  role: string;
+  removed: string;
+  /** The swap-in by name, or null when the ladder dropped the stop instead. */
+  inserted: string | null;
+  reason: string;
+}
+
+/**
+ * One stop that was removed from a day, and why.
+ *
+ * This is the answer to "why isn't teamLab in my trip". Most removals are not
+ * repairs: `packDay` cuts a stop when the day runs out of minutes, and a swap
+ * cannot fix that — putting a different place in the same slot spends the same
+ * minutes — so there is nothing for `SchedulingRepair` to record. A live Bali
+ * day shipped 4 of 7 offered with one swap, and the three stops that actually
+ * went missing left no trace on the debug page at all.
+ *
+ * `validateDay` already merges the packer's cuts and its own into one list on
+ * `PackedDay.dropped`, precisely so a reader does not have to know which module
+ * removed a stop. This field is that list, kept rather than counted:
+ * `stats.scheduling.dropped` is a trip-wide total and can never say which day,
+ * which stop, or why.
+ */
+export interface SchedulingDrop {
+  placeId: string;
+  name: string;
+  /** Plain enough to show a traveller — "over budget", a closure, a rule. */
+  reason: string;
+}
+
+/** One thing still wrong with a day after repair gave up. */
+export interface SchedulingFailure {
+  rule: string;
+  role: string;
+  placeId: string;
+  name: string;
+  reason: string;
+}
+
+export interface SchedulingRecord {
+  dayIndex: number;
+  areaName: string | null;
+  /**
+   * Stops the packer was offered: Pass B's assignments **plus** the flex picks
+   * it may promote. Counting assignments alone reads "kept 8 of 7" on a day
+   * where a spare was promoted, which is how this field was first written.
+   */
+  offered: number;
+  /** Stops in the stored timeline. **Zero means the day shipped empty.** */
+  scheduled: number;
+  repairs: SchedulingRepair[];
+  failures: SchedulingFailure[];
+  /**
+   * Every stop removed from this day, packer cuts included.
+   *
+   * Optional so a plan made before it existed reads as "not recorded" rather
+   * than "nothing was dropped" — the same three-way read `ThemeAttempt` and
+   * `SequencingRecord` keep, and for the same reason.
+   */
+  dropped?: SchedulingDrop[];
+}
+
+/** One id Pass B named that never became a stop, worded for a person. */
+export interface AssignmentDrop {
+  dayIndex: number;
+  placeId: string;
+  reason: string;
+}
+
+/** One stop that shipped `fallbackContent` instead of the model's prose. */
+export interface NarrationFallback {
+  placeId: string;
+  message: string;
+}
+
+/**
+ * The whole record, as stored.
+ *
+ * Read it with `planner_debug.version` in hand — an itinerary planned before a
+ * field existed simply doesn't have it.
+ */
+export interface PlannerDebug {
+  version: number;
+  /** ISO, from the pipeline's injected clock. Never `new Date()`. */
+  recordedAt: string;
+  assignment: {
+    /** Days Pass B could not fill, by `dayIndex`. The ranked shortlist filled
+     *  these instead, so their stops have no `rationale` entry. */
+    fallbackDays: number[];
+    rationale: AssignmentRationale[];
+    dropped: AssignmentDrop[];
+  };
+  narration: {
+    /** Non-empty means the cards are prettier than the model made them. */
+    fallbacks: NarrationFallback[];
+    /** Stops cut off at `max_output_tokens`. A subset of `fallbacks`, named
+     *  separately because the fix is a number rather than a prompt. */
+    truncated: number;
+    /** Dishes rejected for not being in `signature_dishes`. Non-zero is the
+     *  grounding rule working, not a fault. */
+    rejectedDishes: number;
+  };
+  enrichment: {
+    /** Shortlisted places with no usable cached enrichment at plan time. These
+     *  shipped on the type heuristic and were handed to the durable batch. */
+    misses: string[];
+  };
+  /**
+   * What the route reorder bought, per day.
+   *
+   * A day that was already in its shortest order is still listed, with
+   * `savedMinutes: 0` — the question this answers is "did sequencing help", and
+   * an absent row cannot tell "it made no difference" apart from "it never
+   * ran". The whole field is optional for the same reason one rung up: a plan
+   * made before this step existed has none, and an empty array would claim it
+   * ran and saved nothing.
+   */
+  sequencing?: SequencingRecord[];
+  /**
+   * What scheduling did to each day, including the days it could not save.
+   *
+   * Optional for the same reason `sequencing` is: a plan made before this
+   * existed has none, and an empty array would claim the validator ran and
+   * found nothing wrong. Every day is listed, clean ones included — "this day
+   * needed no repair" and "this day was never checked" are different answers.
+   */
+  scheduling?: SchedulingRecord[];
+  /**
+   * Themed runs only; absent on every geographic plan, which is the default.
+   *
+   * `fallbacks` is the answer to "why does day three have no premise" — an
+   * anchor that named a place we never retrieved, two days claiming the same
+   * anchor, a model that did not answer. Each one is recorded and none is
+   * retried: a model that named a place we do not have will name it again, and
+   * a second call is a second bill.
+   */
+  themes?: {
+    /** What each day ended up being about, best read next to the days. */
+    titles: { dayIndex: number; title: string; anchorPlaceId: string }[];
+    fallbacks: ThemeFallback[];
+    /** Days the feasibility ladder had to repair, and how far down it went. */
+    repairs: ThemeRepair[];
+    /**
+     * Every day the ladder ran for, whether or not it helped. Optional, so a
+     * plan made before this existed reads as "not recorded" rather than
+     * "nothing went wrong" — the distinction `scheduling` already keeps.
+     */
+    attempts?: ThemeAttempt[];
+    /**
+     * Places that sat outside every theme's reach and joined no day. On the
+     * Bali run this was **87 of 151** and only a `console.warn` said so, which
+     * nobody reads after the request ends.
+     */
+    unclaimed?: number;
+  };
+}
+
+/**
+ * A record with nothing in it, for a caller assembling a `PlanResult` by hand.
+ *
+ * Every list empty is the honest answer for a plan that did not run — not the
+ * same thing as a plan that ran and had nothing to report, but indistinguishable
+ * from it, which is why this is a helper and not a default.
+ */
+export function emptyPlannerDebug(recordedAt: string): PlannerDebug {
+  return {
+    version: PLANNER_DEBUG_VERSION,
+    recordedAt,
+    assignment: { fallbackDays: [], rationale: [], dropped: [] },
+    narration: { fallbacks: [], truncated: 0, rejectedDishes: 0 },
+    enrichment: { misses: [] },
+    sequencing: [],
+    scheduling: [],
+  };
+}

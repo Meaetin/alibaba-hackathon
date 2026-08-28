@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/primitives/Button";
 import { Separator } from "@/components/ui/primitives/Separator";
 import { AlsoInCard } from "@/components/ui/detail-views/AlsoInCard";
-import type { LocationReference } from "@/lib/supabase/queries/location-references";
+import type { LocationReference } from "@/lib/domain-types";
 
 interface AlsoFoundInModalProps {
   open: boolean;

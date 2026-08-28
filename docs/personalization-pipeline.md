@@ -464,8 +464,13 @@ resolves (relaxed ×1.2, packed ×0.85), clamped so it never pushes outside
 
 Structured data is blind to "cozy with good wifi", "vegetarian options", "great at
 sunset". Run a **one-time, cached** LLM pass over the shortlist. Input is
-`{ name, types, rating, reviewSnippets[5] }` — deliberately *not* Google's
-`editorialSummary`, which is absent on most places and generic where present:
+`{ name, types, rating, reviewSnippets[5] }`, plus `editorialSummary` and
+`reviewSummary`. An earlier draft excluded the editorial summary on the grounds
+that it is absent on most places and generic where present. That argument was
+about what the summary is *worth*, and the shortlist hydration mask has since
+made it free — the Atmosphere tier is already paid for by `reviews`, so both
+summaries ride along at no extra cost. Absent stays absent; where it exists it
+is one more piece of grounding, so it goes in:
 
 ```ts
 // Cached per place_id — profile-agnostic, pay once, TTL ~90 days
@@ -795,22 +800,24 @@ schema constrains *shape*, never *truth*, and a well-formed response can still n
 place that was never retrieved.
 
 **Pass C — ~15 parallel calls, cached prefix.** Every call shares the same system
-prompt and profile slice and differs only in the per-stop payload.
+prompt and profile slice and differs only in the per-stop payload. GPT-5.6 uses
+explicit-only caching here: mark the final stable developer `input_text` block with
+`prompt_cache_breakpoint: { mode: "explicit" }` and set
+`prompt_cache_options: { mode: "explicit" }` so the changing per-stop suffix is not
+written to cache.
 
-Unlike Anthropic's, OpenAI's prompt caching is **automatic** — there is no
-`cache_control` breakpoint to place, and nothing to opt into. What it does require:
+What it requires:
 
 1. **The shared prefix must come first, byte-identical.** Caching routes on a prefix
    hash, so a per-stop field interpolated above the shared instructions means fifteen
-   distinct prefixes and zero cache reads. This is the same failure the breakpoint
-   version had, minus the visible knob that would have warned you.
+   distinct prefixes and zero cache reads.
 2. **≥1024 tokens of shared prefix**, or nothing caches at all. Caching just above
    the threshold is documented as inconsistent, so treat 1024 as the floor, not the
    target.
 3. **Set `prompt_cache_key`** to route the fifteen calls to the same cache — a
    per-itinerary constant, not a per-stop one.
 
-Verify with `usage.prompt_tokens_details.cached_tokens`. If it is 0 across all
+Verify with `usage.input_tokens_details.cached_tokens` — that is the Responses API's naming; `prompt_tokens_details` is Chat Completions and reads as `undefined` here. If it is 0 across all
 fifteen calls, the prefix is not actually shared — diff two rendered requests before
 touching anything else.
 
@@ -841,6 +848,11 @@ the cache first, and why the demo plan is:
 > target city into `place_search_cache`, `locations` and `place_enrichments` ahead of
 > time. A live demo then hits the warm path: one Pass B call plus fifteen short
 > narration calls. Do not discover the cold-start latency on stage.
+
+For the localhost demo: generate the target city once. That single run populates the
+Places caches *and* `place_enrichments`, because enrichment is fetched live in the
+enrich stage rather than queued — see "Enrichment is fetched before Pass B" in
+`AGENTS.md`. Generate the city a second time to verify the warm path.
 
 An earlier draft claimed "marginal cost is the assignment call alone." That is true
 of the *second* trip to a city and badly misleading for the first.

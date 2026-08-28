@@ -8,14 +8,18 @@ import {
   Globe,
   Hourglass,
   Images,
+  Lightbulb,
   MapPin,
   MoreVertical,
   Phone,
+  Sparkles,
+  UtensilsCrossed,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { googleMapsPlaceUrl } from "@/lib/maps/google-maps-url";
 import { humanizePlaceType } from "@/lib/utils/formatters";
 import {
   formatDisplayUrl,
@@ -40,7 +44,8 @@ import { useLocationReferencesQuery } from "@/hooks/queries/useLocationReference
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/queryKeys";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
-import type { LocationReference } from "@/lib/supabase/queries/location-references";
+import type { StopContent } from "@/lib/planner/narrate";
+import type { LocationReference } from "@/lib/domain-types";
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 
 const StaticMap = dynamic(
@@ -66,6 +71,13 @@ interface LocationDetailViewData {
   latitude: number;
   longitude: number;
   googleMapsUri: string | null;
+  /** Google place id. Lets the Maps link name the place when `googleMapsUri` is
+   *  null — which it is for everything retrieved before that field was on the
+   *  search mask. Without it the link drops an unlabelled pin on a coordinate. */
+  placeId?: string | null;
+  /** Pass C's prose for this stop, written for this traveller and this day.
+   *  Absent on a place viewed outside an itinerary. */
+  stopContent?: StopContent | null;
 }
 
 interface LocationDetailViewCollection {
@@ -351,11 +363,24 @@ function LocationDetailView({
   ];
 
   const handleOpenGoogleMaps = () => {
-    const url =
-      location.googleMapsUri ??
-      `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    const url = googleMapsPlaceUrl({
+      googleMapsUri: location.googleMapsUri,
+      placeId: location.placeId,
+      name: location.name,
+      latitude: location.latitude || null,
+      longitude: location.longitude || null,
+    });
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
   };
+
+  // Pass C writes four things per stop. The itinerary card shows the first,
+  // clamped to two lines, and nothing showed the other three — so they land
+  // here, where a traveller comes for the detail.
+  const whyForYou = location.stopContent?.whyForYou?.trim() || null;
+  const highlights = location.stopContent?.highlights?.filter((h) => h.trim()) ?? [];
+  const foodRecommendations =
+    location.stopContent?.foodRecommendations?.filter((f) => f.dish.trim()) ?? [];
+  const tips = location.stopContent?.tips?.filter((t) => t.trim()) ?? [];
 
   const extraImageCount = location.images.length - 3;
 
@@ -612,7 +637,61 @@ function LocationDetailView({
               </div>
             </div>
 
-            {/* Description */}
+            {/* Why This Stop */}
+            {(whyForYou || highlights.length > 0 || foodRecommendations.length > 0 || tips.length > 0) && (
+              <div className="location-detail-view-why mx-2 flex flex-col gap-3 rounded-xl border border-edge-subtle bg-surface-alt p-3">
+                {whyForYou && (
+                  <div className="location-detail-view-why-lead flex gap-2">
+                    <Sparkles className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+                    <p className="location-detail-view-why-text type-body-2 text-content">{whyForYou}</p>
+                  </div>
+                )}
+
+                {highlights.length > 0 && (
+                  <ul className="location-detail-view-highlights flex flex-col gap-1.5">
+                    {highlights.map((highlight) => (
+                      <li
+                        key={highlight}
+                        className="location-detail-view-highlight flex gap-2 type-body-3 text-content-secondary"
+                      >
+                        <span aria-hidden="true" className="text-glyph-secondary">
+                          &bull;
+                        </span>
+                        <span>{highlight}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {foodRecommendations.length > 0 && (
+                  <div className="location-detail-view-food flex flex-col gap-1.5">
+                    {foodRecommendations.map((item) => (
+                      <div key={item.dish} className="location-detail-view-food-item flex gap-2">
+                        <UtensilsCrossed className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+                        <p className="type-body-3 text-content-secondary">
+                          <span className="font-medium text-content">{item.dish}</span>
+                          {item.note ? ` — ${item.note}` : null}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {tips.length > 0 && (
+                  <div className="location-detail-view-tips flex flex-col gap-1.5">
+                    {tips.map((tip) => (
+                      <div key={tip} className="location-detail-view-tip flex gap-2">
+                        <Lightbulb className="size-4 shrink-0 translate-y-0.5 text-glyph-secondary" />
+                        <p className="type-body-3 text-content-secondary">{tip}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Description — Google's blurb for everyone, under the one written
+                for this traveller. */}
             {location.description && (
               <p className="location-detail-view-description px-2 type-body-2 font-medium text-glyph">
                 {location.description}

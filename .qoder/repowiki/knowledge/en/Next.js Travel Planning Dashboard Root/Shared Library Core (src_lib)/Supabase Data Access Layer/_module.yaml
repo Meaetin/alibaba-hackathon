@@ -1,9 +1,0 @@
-schema_version: 1
-module_path: lib_core/supabase_layer
-title: Supabase Data Access Layer
-scope:
-    - src/lib/supabase/
-source_files: []
-depends_on: []
-related_to:
-    - path: app_routes/home

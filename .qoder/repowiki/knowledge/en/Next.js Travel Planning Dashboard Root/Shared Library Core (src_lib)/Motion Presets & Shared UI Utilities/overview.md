@@ -1,1 +1,0 @@
-Shared animation presets for motion/react and a collection of pure utility functions for formatting dates, times, itinerary data, URLs, scroll behavior, and location display.

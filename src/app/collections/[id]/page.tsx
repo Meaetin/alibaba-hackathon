@@ -113,7 +113,6 @@ export default function CollectionDetailPage() {
 
   const batchOps = useCollectionLocationBatchOperations({
     source: "collections",
-    collectionId,
     onRefresh: () => {
       selection.clearSelection();
       refreshCollection();
@@ -123,13 +122,13 @@ export default function CollectionDetailPage() {
     },
   });
 
-  const { jobs: planningJobs } = useJobsQueue(userId, {
+  const { jobs: planningJobs } = useJobsQueue({
     type: "itinerary-planning",
     onJobCompleted: (job) => {
       const itineraryId = (job.result as Record<string, unknown> | undefined)
         ?.itinerary_id as string | undefined;
       // Only redirect if the user is actively waiting on the loading screen.
-      // If they chose "Continue Browsing", the global ItineraryJobNotifier
+      // If they chose "Continue Browsing", MainLayout's job queue
       // surfaces a "View" toast instead.
       if (isGenerating && itineraryId) {
         router.push(`/itineraries/${itineraryId}`);

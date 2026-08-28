@@ -1,1 +1,0 @@
-Next.js App Router client components (`"use client"`) with TanStack Query (`queryClient`, `queryKeys`) for data fetching, Supabase client for realtime subscriptions and DB access, `@dnd-kit/core` for drag-and-drop editing, `motion/react` for layout animations, and `react-day-picker` for date ranges.

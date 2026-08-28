@@ -1,8 +1,12 @@
 import { authFetch, unwrap, ensureOk } from './client'
+import { getFriendlyApiError } from '@/lib/errors/userMessages'
 import { type Surface } from '@/lib/domain-types'
+import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
-import type { ActivityLocation } from '@/lib/supabase/queries/home'
-import type { PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
+import type { ActivityLocationDetail as ActivityLocation } from "@/lib/db/itinerary-detail";
+import type { ItineraryDetail } from '@/lib/db/itinerary-detail'
+import type { Pace, PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
+import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
 
 export interface ItineraryWithRole {
   id: string
@@ -51,8 +55,23 @@ export interface Itinerary {
   updated_at: string
 }
 
+/**
+ * Every trip the signed-in traveller owns.
+ *
+ * Same-origin now, reading Neon through `GET /api/itineraries`. It used to call
+ * the REST backend on `:8080` through `authFetch`, which is why the grid on
+ * `/itineraries` and `/home` has been rendering its empty state on a database
+ * full of trips: the request failed, the query errored, and `data = []` looks
+ * exactly like "no itineraries yet".
+ *
+ * A 401 comes back as an empty list rather than an error. The middleware sends
+ * a signed-out visitor to `/login` before a page renders, so a 401 here means
+ * the session expired mid-session, and one empty grid is a better answer than a
+ * red error card in the second before the next navigation redirects.
+ */
 export async function getItineraries(): Promise<ItineraryWithRole[]> {
-  const res = await authFetch('/api/itineraries')
+  const res = await fetch('/api/itineraries', { credentials: 'same-origin' })
+  if (res.status === 401) return []
   return unwrap<ItineraryWithRole[]>(res, 'Failed to fetch itineraries')
 }
 
@@ -117,6 +136,94 @@ export async function generateItinerary(params: GenerateItineraryParams): Promis
   }
 
   return res.json()
+}
+
+export interface PlanItineraryParams {
+  /** The city being planned, as typed. Drives Places retrieval. */
+  city: string
+  country?: string
+  /** ISO date, `YYYY-MM-DD`. */
+  startDate: string
+  totalDays: number
+  /** Trip name. The server falls back to the city when omitted. */
+  name?: string
+  /** The traveller. Drives retrieval, scoring, slot assignment and narration. */
+  profile: PreferenceProfile
+  /** Scheduler/clustering knobs. Never the traveller — see `profile`. */
+  options?: SchedulerOptions
+  /**
+   * How a day is decided. `themed` names each day and searches around a real
+   * anchor; `geographic` is k-means over coordinates. Omitted means the
+   * server's default, which is geographic.
+   */
+  mode?: 'geographic' | 'themed'
+  /**
+   * Where the traveller is staying, from the create modal's place
+   * autocomplete. Bounds retrieval and every day to a circle around it.
+   *
+   * Omitted plans the whole city, which is what this app did before the field
+   * existed — and what it silently did *with* the field, because the coordinate
+   * was collected, passed to the blank-itinerary path, and dropped here.
+   */
+  base?: { latitude: number; longitude: number }
+}
+
+/**
+ * Queues a plan on **this app's own** Next route and returns the created `jobs`
+ * row, ready to hand straight to `useJobsQueue`'s `upsertJob`.
+ *
+ * Deliberately a plain `fetch`, not `authFetch`. `authFetch` prefixes
+ * `NEXT_PUBLIC_API_URL` and demands a Supabase session, and auth was removed
+ * from this app — it would throw 401 before sending anything. That is also the
+ * difference from {@link generateItinerary} directly below: same intent, but
+ * that one posts to the old external backend and is left untouched.
+ */
+export async function planItinerary(params: PlanItineraryParams): Promise<QueueJob> {
+  const res = await fetch('/api/plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    // Keep the technical detail in the console; the caller gets a plain sentence.
+    console.error('Failed to queue itinerary plan:', res.status, body)
+    throw new Error(
+      getFriendlyApiError(
+        new Error(typeof body?.error === 'string' ? body.error : ''),
+        'We couldn’t start planning that trip. Please try again.',
+      ),
+    )
+  }
+
+  return res.json() as Promise<QueueJob>
+}
+
+/**
+ * The itinerary page's read.
+ *
+ * A plain `fetch`, not `authFetch`: this route is the local Next server over
+ * Neon, and `authFetch` targets the old external API and attaches a Supabase
+ * JWT that no longer exists. Same reason `planItinerary` above uses `fetch`.
+ *
+ * A 404 returns `null` — the page renders "not found" — while anything else
+ * throws, so an outage is not mistaken for a deleted trip.
+ */
+export async function fetchItineraryDetail(id: string): Promise<ItineraryDetail | null> {
+  const res = await fetch(`/api/itineraries/${id}`)
+  if (res.status === 404) return null
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    console.error('Failed to load itinerary:', res.status, body)
+    throw new Error(
+      getFriendlyApiError(
+        new Error(typeof body?.error === 'string' ? body.error : ''),
+        'We couldn’t load that itinerary. Please try again.',
+      ),
+    )
+  }
+  return res.json() as Promise<ItineraryDetail>
 }
 
 export async function updateItinerary(
@@ -372,7 +479,7 @@ export async function createItinerary(name: string, country: string, region?: st
  */
 export type ItineraryCreateResult =
   | { kind: 'blank'; itinerary: Itinerary }
-  | { kind: 'planning'; job: GenerateItineraryJob }
+  | { kind: 'planning'; job: QueueJob }
 
 export interface CreateItineraryRoutedInput {
   tripName: string
@@ -387,26 +494,39 @@ export interface CreateItineraryRoutedInput {
   selectedLocationIds: string[]
   /** State of the "Start with AI recommendations" toggle. */
   aiRecommendations: boolean
+  /**
+   * How full the traveller wants their days, straight off the create modal.
+   * Optional so the one caller that never reaches the planner — the batch
+   * "plan from selected places" path — need not invent an answer. Defaults to
+   * `balanced`, which is what the demo profile always used.
+   */
+  pace?: Pace
   /** Surface the create modal was opened from, for analytics. */
   source: Surface
 }
 
 /**
- * Routes the four itinerary-creation cases to the correct endpoint:
+ * Routes the localhost demo's supported itinerary-creation cases:
  *
  *   | AI toggle | locations | → endpoint                        |
  *   | --------- | --------- | --------------------------------- |
  *   | off       | none      | POST /api/itineraries/blank       | (2b → { kind: 'blank' })
- *   | on        | none      | POST /api/itineraries (ids: [])   | (2a → { kind: 'planning' })
- *   | on/off    | some      | POST /api/itineraries             | (1a/1b → { kind: 'planning' })
+ *   | on        | none      | POST /api/plan                    | (2a → { kind: 'planning' })
+ *   | on/off    | some      | unsupported until pins reach the local planner |
  *
- * `aiFillGaps` mirrors the AI toggle, so the planner skips gap-fill + meals for 1b.
- * Quota errors propagate from the underlying calls unchanged.
+ * Selected locations must never be silently dropped. The local planner does
+ * not accept pinned place ids yet, so that case fails with a plain demo message.
  */
 export async function createItineraryRouted(
   input: CreateItineraryRoutedInput,
 ): Promise<ItineraryCreateResult> {
   const hasLocations = input.selectedLocationIds.length > 0
+
+  if (hasLocations) {
+    throw new Error(
+      'Planning from selected places is not available in this demo yet. Start with AI recommendations and no selected places.',
+    )
+  }
 
   // Case 2b: no locations + AI off → empty itinerary.
   if (!hasLocations && !input.aiRecommendations) {
@@ -423,17 +543,34 @@ export async function createItineraryRouted(
     return { kind: 'blank', itinerary }
   }
 
-  // Cases 1a / 1b / 2a → async planning job.
-  const job = await generateItinerary({
-    title: input.tripName,
-    location_ids: input.selectedLocationIds,
-    aiFillGaps: input.aiRecommendations,
-    start_date: input.startDate,
-    total_days: input.totalDays,
+  // Case 2a: AI-only planning goes through this app's local pipeline.
+  //
+  // The persona is no longer sent. It used to travel as an id read from
+  // `localStorage`, because that pointer was the only thing that knew which
+  // persona was whose. `POST /api/plan` reads it from the session now — the
+  // persona belongs to the traveller, not to the browser — and a client-named
+  // id would have been a way to plan a trip with somebody else's personality.
+  const job = await planItinerary({
+    city: input.region?.trim() || input.country,
     country: input.country,
-    region: input.region,
-    latitude: input.latitude,
-    longitude: input.longitude,
+    startDate: input.startDate,
+    totalDays: input.totalDays,
+    name: input.tripName,
+    // Pace is the one preference the traveller typed, so it overwrites the
+    // demo default rather than sitting beside it.
+    profile: { ...LOCAL_DEMO_PROFILE, pace: input.pace ?? LOCAL_DEMO_PROFILE.pace },
+    // The coordinate the traveller already picked. `city` is a string and a
+    // string is not a place: planned as "Bali" the pipeline searched an island
+    // 150 km across and built three days two hours' drive apart. Sent only when
+    // the autocomplete gave both halves — half a coordinate is not a location,
+    // and a request without one plans exactly as it did before.
+    ...(input.latitude !== undefined && input.longitude !== undefined
+      ? { base: { latitude: input.latitude, longitude: input.longitude } }
+      : {}),
+    // The product default. `runPlan` still defaults to geographic — a library
+    // default that changes behaviour silently is a trap — so the choice is
+    // made here, once, where somebody can see it.
+    mode: 'themed',
   })
   return { kind: 'planning', job }
 }

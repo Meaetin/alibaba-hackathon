@@ -1,1 +1,0 @@
-React client components with TypeScript; drag interactions via a shared `drag-utils.ts`; map integration through Google Places-style components (`PlaceDetailsBlock.tsx`, `MapSearchBar.tsx`).

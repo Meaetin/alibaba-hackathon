@@ -1,1 +1,0 @@
-None — these are pure React components mounted at the app root; no build or test scripts specific to this scope.

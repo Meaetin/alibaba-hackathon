@@ -1,3 +1,0 @@
-- Each itinerary section is implemented as a separate file under `tabs/` following a consistent prop shape so they can be mounted by `ItineraryTabBar.tsx`.
-- Reusable visual building blocks (day columns, activity cards, time bars, map panels) are extracted into top-level files and imported by both edit-mode and read-only views rather than duplicated per tab.
-- Cross-component state such as drag order, overlap calculations, and opening-hours status is centralized in dedicated utility modules (`drag-utils.ts`, `overlap-utils.ts`, `opening-hours-status.ts`) instead of being held inside individual components.

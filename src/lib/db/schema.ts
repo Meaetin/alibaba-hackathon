@@ -27,11 +27,19 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import type {
+  DimensionScores,
+  QuizAnswers,
+  TravelArchetypeId,
+  TravelPersona,
+} from "@/lib/persona/types";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
 import type { OpeningPeriod, PreferenceProfile } from "@/lib/planner/types";
 import type { FunnelStats } from "@/lib/planner/funnel";
 import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { TravelMode } from "@/lib/planner/pack";
+import type { PlannerDebug } from "@/lib/planner/debug";
 
 /** `itinerary_activities.travel_to_next`. `TravelLeg` plus the mode the packer
  *  chose, so a stored day renders without re-deriving it from the distance. */
@@ -94,6 +102,11 @@ export const locations = pgTable(
     /** Null = names stored, media never fetched. */
     photos_resolved_at: timestamptz("photos_resolved_at"),
     business_status: text("business_status"),
+    /** Google's canonical link for the place. Pro tier, so it rides free on a
+     *  search mask that already asks for `rating` and `regularOpeningHours`.
+     *  Null for every place retrieved before the field was on the mask — the
+     *  page falls back to `place_id` via `googleMapsPlaceUrl`. */
+    google_maps_uri: text("google_maps_uri"),
     /** Minutes; backfilled from enrichment. */
     stay_duration: integer("stay_duration"),
     fetched_at: timestamptz("fetched_at").notNull().defaultNow(),
@@ -169,12 +182,121 @@ export const area_guides = pgTable("area_guides", {
     .default(sql`now() + interval '90 days'`),
 });
 
+// ─── Accounts ────────────────────────────────────────────────────────────────
+
+/**
+ * One row per person with an account. Identity lives here, in the same database
+ * as the trips it owns, so an itinerary's owner is a foreign key rather than a
+ * uuid issued by some other system that this one cannot join to.
+ *
+ * `password_hash` is the whole self-describing scrypt string — parameters, salt
+ * and digest — never a bare digest. See `src/lib/auth/password.ts`: a stored
+ * hash has to carry the cost parameters it was made with, or raising them later
+ * silently invalidates every existing password.
+ *
+ * `email` is stored already lower-cased by the route, and the unique index is
+ * what makes that load-bearing rather than cosmetic.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  display_name: text("display_name"),
+  password_hash: text("password_hash").notNull(),
+  /**
+   * The traveller's saved travel preferences, or null if they have not set any.
+   *
+   * A column on `users` rather than a table of its own: there is exactly one
+   * set per person, nobody wants a history of them, and `users` is already the
+   * per-person row. Same shape of decision as `itineraries.persona` being a
+   * jsonb snapshot rather than a join.
+   *
+   * `selectedIds` inside it is the **source of truth**; `profile` is derived
+   * from it by `createSavedPreferences` and stored beside it for the same
+   * reason `travel_personas` stores both answers and scores — a read wants the
+   * planner-ready shape without re-deriving, and a re-derivation wants the ids.
+   * The server rebuilds `profile` on every write, so the two cannot drift.
+   */
+  preferences: jsonb("preferences").$type<SavedTravelPreferences>(),
+  created_at: timestamptz("created_at").notNull().defaultNow(),
+  updated_at: timestamptz("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Live sessions. The primary key is the **sha256 of the cookie token**, never
+ * the token: a row here cannot be replayed as a login, so a database dump is
+ * not a set of live sessions. The browser holds the only copy of the secret.
+ *
+ * Opaque tokens rather than a signed JWT so that signing out is a delete rather
+ * than a wish. A stateless token stays valid until it expires no matter what
+ * the server would prefer.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    token_hash: text("token_hash").primaryKey(),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    expires_at: timestamptz("expires_at").notNull(),
+  },
+  (t) => [index("sessions_user_id_idx").on(t.user_id)],
+);
+
+// ─── Traveller ───────────────────────────────────────────────────────────────
+
+/**
+ * One row per traveller who finished the quiz. The client holds only `id`; the
+ * data lives here so a persona survives the dialog closing and can be named by
+ * a later plan request.
+ *
+ * `answers` is the source of truth and the other two columns are derived from
+ * it by `calculatePersona`. Storing the derivation as well is not redundancy:
+ * a read wants the archetype without re-running the scorer, and re-deriving
+ * every stored row after a scoring change wants the answers. Neither column
+ * can answer the other's question.
+ *
+ * **A retake rewrites the row in place** — one persona per person, one stable
+ * id, no pointer churn in `localStorage`. The consequence is that this table
+ * describes who the traveller is *now*, never who they were when an older trip
+ * was planned. That is what makes `itineraries.persona` load-bearing rather
+ * than decorative: after a retake it is the only record of what produced an
+ * older itinerary. Nothing explaining an existing trip may join to this table.
+ */
+export const travel_personas = pgTable("travel_personas", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * The traveller this persona belongs to, **unique**: the prose above promises
+   * one persona per person and this is what makes that true rather than hoped
+   * for. Nullable because the quiz is open to anyone — a persona taken signed
+   * out has no owner until the browser hands its id to sign-up or sign-in.
+   */
+  user_id: uuid("user_id")
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
+  /** `QuizAnswers` — one option index per question, `null` where unanswered. */
+  answers: jsonb("answers").$type<QuizAnswers>().notNull(),
+  /** Derived. The four raw 0–100 axis scores. */
+  dimensions: jsonb("dimensions").$type<DimensionScores>().notNull(),
+  /** Derived. The nearest archetype's id. */
+  archetype: text("archetype").$type<TravelArchetypeId>().notNull(),
+  created_at: timestamptz("created_at").notNull().defaultNow(),
+  updated_at: timestamptz("updated_at").notNull().defaultNow(),
+});
+
 // ─── Itinerary ───────────────────────────────────────────────────────────────
 
 export const itineraries = pgTable("itineraries", {
   id: uuid("id").primaryKey().defaultRandom(),
-  /** Nullable: auth is removed. */
-  user_id: text("user_id"),
+  /**
+   * The owner. Nullable because the rows planned before accounts existed have
+   * none, and inventing an owner for them would be a lie told in a foreign key.
+   * `POST /api/plan` requires a user, so nothing written from here on is null.
+   *
+   * `set null` rather than `cascade`: deleting an account should not silently
+   * destroy trips, and an orphaned itinerary is still readable at its own URL.
+   */
+  user_id: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   city: text("city").notNull(),
   country: text("country"),
@@ -184,8 +306,27 @@ export const itineraries = pgTable("itineraries", {
   total_days: integer("total_days").notNull(),
   /** The `PreferenceProfile` as submitted. */
   profile: jsonb("profile").$type<PreferenceProfile>().notNull(),
+  /**
+   * The persona that produced this trip, snapshotted whole — answers and
+   * derived result together. Null means the traveller never took the quiz.
+   *
+   * A snapshot, not a foreign key, and written on **every** plan rather than
+   * only the first: `travel_personas` is rewritten in place on a retake, so a
+   * join would silently re-explain an old trip with a new personality, and a
+   * snapshot taken only once is missing exactly when you need it. The prose
+   * inside `PersonaResult` is duplicated static text — that is the price of a
+   * record that does not need today's code to be read.
+   */
+  persona: jsonb("persona").$type<TravelPersona>(),
   /** Every cut, replayable: "why wasn't teamLab included?" has an answer. */
   funnel_stats: jsonb("funnel_stats").$type<FunnelStats>(),
+  /**
+   * What the model said and what we threw away — Pass B's per-stop reasoning,
+   * every id it named that we refused, and the per-stage counters. It is the
+   * only durable record of the two; both used to live and die inside one
+   * request. Diagnostics, never read by a card. See `src/lib/planner/debug.ts`.
+   */
+  planner_debug: jsonb("planner_debug").$type<PlannerDebug>(),
   created_at: timestamptz("created_at").notNull().defaultNow(),
 });
 
@@ -228,12 +369,42 @@ export const itinerary_activities = pgTable(
 
 // ─── Job queue ───────────────────────────────────────────────────────────────
 
+/**
+ * What the loading screen reads out of `jobs.progress`.
+ *
+ * The first five fields are the planner's own report: which stage is running,
+ * how far along the run is, and how many stages there are. The optional five
+ * below exist for the two hooks that animate the card between reports — a plan
+ * writes a row every stage or two, and without them the bar sits still through
+ * a twenty-second model call.
+ *
+ * `progress` is a `jsonb` column, so adding a field here changes no DDL and
+ * needs no migration.
+ */
 export interface JobProgress {
   percent: number;
   label: string;
   stage: string;
   done: number;
   total: number;
+  /**
+   * Legacy step ordinal, read by `useProgressAnimation` only when `percent` is
+   * absent. The planner leaves it unset: that hook's step→percent table
+   * describes the content-analysis pipeline, and a stage number from this one
+   * would map onto the wrong percentage.
+   */
+  step?: number;
+  /** When this report was written, ISO. `useProgressAnimation` starts its crawl
+   *  from it and `useProgressEta` counts down from it. */
+  fired_at?: string;
+  /** Seconds left in the whole run. Read by `useProgressEta`. */
+  eta_seconds?: number;
+  /** The percentage this stage ends at. `useProgressAnimation` walks the bar
+   *  toward it rather than parking on `percent`. */
+  next_percent?: number;
+  /** How long this stage is expected to take, ms. `useProgressAnimation` uses
+   *  it as the crawl's denominator. */
+  stage_ms?: number;
 }
 
 export const jobs = pgTable(

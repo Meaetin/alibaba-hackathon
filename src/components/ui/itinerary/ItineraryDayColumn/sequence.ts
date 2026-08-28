@@ -1,6 +1,6 @@
 import { parseTimeMins, isRealActivity } from "../activity-utils";
 import type { TransportMode } from "./constants";
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 export interface LodgingInfo {
   name: string;
