@@ -3,7 +3,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/primitives/Button";
 
-type CreateCardType = "link" | "collection" | "itinerary";
+type CreateCardType = "link" | "collection" | "itinerary" | "flight";
 
 interface CreateCardContent {
   stickerUrl: string;
@@ -31,6 +31,12 @@ const CREATE_CARD_CONTENT: Record<CreateCardType, CreateCardContent> = {
     description: "Compile your favorite spots into a trip plan",
     buttonLabel: "Start Planning",
   },
+  flight: {
+    stickerUrl: "/images/stickers/Plane.svg",
+    title: "Discover Flights",
+    description: "Find and track flights for your next trip",
+    buttonLabel: "Explore Flights",
+  },
 };
 
 interface CreateCardProps {
@@ -43,7 +49,7 @@ interface CreateCardProps {
 }
 
 /**
- * Promo card for the three create flows (link / collection / itinerary),
+ * Promo card for the four create flows (link / collection / itinerary / flight),
  * shown on the home page and each entity page. The button will open the
  * matching create modal via `onAction`.
  */
