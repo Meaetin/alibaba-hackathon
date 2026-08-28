@@ -78,6 +78,7 @@ const MOBILE_CREATE_SLIDES = [
   { key: "link", label: "Add a link" },
   { key: "collection", label: "Create a collection" },
   { key: "itinerary", label: "Plan an itinerary" },
+  { key: "flight", label: "Discover flights" },
 ] as const;
 
 function getItemHref(item: RecentContentItem): string {
@@ -301,6 +302,10 @@ export default function DashboardPage() {
       cardsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
+
+  const handleFlightsClick = useCallback(() => {
+    router.push("/flights");
+  }, [router]);
 
   const handleCreateCarouselPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
@@ -727,6 +732,9 @@ export default function DashboardPage() {
             <div className="flex-[0_0_88%] snap-start">
               <CreateCard type="itinerary" className="h-[260px]" onAction={() => setNewItineraryModalOpen(true)} />
             </div>
+            <div className="flex-[0_0_88%] snap-start">
+              <CreateCard type="flight" className="h-[260px]" onAction={handleFlightsClick} />
+            </div>
           </div>
 
           <div className="flex h-8 items-center justify-center px-1">
@@ -803,6 +811,9 @@ export default function DashboardPage() {
             <div data-region="home-create-itinerary" className="hidden md:block lg:col-start-1 lg:row-start-2">
               <CreateCard type="itinerary" className="h-full" onAction={() => setNewItineraryModalOpen(true)} />
             </div>
+            <div data-region="home-create-flight" className="hidden md:block lg:col-start-2 lg:row-start-2">
+              <CreateCard type="flight" className="h-full" onAction={handleFlightsClick} />
+            </div>
 
             {/* Map Tile — pinned top-right (3×2 at xl, 2×2 at lg, full-width banner below) */}
             <div
@@ -822,14 +833,14 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Latest Viewed — newest thing the user has, filling the 4th tile
-                (col2/row2). An in-flight itinerary outranks any existing card, so
-                it takes this tile and the latest item drops into the feed. */}
+            {/* Latest Viewed — newest content follows the create group and map. An
+                in-flight itinerary outranks any existing card, so it takes this
+                position and the latest item drops into the feed. */}
             {featuredJob && (
               <motion.div
                 key={featuredJob.id}
                 data-region="home-latest-viewed"
-                className="h-full md:col-start-2 md:row-start-2 lg:col-start-2 lg:row-start-2"
+                className="h-full"
                 initial={
                   newItemIdsRef.current.has(filteredContent[0].id) && !shouldReduceMotion
                     ? motionPresets.completionHandoff.initial
@@ -857,7 +868,7 @@ export default function DashboardPage() {
                 layout
                 data-region="home-latest-viewed"
                 data-card-id={featuredItem.id}
-                className="h-full md:col-start-2 md:row-start-2 lg:col-start-2 lg:row-start-2"
+                className="h-full"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, ease: [0.25, 1, 0.5, 1] }}

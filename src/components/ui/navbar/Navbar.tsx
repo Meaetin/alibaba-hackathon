@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, CreditCard, Menu as MenuIcon, MessageSquareText, Plus, User } from "lucide-react";
+import { Bell, CreditCard, Menu as MenuIcon, MessageSquareText, Plane, Plus, User } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@/lib/utils";
@@ -207,6 +207,10 @@ function Navbar({
     router.push("/home");
   }, [router]);
 
+  const handleFlightsClick = useCallback(() => {
+    router.push("/flights");
+  }, [router]);
+
   const handleCloseSearch = useCallback(() => {
     setSearchActive(false);
   }, []);
@@ -365,7 +369,7 @@ function Navbar({
                 </div>
               </div>
 
-              {/* Right: Feedback, Create, Notifications, Profile */}
+              {/* Right: Feedback, Flights, Create, Notifications, Profile */}
               <div className="flex flex-1 items-center justify-end gap-1 min-w-0">
                 <Button
                   variant="ghost"
@@ -380,6 +384,17 @@ function Navbar({
                 >
                   <MessageSquareText className="size-4" />
                   <span className="hidden xl:inline">Feedback</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  icon="only"
+                  aria-label="Open flights"
+                  title="Flights"
+                  onClick={handleFlightsClick}
+                  className="rounded-xl text-content-secondary"
+                >
+                  <Plane className="size-4" />
                 </Button>
                 {menusMounted ? (
                   <NewMenuDropdown
@@ -466,6 +481,14 @@ function Navbar({
                         }}
                       >
                         Feedback
+                      </MenuItem>
+                      <MenuItem
+                        size="lg"
+                        icon="leading"
+                        leadingIcon={<Plane className="size-4" />}
+                        onClick={handleFlightsClick}
+                      >
+                        Flights
                       </MenuItem>
                       <MenuSeparator />
                       <DescriptiveMenuItem
