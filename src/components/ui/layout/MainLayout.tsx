@@ -275,6 +275,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
 
   const displayName =
     profile?.display_name || profile?.email?.split("@")[0] || "User";
+  const avatarHash = profile?.id ?? profile?.email ?? userId ?? "argo-guest";
 
   const avatar = profile?.avatar_url ? (
     <Avatar
@@ -286,7 +287,8 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     />
   ) : (
     <Avatar
-      type="initial"
+      type="generated"
+      hash={avatarHash}
       name={displayName}
       size="sm"
       className="size-5"
