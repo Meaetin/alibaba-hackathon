@@ -173,10 +173,41 @@ export function priceFit(
  * where Google gave no direct answer — see `violatesDietaryNeed`. Applied to
  * MEAL-SLOT candidates only: a diet doesn't ban you from a museum with a grill
  * in the lobby.
+ *
+ * **The rule for adding one: the animal has to be the cuisine, not an item on
+ * the menu.** `steak_house` qualifies because a steakhouse without steak is not
+ * a steakhouse; `italian_restaurant` does not, because pasta exists. Getting
+ * that boundary wrong in the permissive direction serves meat to a vegetarian,
+ * and in the strict direction deletes most of a city — which is the same reason
+ * `undefined` from Google is never read as `false`.
+ *
+ * `chicken_restaurant` was added after a live Singapore run seated a vegetarian
+ * at Poulet - VivoCity for dinner. Its types are `french_restaurant,
+ * chicken_restaurant, restaurant`, Google was silent on `servesVegetarianFood`,
+ * and a four-entry list had nothing to say about it.
+ *
+ * `sushi_restaurant` and `ramen_restaurant` were tried here and **rejected**.
+ * Both name the carbohydrate, not the animal: Gate A's Kyoto fixture contains
+ * Vegan Ramen Uzu Kyoto, which the ramen rule deleted. Vegetarian sushi is a
+ * category too. Where such a place genuinely serves nothing, Google's
+ * `servesVegetarianFood: false` catches it at rung 1, which is the rung that
+ * knows rather than guesses.
  */
 const DIETARY_CONFLICT_TYPES: Record<string, readonly string[]> = {
-  vegetarian: ["steak_house", "barbecue_restaurant", "seafood_restaurant", "hamburger_restaurant"],
-  vegan: ["steak_house", "barbecue_restaurant", "seafood_restaurant", "hamburger_restaurant"],
+  vegetarian: [
+    "steak_house",
+    "barbecue_restaurant",
+    "seafood_restaurant",
+    "hamburger_restaurant",
+    "chicken_restaurant",
+  ],
+  vegan: [
+    "steak_house",
+    "barbecue_restaurant",
+    "seafood_restaurant",
+    "hamburger_restaurant",
+    "chicken_restaurant",
+  ],
 };
 
 /** How many priceLevel steps above budget a place must be to be killed rather
@@ -212,8 +243,14 @@ const DIETARY_GOOGLE_FIELD: Record<string, (place: CandidatePlace) => boolean | 
  * a place that serves no vegetarian food serves no vegan food either — so `false`
  * is sound for both. `true` is weaker for vegan than vegetarian, which is why it
  * clears the hard filter but doesn't promote a place up the ladder in `funnel.ts`.
+ *
+ * Exported for `feasibility.ts`, which has to ask the same question a whole
+ * stage earlier. Counting a day's meal capacity as "restaurants" let a
+ * vegetarian's cluster of five steakhouses read as perfectly feasible; the
+ * ladder never fired, and the traveller found out at `selectMealCandidates`
+ * rung 3 — after every circle was billed. One definition, asked twice.
  */
-function violatesDietaryNeed(place: CandidatePlace, need: string): boolean {
+export function violatesDietaryNeed(place: CandidatePlace, need: string): boolean {
   const googleAnswer = Object.hasOwn(DIETARY_GOOGLE_FIELD, need)
     ? DIETARY_GOOGLE_FIELD[need](place)
     : undefined;

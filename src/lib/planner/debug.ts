@@ -21,7 +21,7 @@
  */
 
 /** Bumped when the shape below changes. Read it before trusting an old row. */
-export const PLANNER_DEBUG_VERSION = 1;
+export const PLANNER_DEBUG_VERSION = 3;
 
 /**
  * One stop, and why Pass B put it there.
@@ -67,6 +67,33 @@ export interface ThemeRepair {
 }
 
 /**
+ * One day that needed the feasibility ladder — **including the ones it could
+ * not fix**.
+ *
+ * `ThemeRepair` records only rungs that worked, because a repair is pushed when
+ * `after > before`. So a day that walked all three and fixed nothing left no
+ * trace at all. A live Bali day did exactly that: nothing to eat, widened and
+ * found none, no donor within reach, no better geography — and the only
+ * surviving evidence anywhere in the run was `validateDay` reporting
+ * `lost_meal` at the very end.
+ *
+ * Every day that entered the ladder is listed, fixed or not. Same rule
+ * `SchedulingRecord` keeps and the same reason: "it tried and failed" and "it
+ * never ran" are different answers, and an absent row cannot tell them apart.
+ */
+export interface ThemeAttempt {
+  dayIndex: number;
+  /** Places that could seat a meal when the day entered the ladder. */
+  before: number;
+  /** And when it left. Below `needed` means it is shipping short. */
+  after: number;
+  needed: number;
+  /** Rungs walked, in order. A rung that changed nothing is still listed. */
+  tried: ("widened" | "merged" | "geographic")[];
+  unfixed: boolean;
+}
+
+/**
  * What reordering one day's route cost and saved, in travel minutes.
  *
  * Pass B orders a day without ever seeing a coordinate, so `beforeMinutes` is
@@ -82,6 +109,57 @@ export interface SequencingRecord {
   reordered: boolean;
   /** Straight-line metres of the returned order. What a reader recognises. */
   meters: number;
+}
+
+/**
+ * What the validator did to one day, and what it could not fix.
+ *
+ * The gap this closes: a live Singapore run produced a day with **zero** stops.
+ * Pass B had filled it, `sequenceDay` had routed it (4.4 km, 86 minutes), and
+ * then `validateDay` emptied it — and the only surviving trace was
+ * `scheduling.failedDays: 1` buried in `jobs.result.stats`, which says how many
+ * days went wrong and nothing about which, or why. Every field below was
+ * already computed on `DayValidation` and thrown away when the request ended.
+ *
+ * `scheduled: 0` is the case worth grepping for: the day exists in
+ * `itinerary_days`, it has a date and an area name, and there is nothing in it.
+ *
+ * Shapes are redeclared rather than imported from `validate.ts`, for the rule at
+ * the top of this file — this module depends on nothing, because
+ * `src/lib/db/schema.ts` pulls `PlannerDebug` in to type a column.
+ */
+export interface SchedulingRepair {
+  /** `closed`, `meal_slot` or `lost_meal` — `ValidationRule` in `validate.ts`. */
+  rule: string;
+  role: string;
+  removed: string;
+  /** The swap-in by name, or null when the ladder dropped the stop instead. */
+  inserted: string | null;
+  reason: string;
+}
+
+/** One thing still wrong with a day after repair gave up. */
+export interface SchedulingFailure {
+  rule: string;
+  role: string;
+  placeId: string;
+  name: string;
+  reason: string;
+}
+
+export interface SchedulingRecord {
+  dayIndex: number;
+  areaName: string | null;
+  /**
+   * Stops the packer was offered: Pass B's assignments **plus** the flex picks
+   * it may promote. Counting assignments alone reads "kept 8 of 7" on a day
+   * where a spare was promoted, which is how this field was first written.
+   */
+  offered: number;
+  /** Stops in the stored timeline. **Zero means the day shipped empty.** */
+  scheduled: number;
+  repairs: SchedulingRepair[];
+  failures: SchedulingFailure[];
 }
 
 /** One id Pass B named that never became a stop, worded for a person. */
@@ -141,6 +219,15 @@ export interface PlannerDebug {
    */
   sequencing?: SequencingRecord[];
   /**
+   * What scheduling did to each day, including the days it could not save.
+   *
+   * Optional for the same reason `sequencing` is: a plan made before this
+   * existed has none, and an empty array would claim the validator ran and
+   * found nothing wrong. Every day is listed, clean ones included — "this day
+   * needed no repair" and "this day was never checked" are different answers.
+   */
+  scheduling?: SchedulingRecord[];
+  /**
    * Themed runs only; absent on every geographic plan, which is the default.
    *
    * `fallbacks` is the answer to "why does day three have no premise" — an
@@ -155,6 +242,18 @@ export interface PlannerDebug {
     fallbacks: ThemeFallback[];
     /** Days the feasibility ladder had to repair, and how far down it went. */
     repairs: ThemeRepair[];
+    /**
+     * Every day the ladder ran for, whether or not it helped. Optional, so a
+     * plan made before this existed reads as "not recorded" rather than
+     * "nothing went wrong" — the distinction `scheduling` already keeps.
+     */
+    attempts?: ThemeAttempt[];
+    /**
+     * Places that sat outside every theme's reach and joined no day. On the
+     * Bali run this was **87 of 151** and only a `console.warn` said so, which
+     * nobody reads after the request ends.
+     */
+    unclaimed?: number;
   };
 }
 
@@ -173,5 +272,6 @@ export function emptyPlannerDebug(recordedAt: string): PlannerDebug {
     narration: { fallbacks: [], truncated: 0, rejectedDishes: 0 },
     enrichment: { misses: [] },
     sequencing: [],
+    scheduling: [],
   };
 }

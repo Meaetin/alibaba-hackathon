@@ -30,11 +30,13 @@
  * seam. The date is parsed as a calendar date, never as a local instant — see
  * `weekdayOf`.
  *
- * ## What is missing, stated rather than hidden
+ * ## Where travel times come from
  *
- * There is no Routes API module in this repo, so travel legs default to
- * memoized crow-flight distance (`createStraightLineTravel`). It is injectable
- * precisely so a real provider can replace it without touching this file.
+ * Two paths, chosen by `PipelineDeps.routing`, and the default is the free one.
+ * `travel-estimate.ts` models a leg from the map and bills nothing; `routes.ts`
+ * measures it against Google's Compute Route Matrix and bills per element. A
+ * caller may also inject `getTravelLeg` and bypass both, which is every test.
+ * `stats.travel.source` records which of the three answered.
  */
 
 import { createHash } from "node:crypto";
@@ -52,14 +54,19 @@ import { clusterPlaces } from "./cluster";
 import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
 import { pathMeters, sequenceDay } from "./sequence";
 import { buildTravelMatrix, type TravelMatrixStats } from "./routes";
-import { PLANNER_DEBUG_VERSION, type PlannerDebug, type SequencingRecord } from "./debug";
+import { createTravelEstimate, type TravelEstimateStats } from "./travel-estimate";
+import {
+  PLANNER_DEBUG_VERSION,
+  type PlannerDebug,
+  type SchedulingRecord,
+  type SequencingRecord,
+} from "./debug";
 import {
   enrichPlaces,
   readEnrichments,
   type EnrichPlacesResult,
   type EnrichmentStore,
   type EnrichmentReadStats,
-  type EnrichmentSubject,
 } from "./enrich";
 import {
   FUNNEL_DEFAULTS,
@@ -68,10 +75,14 @@ import {
   type FunnelStats,
   type ScoredCluster,
 } from "./funnel";
-import { repairFeasibility, type FeasibilityRepair } from "./feasibility";
-import { groupByTheme, type ThemedCluster } from "./group";
+import {
+  repairFeasibility,
+  type FeasibilityAttempt,
+  type FeasibilityRepair,
+} from "./feasibility";
+import { metersBetween } from "./geo";
+import { MEMBER_RADIUS_SLACK, groupByTheme, type ThemedCluster } from "./group";
 import { bandsFor, resolvePlannerKnobs, type PlannerKnobs } from "./knobs";
-import { metersBetween as greatCircleMeters } from "./geo";
 import { personaBriefFor, type PersonaBrief } from "./persona-brief";
 import { type Weekday } from "./hours";
 import type { FetchLike } from "./http";
@@ -88,7 +99,6 @@ import {
   type PackDayInput,
   type PackKnobs,
   type PackedDay,
-  type TravelLeg,
   type TravelLegProvider,
   type TravelMode,
 } from "./pack";
@@ -101,6 +111,8 @@ import {
 import {
   buildSearchPlan,
   hydrateShortlist,
+  textNearRequest,
+  mergeRetrievalStats,
   nearbyRequest,
   retrievePlaces,
   type LocationStore,
@@ -110,6 +122,7 @@ import {
   type ShortlistHydrationStats,
 } from "./retrieval";
 import { scorePlace, type ScoredPlace } from "./score";
+import { dietaryBridgeFor, mealSearchTypes } from "./taxonomy";
 import { surveyCity } from "./survey";
 import {
   planThemes,
@@ -125,6 +138,7 @@ import type {
   SchedulerOptions,
 } from "./types";
 import {
+  mealSlotReason,
   validateDay,
   type Alternate,
   type Repair,
@@ -371,29 +385,47 @@ export function searchLocality(city: string, country?: string): string {
  * `alternatesFor` hands back the whole rest of the cluster — forty-odd places —
  * and routing all of them would multiply the day's elements for pairs a repair
  * will almost never reach. Six is well past what `MAX_REPAIR_ROUNDS` can spend.
- * Anything beyond it that does get swapped in is served from the straight line
- * and shows up in `stats.travel.estimated`, rather than being hidden.
+ * Anything beyond it that does get swapped in is served by the estimator and
+ * shows up in `stats.travel.estimated`, rather than being hidden.
  */
 const MATRIX_ALTERNATES = 6;
 
-/** Walking pace, metres per minute. */
-const WALK_M_PER_MIN = 80;
-/** Transit: a fixed wait plus a faster metre. */
-const TRANSIT_WAIT_MIN = 8;
-const TRANSIT_M_PER_MIN = 400;
+/**
+ * Where a leg's minutes come from.
+ *
+ * `"estimate"` is `travel-estimate.ts`: no network, no key, no bill, and a
+ * model fitted against the legs Google did route. `"matrix"` is `routes.ts`,
+ * which measures and charges per element.
+ *
+ * The default is `"estimate"`, and that is a deliberate reversal of this
+ * repo's usual rule. "A product default lives at the caller, not in the
+ * library" is about choices that change what a traveller gets. This one
+ * changes what a run *spends*, and a library whose default is to spend money
+ * bills whoever forgets it is there. Opting in should be the visible act;
+ * opting out should not have to be.
+ */
+export type TravelRouting = "estimate" | "matrix";
 
 /**
- * Crow-flight legs, memoized per pair.
+ * The one travel row on `jobs.result.stats`, whichever path produced it.
  *
- * Memoized because `packDay` calls the provider hundreds of times per day while
- * it searches for a set of durations that fits — that is the packer's documented
- * requirement of any provider, and it is the reason a network call must never
- * sit behind this signature.
- *
- * This is a stand-in, and it is the one place the pipeline knowingly guesses.
- * A place with no coordinates yields a zero leg rather than `NaN`; clustering
- * already dropped those, so it can only be reached by a hand-built input.
+ * The estimator's counters are trip-wide because the estimator itself is, so
+ * they are read straight off it rather than summed — summing a single object
+ * once per day is how "kept 8 of 7" bugs get written.
  */
+function travelStatsFor(
+  routing: TravelRouting,
+  injected: boolean,
+  perDay: readonly TravelMatrixStats[],
+  estimate: TravelEstimateStats,
+): { travel?: PlanStats["travel"] } {
+  if (injected) return {};
+  if (routing === "estimate") {
+    return { travel: { source: "estimate", walk: estimate.walk, transit: estimate.transit } };
+  }
+  return perDay.length > 0 ? { travel: sumTravelStats(perDay) } : {};
+}
+
 /**
  * Adds the per-day matrices into one set of counters for `jobs.result.stats`.
  *
@@ -401,8 +433,9 @@ const TRANSIT_M_PER_MIN = 400;
  * identically on every request, and twelve copies of one sentence reads like
  * twelve faults.
  */
-function sumTravelStats(perDay: readonly TravelMatrixStats[]): NonNullable<PlanStats["travel"]> {
+function sumTravelStats(perDay: readonly TravelMatrixStats[]): PlanStats["travel"] {
   return {
+    source: "matrix",
     requests: perDay.reduce((total, day) => total + day.requests, 0),
     walkLegs: perDay.reduce((total, day) => total + day.walkLegs, 0),
     transitLegs: perDay.reduce((total, day) => total + day.transitLegs, 0),
@@ -410,45 +443,6 @@ function sumTravelStats(perDay: readonly TravelMatrixStats[]): NonNullable<PlanS
     estimated: perDay.reduce((total, day) => total + day.estimated, 0),
     errors: [...new Set(perDay.flatMap((day) => day.errors))],
   };
-}
-
-export function createStraightLineTravel(): TravelLegProvider {
-  const cache = new Map<string, TravelLeg>();
-  return (from, to) => {
-    // `\u0000`, escaped rather than typed. A literal NUL byte in the source
-    // makes grep and ripgrep classify this whole file as binary and skip it
-    // silently — the file stops appearing in code search and nothing warns you.
-    const key = `${from.placeId}\u0000${to.placeId}`;
-    const hit = cache.get(key);
-    if (hit) return hit;
-
-    const meters = metersBetween(from, to);
-    const minutes =
-      meters < 1200
-        ? Math.ceil(meters / WALK_M_PER_MIN)
-        : TRANSIT_WAIT_MIN + Math.ceil(meters / TRANSIT_M_PER_MIN);
-    const leg: TravelLeg = { minutes, meters };
-    cache.set(key, leg);
-    return leg;
-  };
-}
-
-/** Zero for a place with no coordinates: a leg is minutes, and `NaN` minutes
- *  would poison every arrival time downstream. Clustering already dropped
- *  those, so only a hand-built input reaches it. */
-function metersBetween(from: CandidatePlace, to: CandidatePlace): number {
-  if (
-    from.latitude === undefined ||
-    from.longitude === undefined ||
-    to.latitude === undefined ||
-    to.longitude === undefined
-  ) {
-    return 0;
-  }
-  return greatCircleMeters(
-    { latitude: from.latitude, longitude: from.longitude },
-    { latitude: to.latitude, longitude: to.longitude },
-  );
 }
 
 // ── the result ───────────────────────────────────────────────────────────────
@@ -500,6 +494,15 @@ export interface PlanStats {
     themed: number;
     fellBack: number;
     repaired: number;
+    /**
+     * Days that walked the whole ladder and still cannot seat their meals.
+     * Distinct from `repaired`, which counts only the rungs that *worked* — a
+     * live Bali day tried all three, fixed nothing, and was invisible in every
+     * counter here.
+     */
+    unfixed: number;
+    /** Places that sat outside every theme's reach and joined no day. */
+    unclaimed: number;
   };
   clustering: {
     /** Candidates with coordinates, which is all clustering can place. */
@@ -515,8 +518,7 @@ export interface PlanStats {
   hydration: ShortlistHydrationStats;
   enrichment: EnrichmentReadStats;
   /**
-   * The live fetch for what the cache missed. Absent when nothing missed, or
-   * when `enrichNow` is off and the misses went to a batch instead.
+   * The live fetch for what the cache missed. Absent when nothing missed.
    *
    * `failed` is the one to read: each one is a place that shipped on the type
    * heuristic, which is a complete-looking itinerary built on a table of round
@@ -543,24 +545,40 @@ export interface PlanStats {
     failedDays: number;
   };
   /**
-   * Route Matrix, summed over the days. Absent when a caller injected its own
-   * `getTravelLeg`, which is every test and the offline harness.
+   * How this trip's travel times were arrived at. Absent when a caller injected
+   * its own `getTravelLeg`, which is every test and the offline harness.
    *
-   * `estimated` is the one to read. Every leg degrades to the straight line
-   * rather than failing, so a run where routing never worked produces exactly
-   * the itinerary it produced before and says nothing — unless this counter is
-   * looked at. `errors` carries the reason, once per distinct message.
+   * A union rather than one shape with a flag, because the two paths have
+   * genuinely different things to report and sharing a field name between them
+   * would mean one of the two names is a lie. `source` is the discriminant, and
+   * it exists because a trip built on the model and a trip built on measurement
+   * look identical from the outside — the stops, the clock and the modes all
+   * render the same way, and only this says which one you are looking at.
    */
-  travel?: {
-    requests: number;
-    walkLegs: number;
-    transitLegs: number;
-    /** Legs served as transit because it genuinely beat walking. */
-    chosenTransit: number;
-    /** Lookups answered by crow-flight instead of by Google. */
-    estimated: number;
-    errors: string[];
-  };
+  travel?:
+    | {
+        source: "matrix";
+        requests: number;
+        walkLegs: number;
+        transitLegs: number;
+        /** Legs served as transit because it genuinely beat walking. */
+        chosenTransit: number;
+        /**
+         * Lookups answered by crow-flight instead of by Google. Every leg
+         * degrades rather than failing, so a run where routing never worked
+         * produces exactly the itinerary it produced before and says nothing —
+         * unless this counter is looked at. `errors` carries the reason, once
+         * per distinct message.
+         */
+        estimated: number;
+        errors: string[];
+      }
+    | {
+        source: "estimate";
+        /** Distinct pairs the model answered, by the mode it chose. */
+        walk: number;
+        transit: number;
+      };
   photos: PhotoStats;
   narration: NarrateStats;
   /**
@@ -571,10 +589,10 @@ export interface PlanStats {
    * turns these into money at render time, so correcting a rate re-prices every
    * historical run.
    *
-   * Enrichment is deliberately absent. Its batch is queued by one plan and its
-   * answers serve every later trip touching those places, so it is billed to
-   * `enrichment_batches.usage` instead — charging it here would overstate this
-   * trip and let every trip that reuses the cache read as free.
+   * Enrichment is here, because it is fetched inside the run that pays for it.
+   * Its answers do outlive the trip — the next plan touching those places reads
+   * them from `place_enrichments` for nothing — but the tokens were spent
+   * building this one.
    */
   cost: StageUsage[];
 }
@@ -610,30 +628,19 @@ export interface PipelineDeps {
   cache: SearchCache;
   store: LocationStore;
   enrichments: EnrichmentStore;
-  /** Durable Batch submission for cold enrichment rows. This waits for the
-   * handle, never for the model's up-to-24-hour completion. */
-  enqueueEnrichments?: (
-    subjects: readonly EnrichmentSubject[],
-    now: Date,
-  ) => Promise<void>;
   responses: ResponsesClient;
   fetch?: FetchLike;
   blobs?: PhotoBlobStore;
   /** Injected. Nothing in the planner reads the ambient clock or Math.random. */
   now: Date;
   rng: () => number;
-  /** Defaults to memoized crow-flight. There is no Routes module in this repo. */
-  getTravelLeg?: TravelLegProvider;
   /**
-   * Fetch cache misses before Pass B rather than queueing them for tomorrow.
-   *
-   * Defaults to **off**, and the default is not the recommendation — it is the
-   * same rule `mode` follows: a library default that changes behaviour and
-   * spends money silently is a trap, so the product default lives in
-   * `defaultPlanRouteDeps` where somebody reading the route can see it. Off,
-   * misses go to the batch: half price, and the answers arrive tomorrow.
+   * Overrides both routing paths outright — no matrix is fetched and no model
+   * is consulted. This is every test and the Gate A harness.
    */
-  enrichNow?: boolean;
+  getTravelLeg?: TravelLegProvider;
+  /** Defaults to `"estimate"`. `"matrix"` is the one that costs money. */
+  routing?: TravelRouting;
   onProgress?: (progress: PlanProgress) => void | Promise<void>;
 }
 
@@ -658,27 +665,37 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   const packKnobs: PackKnobs = {
     visitDurationBias: knobs.visitDurationBias,
     walkMaxMeters: knobs.walkMaxMeters,
+    // Read by nothing before this: `mealMinutes` sized Pass B's budget and
+    // never the meal it is named for. See `MEAL_MAX_MINUTES` in `pack.ts`.
+    mealMinutes: knobs.mealMinutes,
   };
-  const getTravelLeg = deps.getTravelLeg ?? createStraightLineTravel();
+  const routing = deps.routing ?? "estimate";
+  // Built once for the whole trip, not per day: the model has no departure time
+  // in it, so a leg is the same on Tuesday as on Sunday and the memo is worth
+  // more the longer it lives. Its counters are therefore trip-wide already, and
+  // must not be summed per day the way the matrices are.
+  const estimate = createTravelEstimate(knobs.walkMaxMeters);
+  const getTravelLeg = deps.getTravelLeg ?? estimate.getTravelLeg;
 
   /**
    * One day's travel provider.
    *
-   * An injected `getTravelLeg` wins outright and no matrix is fetched — that is
-   * every test, the Gate A harness, and any caller that wants the old
-   * arithmetic. Otherwise the day's places are routed for real, with the
-   * straight line kept underneath for pairs Google cannot answer.
+   * An injected `getTravelLeg` wins outright and neither path runs — that is
+   * every test and the Gate A harness. Otherwise `routing` decides, and the
+   * model is the default: see `TravelRouting`.
    *
-   * `departureDate` is the day's own date, so a Sunday leg is not priced on a
-   * Tuesday service. `departureTimeFor` turns it into mid-morning local, with
-   * the offset estimated from the places' longitude because the planner has no
-   * timezone. That estimate is the one real guess in here.
+   * On the matrix path, `departureDate` is the day's own date, so a Sunday leg
+   * is not priced on a Tuesday service. `departureTimeFor` turns it into
+   * mid-morning local, with the offset estimated from the places' longitude
+   * because the planner has no timezone. The estimator is kept underneath it
+   * for pairs Google cannot answer.
    */
   const travelFor = async (
     places: readonly CandidatePlace[],
     date: string,
   ): Promise<{ getTravelLeg: TravelLegProvider; stats?: TravelMatrixStats }> => {
     if (deps.getTravelLeg) return { getTravelLeg: deps.getTravelLeg };
+    if (routing === "estimate") return { getTravelLeg };
     const matrix = await buildTravelMatrix(places, getTravelLeg, {
       apiKey: deps.googleApiKey,
       fetch: deps.fetch,
@@ -687,6 +704,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     });
     return matrix;
   };
+
   const report = async (stage: Exclude<PlanStage, "done">) => {
     await deps.onProgress?.(progressFor(stage));
   };
@@ -778,17 +796,19 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   });
 
   /**
-   * A cache miss used to mean "queue a batch and plan without it". The batch is
-   * half price and up to 24 hours, so its answers reach the *next* plan touching
-   * these places — which meant every first trip to a city sized its visits from
-   * the type table in `duration.ts` and looked complete doing it.
+   * A cache miss used to mean "queue an OpenAI batch and plan without it". That
+   * batch was half price and up to 24 hours, so its answers reached the *next*
+   * plan touching these places — which meant every first trip to a city sized
+   * its visits from the type table in `duration.ts` and looked complete doing
+   * it.
    *
    * So the misses are fetched here, before Pass B, which is where the
-   * enrichment stage always claimed to be. The batch stays available for
-   * pre-warming a city ahead of time; it is no longer how a plan gets its data.
+   * enrichment stage always claimed to be. It costs about a cent and ~11
+   * seconds, and nothing here throws: a place that fails falls to the type
+   * heuristic, exactly as a cache miss already did.
    */
   let liveEnrichment: EnrichPlacesResult | undefined;
-  if (missing.length > 0 && deps.enrichNow) {
+  if (missing.length > 0) {
     liveEnrichment = await enrichPlaces(missing, {
       client: deps.responses,
       store: deps.enrichments,
@@ -797,8 +817,6 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     for (const [placeId, value] of liveEnrichment.enrichments) {
       enrichment.enrichments.set(placeId, value);
     }
-  } else if (missing.length > 0 && deps.enqueueEnrichments) {
-    await deps.enqueueEnrichments(missing, deps.now);
   }
 
   // 5 — Pass B. One call for the trip; never throws, degrades to the ranked list.
@@ -836,6 +854,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     enrichment.enrichments,
   );
   const sequencing: SequencingRecord[] = [];
+  const scheduling: SchedulingRecord[] = [];
   const travelStats: TravelMatrixStats[] = [];
   const days: PlannedDay[] = await Promise.all(
     assignment.days.map(async (assigned, index): Promise<PlannedDay> => {
@@ -849,7 +868,14 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       // Computed before the matrix rather than after, because the validator's
       // replacements have to be *in* the matrix. A swap whose legs are the only
       // crow-flight ones in an otherwise routed day is worse than either.
-      const alternates = alternatesFor(cluster, withFlex, profile, enrichment.enrichments);
+      // The reserve is the places `groupByTheme` refused — over half the pool
+      // on both the Kyoto fixture and a live Bali run, every one already
+      // billed for. It is offered only to a day that cannot feed itself, and
+      // only for meal slots; see `mealReserveFor`.
+      const alternates = alternatesFor(cluster, withFlex, profile, enrichment.enrichments, {
+        places: themed?.unclaimed ?? [],
+        walkMaxMeters: knobs.walkMaxMeters,
+      });
 
       // Real travel times for this day's stops, its spares and the handful of
       // replacements a repair might reach for. One pair of matrices, then every
@@ -886,6 +912,55 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
         reordered: sequenced.reordered,
         meters: Math.round(pathMeters(sequenced.input.assignments)),
       };
+
+      // Everything below was already computed and then dropped when the request
+      // ended. `stats.scheduling.failedDays` counted these days and could never
+      // say which one, or why — which is exactly the question asked the morning
+      // after a trip came back with an empty day in it.
+      const scheduledStops = validation.day.segments.filter(
+        (segment) => segment.kind === "activity",
+      ).length;
+      scheduling[index] = {
+        dayIndex: assigned.dayIndex,
+        areaName: assigned.areaName ?? null,
+        offered:
+          sequenced.input.assignments.length + (sequenced.input.flex?.length ?? 0),
+        scheduled: scheduledStops,
+        repairs: validation.repairs.map((repair) => ({
+          rule: repair.rule,
+          role: repair.role,
+          removed: repair.removed.name,
+          inserted: repair.inserted?.name ?? null,
+          reason: repair.reason,
+        })),
+        failures: validation.failures.map((failure) => ({
+          rule: failure.rule,
+          role: failure.role,
+          placeId: failure.placeId,
+          name: failure.name,
+          reason: failure.reason,
+        })),
+      };
+
+      // Warned as it happens as well as stored, following the same rule the
+      // assignment drops follow: the dev terminal is where somebody is actually
+      // looking while a plan runs. An empty day is warned about separately
+      // because it is the one outcome no traveller can use.
+      if (scheduledStops === 0) {
+        console.warn(
+          `[plan] day ${assigned.dayIndex} (${assigned.areaName ?? "no area"}) ` +
+            `shipped EMPTY — ${sequenced.input.assignments.length} stops assigned, ` +
+            `${validation.repairs.length} repairs, none survived. ` +
+            `Failures: ${validation.failures.map((f) => `${f.rule} ${f.name} (${f.reason})`).join("; ") || "none recorded"}`,
+        );
+      } else if (validation.failures.length > 0) {
+        console.warn(
+          `[plan] day ${assigned.dayIndex} (${assigned.areaName ?? "no area"}) ` +
+            `kept ${scheduledStops} of ${sequenced.input.assignments.length} assigned stops with ` +
+            `${validation.failures.length} unfixed: ` +
+            validation.failures.map((f) => `${f.rule} ${f.name} (${f.reason})`).join("; "),
+        );
+      }
 
       return {
         dayIndex: assigned.dayIndex,
@@ -970,6 +1045,7 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       },
       enrichment: { misses: enrichment.misses },
       sequencing,
+      scheduling,
       ...(themed
         ? {
             themes: {
@@ -986,6 +1062,8 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
               ),
               fallbacks: themed.rejected,
               repairs: themed.repairs,
+              attempts: themed.attempts,
+              unclaimed: themed.unclaimedCount,
             },
           }
         : {}),
@@ -1001,10 +1079,15 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
               themed: themed.clusters.filter((cluster) => cluster.theme).length,
               fellBack: themed.rejected.length,
               repaired: themed.repairs.length,
+              unfixed: themed.attempts.filter((attempt) => attempt.unfixed).length,
+              unclaimed: themed.unclaimedCount,
             },
           }
         : {}),
-      ...(travelStats.length > 0 ? { travel: sumTravelStats(travelStats) } : {}),
+      // Nothing at all when a caller injected its own provider: neither path
+      // ran, so there is no honest answer to "where did these minutes come
+      // from" and a zeroed row would read as one.
+      ...travelStatsFor(routing, deps.getTravelLeg !== undefined, travelStats, estimate.stats),
       clustering: {
         located: located.length,
         unlocated: unlocated.length,
@@ -1052,8 +1135,8 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
           : []),
         ...(narration.stats.usage.calls > 0 ? [narration.stats.usage] : []),
         // Unlike the batch, a live enrichment belongs to the plan that made it:
-        // it was spent to build *this* trip. The batch's tokens still go on
-        // `enrichment_batches.usage`, because its answers serve every later one.
+        // it was spent to build *this* trip, even though the cached answers go
+        // on to serve every later trip that touches the same places.
         ...(liveEnrichment && liveEnrichment.stats.usage.calls > 0
           ? [liveEnrichment.stats.usage]
           : []),
@@ -1165,6 +1248,15 @@ interface ThemedPlan {
   rejected: ThemeRejection[];
   /** Which rung of the feasibility ladder each thin day ended on. */
   repairs: FeasibilityRepair[];
+  /** Every day that needed the ladder, including the ones it could not fix. */
+  attempts: FeasibilityAttempt[];
+  /**
+   * Places no theme's circle would claim — the places, because a day with
+   * nothing to eat is offered the meal-capable ones as a last resort.
+   */
+  unclaimed: CandidatePlace[];
+  /** `unclaimed.length`, for the counters that only ever wanted the number. */
+  unclaimedCount: number;
   /** Nearby-search counters, folded into the run's retrieval stats. */
   exploreStats?: RetrievalStats;
   /** The theme call's token usage. It runs on `MODELS.assign`, the expensive
@@ -1235,6 +1327,7 @@ async function planThemedDays(
 
   await report("explore");
   const explored = await explorePlaces(request, pool, themes.themes, knobs, deps);
+  let exploreStats = explored.stats;
 
   const merged = new Map(pool.map((place) => [place.placeId, place]));
   for (const place of explored.places) merged.set(place.placeId, place);
@@ -1246,11 +1339,10 @@ async function planThemedDays(
     pool: merged,
     totalDays: request.totalDays,
     rng: deps.rng,
-    walkMaxMeters: knobs.walkMaxMeters,
   });
-  if (grouped.unclaimed > 0) {
+  if (grouped.unclaimed.length > 0) {
     console.warn(
-      `[group] ${grouped.unclaimed} place${grouped.unclaimed === 1 ? "" : "s"} sat outside every theme's reach and joined no day`,
+      `[group] ${grouped.unclaimed.length} place${grouped.unclaimed.length === 1 ? "" : "s"} sat outside every theme's reach and joined no day`,
     );
   }
 
@@ -1260,6 +1352,9 @@ async function planThemedDays(
   // bug this project already knows about.
   const repaired = await repairFeasibility(grouped.clusters, {
     mealsPerDay: FUNNEL_DEFAULTS.mealsPerCluster,
+    // Asked about *this* traveller. A vegetarian's day of five steakhouses used
+    // to count as fed, so the ladder never ran on the days that needed it most.
+    dietary: request.profile.dietary,
     widen: async (cluster) => {
       if (!cluster.theme) return [];
       const wider = await explorePlaces(
@@ -1270,21 +1365,31 @@ async function planThemedDays(
         deps,
       );
       for (const place of wider.places) merged.set(place.placeId, place);
+      // Folded in rather than dropped. Each widen is three more billed circles
+      // now, and they are spent on the days going worst — reporting only the
+      // opening searches made those days read as the cheapest in the trip. A
+      // widen that 400s lands in `failures` here for the same reason: "found
+      // nothing" and "was rejected" need different fixes.
+      exploreStats = exploreStats
+        ? wider.stats
+          ? mergeRetrievalStats(exploreStats, wider.stats)
+          : exploreStats
+        : wider.stats;
       return wider.places;
     },
     // The geographic cluster for a day only exists once themes have claimed
     // what they wanted, so it is computed from the leftovers the same way
     // `groupByTheme` does — one k-means over what no theme is using.
     geographicFor: (dayIndex) => geographicFallbackFor(grouped.clusters, dayIndex, deps.rng),
-    // Same reach the membership cap uses, so rung 2 cannot hand back a place
-    // rung 0 refused.
-    walkMaxMeters: knobs.walkMaxMeters,
   });
 
   return {
     pool: [...merged.values()],
     clusters: repaired.clusters,
     repairs: repaired.repairs,
+    attempts: repaired.attempts,
+    unclaimed: grouped.unclaimed,
+    unclaimedCount: grouped.unclaimed.length,
     rejected: [
       ...themes.rejected,
       // A day that had a theme and lost it during grouping — an anchor Google
@@ -1297,9 +1402,24 @@ async function planThemedDays(
           reason: "the anchor has no coordinates to search around",
         })),
     ],
-    exploreStats: explored.stats,
+    exploreStats,
     usage: themes.usage,
   };
+}
+
+/**
+ * The dietary phrases to ask near an anchor, with `{city}` interpolated.
+ *
+ * Empty for a traveller with no needs, which is what keeps this free for
+ * everybody else — and empty for a need `dietaryBridgeFor` has no phrases for,
+ * rather than inventing one. An invented query is a billed call that returns
+ * whatever Google makes of a word we chose.
+ */
+function dietaryQueriesFor(dietary: readonly string[], city: string): string[] {
+  const queries = dietary.flatMap(
+    (need) => dietaryBridgeFor(need)?.queries.map((q) => q.replaceAll("{city}", city)) ?? [],
+  );
+  return [...new Set(queries)];
 }
 
 /** One step wider. `wide` is already the top of the scale. */
@@ -1353,14 +1473,63 @@ async function explorePlaces(
   const requests = themes.flatMap((theme) => {
     const anchor = byPlaceId.get(theme.anchorPlaceId);
     if (anchor?.latitude === undefined || anchor.longitude === undefined) return [];
+    const centre = { latitude: anchor.latitude, longitude: anchor.longitude };
+    // The hint alone. How far this traveller will walk between two stops is
+    // a different question from how much city to search — see `radiusFor`.
+    const radius = radiusFor(theme.radiusHint);
     return [
+      // The premise, twice, ranked both ways.
+      //
+      // `rankPreference` is one enum per request, so "near AND notable" is two
+      // circles or it is neither. Distance alone never returns the famous
+      // museum three kilometres out; popularity alone returned twenty places in
+      // Kuta for a circle centred in Nusa Dua. Neither is wrong — they answer
+      // different questions, and *which one this traveller wants is already a
+      // persona decision*: `weights.popularity` is signed and
+      // `touristTrapPenalty` sets its direction, so a deep-immersion traveller
+      // wants the obscure place and a highlights traveller wants the famous
+      // one. Letting Google rank by popularity alone throws away the
+      // low-popularity tail twenty places before `scorePlace` ever sees it, and
+      // no knob downstream can get it back. Union first, decide after.
+      //
+      // Overlap is free: `retrievePlaces` dedupes and counts
+      // `duplicatesDropped`.
+      nearbyRequest(request.city, centre, radius, theme.includedTypes, "DISTANCE"),
+      nearbyRequest(request.city, centre, radius, theme.includedTypes, "POPULARITY"),
+      // Somewhere to eat, near. One circle and not two: lunch has to be
+      // walkable from the rest of the day, and among the near ones `scorePlace`
+      // can still prefer the popular one. Two circles rather than one merged
+      // type list because a request returns at most twenty places — shared
+      // between museums and restaurants that is ten of each, and the day needs
+      // both.
+      //
+      // The radius is deliberately identical to the premise circle's. The Bali
+      // day that prompted this failed on *types*, not distance — the two
+      // nearest food places were 1.1 km inside a circle that was never asked
+      // about food — and a wider meal circle would return restaurants beyond
+      // `MEMBER_RADIUS_SLACK`, which `groupByTheme` then refuses to seat on the
+      // day anyway. One variable moves, which is what makes it measurable.
       nearbyRequest(
         request.city,
-        { latitude: anchor.latitude, longitude: anchor.longitude },
-        // `comfortTolerance` owns distance, so the radius scales with the same
-        // knob that decides what counts as walking.
-        radiusFor(theme.radiusHint, knobs.walkMaxMeters),
-        theme.includedTypes,
+        centre,
+        radius,
+        mealSearchTypes(request.profile.dietary),
+        "DISTANCE",
+      ),
+      // And the phrases, for a traveller with a dietary need.
+      //
+      // The meal circle asks Google for *types*, and `includedTypes` is coarse
+      // on exactly this question: a great vegetarian-friendly izakaya is typed
+      // `izakaya_restaurant`, never `vegetarian_restaurant`, so a type search
+      // finds the places that label themselves and misses everywhere that
+      // simply has good vegetarian food. `dietaryBridgeFor` already carries the
+      // phrases that catch that tail — they were only ever fired **city-wide**,
+      // where results cluster wherever the city is busiest rather than where
+      // this day actually is.
+      //
+      // Only for a traveller who has a need, so nobody else pays for it.
+      ...dietaryQueriesFor(request.profile.dietary, searchLocality(request.city, request.country)).map(
+        (query) => textNearRequest(request.city, query, centre, radius),
       ),
     ];
   });
@@ -1439,6 +1608,14 @@ export function alternatesFor(
   input: PackDayInput,
   profile: PreferenceProfile,
   enrichments: ReadonlyMap<string, PlaceEnrichment>,
+  /**
+   * Required, not optional. Forgetting to pass it is the one failure mode a
+   * test cannot catch — an empty reserve behaves exactly like no reserve, so a
+   * caller that silently stopped wiring it would keep every assertion green.
+   * Making it a parameter makes that a compile error instead. A caller with
+   * genuinely nothing to offer passes `NO_MEAL_RESERVE` and says so.
+   */
+  reserve: MealReserve,
 ): Alternate[] {
   if (!cluster) return [];
   const used = new Set([
@@ -1467,10 +1644,99 @@ export function alternatesFor(
   // day into an aquarium is the premise breaking with nothing to show for it.
   // Stable within each group, so the funnel's ranking still orders the queue.
   const wanted = cluster.theme?.includedTypes;
-  if (!wanted || wanted.length === 0) return alternates;
-  const onTheme = (alternate: Alternate) =>
-    wanted.some((type) => alternate.place.types.includes(type));
-  return [...alternates.filter(onTheme), ...alternates.filter((a) => !onTheme(a))];
+  const ordered =
+    !wanted || wanted.length === 0
+      ? alternates
+      : (() => {
+          const onTheme = (alternate: Alternate) =>
+            wanted.some((type) => alternate.place.types.includes(type));
+          return [...alternates.filter(onTheme), ...alternates.filter((a) => !onTheme(a))];
+        })();
+
+  return [...ordered, ...mealReserveFor(cluster, used, profile, enrichments, reserve)];
+}
+
+/**
+ * The pool `alternatesFor` may reach into when a day has nothing to eat, plus
+ * the one knob that bounds how far it may reach.
+ */
+export interface MealReserve {
+  places: readonly CandidatePlace[];
+  /** `PlannerKnobs.walkMaxMeters` — how far this traveller goes between stops. */
+  walkMaxMeters: number;
+}
+
+/** For a caller with nothing to offer — a geographic run, or a test about
+ *  something else. Explicit, so "no reserve" is a decision on the page. */
+export const NO_MEAL_RESERVE: MealReserve = { places: [], walkMaxMeters: 0 };
+
+/**
+ * Places no theme claimed, offered to a day that would otherwise go hungry.
+ *
+ * `groupByTheme` refuses a place further from an anchor than
+ * `MEMBER_RADIUS_SLACK` allows, which is the right rule and leaves over half
+ * the pool on the floor — 45 of 84 on the Kyoto fixture, 87 of 151 on a live
+ * Bali run. Every one is already retrieved and already billed for. Meanwhile
+ * `validate.ts` could only ever repair from the day's own cluster, so a themed
+ * day whose circle contained nothing edible shipped with `lost_meal` while the
+ * restaurants that would have fixed it sat unused.
+ *
+ * Three rules keep this from becoming the "5.7 km cafe" bug over again:
+ *
+ * 1. **Meal-capable only.** Not a general-purpose top-up. `admits` refuses a
+ *    restaurant for a plain activity and `withFill` excludes them outright, so
+ *    a list of restaurants can reach a meal slot or a cafe break and nothing
+ *    else. The containment is structural rather than a promise made here.
+ * 2. **This traveller's meals.** `mealSlotReason` is the same predicate the
+ *    validator enforces, so a vegetarian is never offered a steakhouse.
+ * 3. **A hard distance cap, and it is wider than membership on purpose.** These
+ *    places are outside the membership reach *by definition*, so reusing that
+ *    bound would return nothing. `MEAL_RESERVE_REACH` is the day's own circle
+ *    plus one hop as far as this traveller travels between stops. A transit
+ *    ride to lunch beats no lunch; a transit ride across the city does not.
+ *
+ * Sorted nearest-first and appended **last**, so the cluster's own ranked
+ * candidates are always spent before anything from outside it.
+ */
+function mealReserveFor(
+  cluster: ScoredCluster,
+  used: ReadonlySet<string>,
+  profile: PreferenceProfile,
+  enrichments: ReadonlyMap<string, PlaceEnrichment>,
+  reserve: MealReserve,
+): Alternate[] {
+  if (reserve.places.length === 0 || !cluster.theme) return [];
+  const centre = cluster.centroid;
+  if (centre.latitude === undefined || centre.longitude === undefined) return [];
+  const reach = radiusFor(cluster.theme.radiusHint) * MEMBER_RADIUS_SLACK + reserve.walkMaxMeters;
+
+  return reserve.places
+    .flatMap((place) =>
+      used.has(place.placeId) ||
+      place.latitude === undefined ||
+      place.longitude === undefined ||
+      mealSlotReason(place, profile) !== undefined
+        ? []
+        : [
+            {
+              place,
+              metres: metersBetween(
+                { latitude: place.latitude, longitude: place.longitude },
+                { latitude: centre.latitude, longitude: centre.longitude },
+              ),
+            },
+          ],
+    )
+    .filter((entry) => entry.metres <= reach)
+    .sort((a, b) => a.metres - b.metres)
+    .map(({ place }) => ({
+      place,
+      // Zero: these never competed in the funnel, so they hold no score of
+      // their own, and a borrowed number would order them against places that
+      // earned theirs. The queue position is the ranking — last, nearest first.
+      score: 0,
+      duration: resolveVisitDuration(place, enrichments.get(place.placeId), profile.pace),
+    }));
 }
 
 /**

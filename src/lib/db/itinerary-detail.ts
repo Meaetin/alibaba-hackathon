@@ -44,8 +44,9 @@ export type ActivityCategory = "poi" | "meal";
 /**
  * What a leg between two stops is travelled by.
  *
- * The planner produces `walk` and `transit` only — `createStraightLineTravel`
- * decides between them on `WALK_MAX_METERS`. `drive` is here because the page
+ * The planner produces `walk` and `transit` only — `createTravelEstimate`
+ * decides between them, or the Route Matrix measures both and picks. `drive` is
+ * here because the page
  * builds its own optimistic rows with it, and because the mode buttons in
  * `TransportDetailRow` offer it. `TransportMode` in the day-column constants is
  * this type, re-exported, so the two cannot drift apart.

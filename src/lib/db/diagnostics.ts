@@ -22,16 +22,14 @@
  *   different thing and says so.
  */
 
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 
 import type { FunnelStats } from "@/lib/planner/funnel";
-import type { EnrichmentFailure } from "@/lib/planner/enrich";
 import type { PlannerDebug } from "@/lib/planner/debug";
 import type { PreferenceProfile } from "@/lib/planner/types";
 
 import type { Database } from "./client";
 import {
-  enrichment_batches,
   itineraries,
   itinerary_activities,
   itinerary_days,
@@ -68,12 +66,6 @@ export interface DiagnosticDay {
   stops: DiagnosticStop[];
 }
 
-/** A recorded enrichment failure, with the batch it was recorded against. */
-export interface DiagnosticEnrichmentFailure extends EnrichmentFailure {
-  providerBatchId: string;
-  batchStatus: string;
-}
-
 export interface PlanDiagnostics {
   itinerary: {
     id: string;
@@ -92,8 +84,6 @@ export interface PlanDiagnostics {
   /** The job that produced it, if its row is still around. Per-stage counters
    *  live on `jobs.result.stats` and deliberately not in `planner_debug`. */
   job: { id: string; status: string; error: string | null; stats: unknown } | null;
-  /** By `place_id`. Only places some batch actually recorded a failure for. */
-  enrichmentFailures: Record<string, DiagnosticEnrichmentFailure>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -168,7 +158,6 @@ export async function readPlanDiagnostics(
           stats: (job.result as { stats?: unknown } | null)?.stats ?? null,
         }
       : null,
-    enrichmentFailures: await readEnrichmentFailures(db),
   };
 }
 
@@ -219,41 +208,4 @@ async function readStops(
     });
   }
   return byDay;
-}
-
-/**
- * Every recorded enrichment failure, keyed by place.
- *
- * Read whole rather than filtered by the itinerary's places: the failures are
- * a jsonb array, so filtering by id means unnesting in SQL to save reading a
- * handful of rows. When the batch table is big enough for that to matter, this
- * is the function to change.
- *
- * A place named by two batches keeps the more recent record.
- */
-export async function readEnrichmentFailures(
-  db: Database,
-): Promise<Record<string, DiagnosticEnrichmentFailure>> {
-  const rows = await db
-    .select({
-      providerBatchId: enrichment_batches.provider_batch_id,
-      status: enrichment_batches.status,
-      failures: enrichment_batches.failures,
-      updatedAt: enrichment_batches.updated_at,
-    })
-    .from(enrichment_batches)
-    .where(sql`jsonb_array_length(${enrichment_batches.failures}) > 0`)
-    .orderBy(enrichment_batches.updated_at);
-
-  const byPlaceId: Record<string, DiagnosticEnrichmentFailure> = {};
-  for (const row of rows) {
-    for (const failure of row.failures ?? []) {
-      byPlaceId[failure.placeId] = {
-        ...failure,
-        providerBatchId: row.providerBatchId,
-        batchStatus: row.status,
-      };
-    }
-  }
-  return byPlaceId;
 }

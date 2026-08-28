@@ -38,7 +38,7 @@ interface PlannerDebugViewProps {
 }
 
 export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
-  const { itinerary, days, debug, funnelStats, job, enrichmentFailures } = diagnostics;
+  const { itinerary, days, debug, funnelStats, job } = diagnostics;
 
   // Pass B's sentences arrive as a flat list; every day section wants only its
   // own, and every stop wants only its own line. Indexed once, here.
@@ -144,7 +144,7 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
             </ul>
           )}
 
-          {debug.themes.repairs.length > 0 ? (
+          {debug.themes.repairs.length > 0 && (
             <ul className="planner-debug-theme-repairs flex flex-col gap-1">
               {debug.themes.repairs.map((repair) => (
                 <li
@@ -156,8 +156,38 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
                 </li>
               ))}
             </ul>
-          ) : (
+          )}
+
+          {/*
+            An empty `repairs` list used to render "No day needed the
+            feasibility ladder", which on the run that prompted all of this was
+            simply false: two days entered the ladder, walked every rung, fixed
+            nothing, and pushed no repair because a repair is only recorded when
+            it *helped*. `attempts` is the honest list, and `undefined` means an
+            older plan that never recorded one — not a clean run.
+          */}
+          {debug.themes.attempts === undefined ? (
+            <Empty>Feasibility attempts were not recorded for this itinerary.</Empty>
+          ) : debug.themes.attempts.length === 0 ? (
             <Ok>No day needed the feasibility ladder.</Ok>
+          ) : (
+            <ul className="planner-debug-theme-attempts flex flex-col gap-1">
+              {debug.themes.attempts.map((attempt) => (
+                <li key={attempt.dayIndex} className="type-body-3 text-content-secondary">
+                  Day {attempt.dayIndex + 1} — tried {attempt.tried.join(", ") || "nothing"}:{" "}
+                  {attempt.before} → {attempt.after} of {attempt.needed} places to eat
+                  {attempt.unfixed ? " — still short, this day ships without a full meal plan" : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {debug.themes.unclaimed !== undefined && debug.themes.unclaimed > 0 && (
+            <p className="planner-debug-theme-unclaimed type-body-3 text-content-secondary">
+              {debug.themes.unclaimed} place
+              {debug.themes.unclaimed === 1 ? "" : "s"} sat outside every theme&rsquo;s reach and
+              joined no day.
+            </p>
           )}
         </Section>
       )}
@@ -425,7 +455,7 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
       <Section
         region="itinerary-debug-enrichment"
         title="Enrichment misses"
-        note="A miss is normal — the place ships on the type heuristic and goes to the durable batch. A miss with a recorded failure is not."
+        note="A miss means the live fetch before Pass B had no answer for that place, so it ships on the type heuristic in `duration.ts` rather than an estimate of the place itself."
       >
         {debug === null ? (
           <Empty>Not recorded for this itinerary.</Empty>
@@ -438,24 +468,11 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
               this ran.
             </p>
             <ul className="flex flex-col gap-1">
-              {debug.enrichment.misses.map((placeId) => {
-                const failure = enrichmentFailures[placeId];
-                return (
-                  <li key={placeId} className="type-body-3 flex flex-wrap items-baseline gap-2">
-                    <span className="font-mono text-content-tertiary">{placeId}</span>
-                    {failure ? (
-                      <span className="text-content-error">
-                        {failure.reason} — {failure.message ?? "no message"} (batch{" "}
-                        {failure.providerBatchId}, {failure.batchStatus})
-                      </span>
-                    ) : (
-                      <span className="text-content-tertiary">
-                        no recorded failure — queued, or never asked for
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
+              {debug.enrichment.misses.map((placeId) => (
+                <li key={placeId} className="type-body-3">
+                  <span className="font-mono text-content-tertiary">{placeId}</span>
+                </li>
+              ))}
             </ul>
           </div>
         )}
@@ -490,6 +507,55 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
                   // already in their shortest order.
                   <span className="text-content-tertiary">already shortest</span>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {/* Scheduling */}
+      <Section
+        region="itinerary-debug-scheduling"
+        title="Scheduling"
+        note="What the validator swapped, dropped and could not fix, per day. A day that kept none of its stops is the one to read first."
+      >
+        {debug === null || debug.scheduling === undefined ? (
+          <Empty>Not recorded — this itinerary was planned before scheduling was captured.</Empty>
+        ) : debug.scheduling.length === 0 ? (
+          <Empty>No days to schedule.</Empty>
+        ) : (
+          <ul className="scheduling-day-list flex flex-col gap-3">
+            {debug.scheduling.map((day) => (
+              <li key={day.dayIndex} className="flex flex-col gap-1">
+                <div className="type-body-3 flex flex-wrap items-baseline gap-2 text-content-secondary">
+                  <span className="font-medium text-content">Day {day.dayIndex + 1}</span>
+                  {day.areaName && <span className="text-content-tertiary">{day.areaName}</span>}
+                  <span>
+                    kept {day.scheduled} of {day.offered} offered
+                  </span>
+                  {/* Empty is its own claim, and a louder one than "some were
+                      dropped" — nobody can use a day with nothing in it. */}
+                  {day.scheduled === 0 ? (
+                    <Chip label="shipped empty" tone="error" />
+                  ) : day.failures.length > 0 ? (
+                    <Chip label={`${day.failures.length} unfixed`} tone="warning" />
+                  ) : day.repairs.length > 0 ? (
+                    <Chip label={`${day.repairs.length} repaired`} />
+                  ) : (
+                    <Ok>clean</Ok>
+                  )}
+                </div>
+                {day.repairs.map((repair, index) => (
+                  <p key={index} className="type-body-4 pl-4 text-content-tertiary">
+                    {repair.rule} · {repair.removed}
+                    {repair.inserted ? ` → ${repair.inserted}` : " → dropped"} ({repair.reason})
+                  </p>
+                ))}
+                {day.failures.map((failure) => (
+                  <p key={failure.placeId} className="type-body-4 pl-4 text-content-secondary">
+                    unfixed {failure.rule} · {failure.name} ({failure.reason})
+                  </p>
+                ))}
               </li>
             ))}
           </ul>

@@ -79,10 +79,26 @@ export interface FakeGoogle {
   /** Every URL asked for, in order. */
   calls: string[]
   searchCalls: string[]
+  /**
+   * Text Searches that leaned on a circle. Recorded apart from `searchCalls`
+   * because the same phrase fired city-wide and fired around a day's anchor are
+   * different billed calls with different answers, and the query string alone
+   * cannot tell them apart.
+   */
+  biasedSearchCalls: { query: string; latitude: number; longitude: number; radius: number }[]
   /** One entry per `places:searchNearby` — a different SKU from Text Search,
    *  so counted separately, which is what makes "themes cost N more calls"
    *  assertable. */
-  nearbyCalls: { latitude: number; longitude: number; radius: number; includedTypes: string[] }[]
+  nearbyCalls: {
+    latitude: number
+    longitude: number
+    radius: number
+    includedTypes: string[]
+    /** Recorded because two circles now differ by nothing else. Absent means
+     *  the request omitted it, which is Google's POPULARITY default and a
+     *  regression this fake has to be able to show. */
+    rankPreference?: string
+  }[]
   detailsCalls: string[]
   /** Photo resource names turned into an image — the billed Photos SKU. */
   mediaCalls: string[]
@@ -107,6 +123,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
   const queryOffsets = new Map<string, number>()
   const calls: string[] = []
   const searchCalls: string[] = []
+  const biasedSearchCalls: FakeGoogle['biasedSearchCalls'] = []
   const nearbyCalls: FakeGoogle['nearbyCalls'] = []
   const detailsCalls: string[] = []
   const mediaCalls: string[] = []
@@ -137,8 +154,21 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
     calls.push(url)
 
     if (url === SEARCH_URL) {
-      const body = JSON.parse(init.body ?? '{}') as { textQuery: string; pageSize?: number }
+      const body = JSON.parse(init.body ?? '{}') as {
+        textQuery: string
+        pageSize?: number
+        locationBias?: { circle: { center: { latitude: number; longitude: number }; radius: number } }
+      }
       searchCalls.push(body.textQuery)
+      if (body.locationBias) {
+        const { center, radius } = body.locationBias.circle
+        biasedSearchCalls.push({
+          query: body.textQuery,
+          latitude: center.latitude,
+          longitude: center.longitude,
+          radius,
+        })
+      }
       const pageSize = body.pageSize ?? 20
       if (!queryOffsets.has(body.textQuery)) {
         queryOffsets.set(body.textQuery, (queryOffsets.size * pageSize) % Math.max(1, pool.length))
@@ -154,6 +184,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
       const body = JSON.parse(init.body ?? '{}') as {
         maxResultCount?: number
         includedTypes?: string[]
+        rankPreference?: string
         locationRestriction: { circle: { center: { latitude: number; longitude: number }; radius: number } }
       }
       const { center, radius } = body.locationRestriction.circle
@@ -162,6 +193,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
         longitude: center.longitude,
         radius,
         includedTypes: body.includedTypes ?? [],
+        rankPreference: body.rankPreference,
       })
       // Answers with what is genuinely near the circle's centre, which is the
       // one property a nearby search has that a text search does not. A fake
@@ -201,7 +233,7 @@ export function createFakeGoogle(options: FakeGoogleOptions): FakeGoogle {
     throw new Error(`the Google fake was asked for an endpoint it does not serve: ${url}`)
   }
 
-  return { fetch, calls, searchCalls, nearbyCalls, detailsCalls, mediaCalls }
+  return { fetch, calls, searchCalls, biasedSearchCalls, nearbyCalls, detailsCalls, mediaCalls }
 }
 
 // ── OpenAI ───────────────────────────────────────────────────────────────────

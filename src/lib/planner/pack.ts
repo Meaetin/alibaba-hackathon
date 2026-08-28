@@ -35,6 +35,7 @@ import {
   VISIT_STEP_MINUTES,
   ceilToStep,
   quantizeDuration,
+  toStep,
   type VisitDuration,
 } from "./duration";
 
@@ -270,6 +271,25 @@ export interface PackedDay {
   dropped: DroppedPlace[];
 }
 
+/**
+ * The longest a meal may be planned for, when no persona says otherwise.
+ *
+ * A meal is a stop like any other to `resolveVisitDuration`, so a restaurant
+ * whose `stay_duration` says 135 minutes was being planned at its ceiling — and
+ * a live Singapore day stamped a lunch from 11:30 to 14:55. Nobody eats for
+ * three and a half hours. `mealMinutes` already existed as a persona knob and
+ * was read in exactly one place, `dayCapacity`, to budget Pass B's ask; it
+ * never sized the meal it was named for. Now it does.
+ *
+ * A ceiling, not a fixed length: the packer may still squeeze a meal toward its
+ * `min` on a tight day. It may no longer stretch one past this.
+ *
+ * The value duplicates `MEAL_MINUTES` in `assign.ts` and
+ * `DEFAULT_KNOBS.mealMinutes` in `knobs.ts` because this module may not import
+ * either — `assign.ts` imports *this* one. A test pins all three equal.
+ */
+export const MEAL_MAX_MINUTES = 75;
+
 export function travelModeForMeters(meters: number, walkMaxMeters = WALK_MAX_METERS): TravelMode {
   return meters < walkMaxMeters ? "walk" : "transit";
 }
@@ -308,6 +328,8 @@ interface Stop {
 export interface PackKnobs {
   visitDurationBias: DurationBias;
   walkMaxMeters: number;
+  /** `PlannerKnobs.mealMinutes`. Omitted means `MEAL_MAX_MINUTES`. */
+  mealMinutes?: number;
 }
 
 /**
@@ -317,6 +339,8 @@ export interface PackKnobs {
  */
 interface EffectivePlan extends PacePlan {
   walkMaxMeters: number;
+  /** Ceiling for a `lunch` or `dinner` stop. See `MEAL_MAX_MINUTES`. */
+  mealMinutes: number;
 }
 
 const OVER_BUDGET_REASON = "over budget — no room left in the day";
@@ -348,6 +372,7 @@ export function packDay(
     ...PACE_PLANS[pace],
     ...(knobs ? { durationBias: knobs.visitDurationBias } : {}),
     walkMaxMeters: knobs?.walkMaxMeters ?? WALK_MAX_METERS,
+    mealMinutes: knobs?.mealMinutes ?? MEAL_MAX_MINUTES,
   };
   const dropped: DroppedPlace[] = [];
   let stops = selectStops(input, plan);
@@ -356,7 +381,7 @@ export function packDay(
     const outcome = fitDay(stops, plan, getTravelLeg);
     if (outcome.segments) return { segments: outcome.segments, dropped };
 
-    const victim = pickVictim(stops, outcome.blockedBefore);
+    const victim = pickVictim(stops, outcome.blockedBefore, outcome.overrunFrom);
     dropped.push(drop(victim, OVER_BUDGET_REASON));
     stops = stops.filter((stop) => stop !== victim);
   }
@@ -405,16 +430,30 @@ function toStop(
   // one that stamps a clock, so keeping every time on the grid is its promise
   // to keep. In production `resolveVisitDuration` has already done it and this
   // changes nothing.
-  const onGrid = quantizeDuration(duration);
+  const onGrid = capMeal(quantizeDuration(duration), role, plan.mealMinutes);
   const isAnchor = onGrid.min >= ANCHOR_MIN_MINUTES;
   const base = baseSize(onGrid, isAnchor, plan);
   return { place, role, score, duration: onGrid, isAnchor, isFlex, base, size: base };
 }
 
+/**
+ * Holds a meal to its ceiling, leaving every other role alone.
+ *
+ * `min` is lowered with the rest rather than left above the new ceiling: the
+ * packer treats these bounds as honest and squeezes against them, so a range
+ * that came back with `min` above `max` would be a worse bug than the long
+ * lunch this fixes.
+ */
+function capMeal(duration: VisitDuration, role: SlotRole, ceiling: number): VisitDuration {
+  if (!isMealRole(role) || duration.max <= ceiling) return duration;
+  const max = toStep(ceiling);
+  return { min: Math.min(duration.min, max), preferred: Math.min(duration.preferred, max), max };
+}
+
 /** What `fitDay` produced: a stamped day, or nothing plus the stop it stuck on. */
 type FitOutcome =
-  | { segments: TimelineSegment[]; blockedBefore?: undefined }
-  | { segments: null; blockedBefore?: number };
+  | { segments: TimelineSegment[]; blockedBefore?: undefined; overrunFrom?: undefined }
+  | { segments: null; blockedBefore?: number; overrunFrom?: number };
 
 /**
  * The stop to give up, flex first, then lowest score, then meals — whatever
@@ -428,17 +467,36 @@ type FitOutcome =
  * the day shed every low-scored stop after the meal before it touched the one
  * in front of it that was actually the cause.
  *
- * The narrowing excludes meals, and falls back to the whole day when it leaves
- * nothing — so this always returns a stop, and `packDay` always terminates.
+ * `overrunFrom` is the mirror, for the other way a day fails: it ran past the
+ * pace's end. It is the index of the last stop that **waited** for its window,
+ * and it narrows the field to that stop and everything **after** it. A stop
+ * that waits swallows every spare minute in front of it, so the day ends at the
+ * same o'clock whatever you drop earlier — dropping a 9 AM coffee cannot bring
+ * a 23:15 nightcap home. Left unnarrowed, a bar-heavy evening sheds the whole
+ * morning by score before it reaches the two stops behind dinner that were the
+ * cause, and a nine-stop day ships two.
+ *
+ * `blockedBefore` wins when both are set: a stamp that failed on a meal window
+ * never reached the end of the day, so its overrun is not yet a fact.
+ *
+ * Both narrowings exclude meals, and both fall back to the whole day when that
+ * leaves nothing — so this always returns a stop, and `packDay` always
+ * terminates.
  */
-function pickVictim(stops: Stop[], blockedBefore?: number): Stop {
+function pickVictim(stops: Stop[], blockedBefore?: number, overrunFrom?: number): Stop {
   const rank = (stop: Stop) => (stop.isFlex ? 0 : isMealRole(stop.role) ? 2 : 1);
   const worstFirst = (a: Stop, b: Stop) => rank(a) - rank(b) || a.score - b.score;
 
-  if (blockedBefore !== undefined) {
-    const blame = stops.slice(0, blockedBefore).filter((stop) => !isMealRole(stop.role));
-    if (blame.length > 0) return [...blame].sort(worstFirst)[0];
-  }
+  // The waiting stop is inside its own blame set on purpose: dropping it does
+  // shorten the tail, because everything after it then stops waiting too.
+  const blame =
+    blockedBefore !== undefined
+      ? stops.slice(0, blockedBefore)
+      : overrunFrom !== undefined
+        ? stops.slice(overrunFrom)
+        : [];
+  const blameable = blame.filter((stop) => !isMealRole(stop.role));
+  if (blameable.length > 0) return [...blameable].sort(worstFirst)[0];
   return [...stops].sort(worstFirst)[0];
 }
 
@@ -463,9 +521,13 @@ function fitDay(
   // The blocker from the *tightest* attempt is the one worth reporting: earlier
   // attempts were still carrying slack the squeeze went on to surrender.
   let blockedBefore: number | undefined;
+  let overrunFrom: number | undefined;
   const fits = () => {
     const stamped = stampDay(stops, plan, getTravelLeg);
+    // Read from the same stamp, so the two can never describe different
+    // attempts — `stampDay` sets at most one of them per call.
     blockedBefore = stamped.blockedBefore;
+    overrunFrom = stamped.overrunFrom;
     return stamped.feasible;
   };
 
@@ -492,7 +554,7 @@ function fitDay(
     if (fits()) return { segments: growDay(stops, plan, getTravelLeg) };
   }
 
-  return { segments: null, blockedBefore };
+  return { segments: null, blockedBefore, overrunFrom };
 }
 
 function baseSize(duration: VisitDuration, isAnchor: boolean, plan: EffectivePlan): number {
@@ -610,13 +672,20 @@ function stampDay(
   stops: Stop[],
   plan: EffectivePlan,
   getTravelLeg: TravelLegProvider,
-): { segments: TimelineSegment[]; feasible: boolean; blockedBefore?: number } {
+): {
+  segments: TimelineSegment[];
+  feasible: boolean;
+  blockedBefore?: number;
+  overrunFrom?: number;
+} {
   const segments: TimelineSegment[] = [];
   const [cafeOpen, cafeClose] = SLOT_WINDOWS.cafe_break;
   // An assigned cafe already occupies that role; don't invent a second one.
   let cafeTaken = stops.some((stop) => stop.role === "cafe_break");
   let cursor = DAY_START_MIN;
   let position = 0;
+  // The last stop that waited for its window. See `pickVictim`.
+  let overrunFrom: number | undefined;
 
   const fillIdle = (from: number, to: number) => {
     if (to <= from) return;
@@ -666,6 +735,9 @@ function stampDay(
       if (isMealRole(stop.role) && start > latestStart)
         return { segments, feasible: false, blockedBefore: index };
       if (!isMealRole(stop.role) && start > latestStart) start = arrival;
+      // Idle time in front of a window is slack this stop swallowed whole:
+      // nothing before it can move the rest of the day one minute earlier.
+      if (start > arrival) overrunFrom = index;
     }
     if (index > 0) fillIdle(arrival, start);
 
@@ -681,5 +753,5 @@ function stampDay(
     cursor = start + stop.size;
   }
 
-  return { segments, feasible: cursor <= plan.dayEndMin };
+  return { segments, feasible: cursor <= plan.dayEndMin, overrunFrom };
 }

@@ -285,7 +285,7 @@ describe('POST /api/plan', () => {
 
     // What the model said and what we refused, on the row you would open when
     // asking why a day came back strange. Both used to die with the request.
-    expect(debug.version).toBe(1)
+    expect(debug.version).toBe(3)
     expect(debug.assignment.rationale.length).toBeGreaterThan(0)
     expect(debug.assignment.rationale.every((entry) => entry.why.trim().length > 0)).toBe(true)
     expect(debug.assignment.fallbackDays).toEqual([])

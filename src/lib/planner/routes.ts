@@ -1,7 +1,15 @@
 /**
  * Real travel times, from the Routes API's Compute Route Matrix.
  *
- * What this replaces is a straight line and two constants: `createStraightLineTravel`
+ * **Off by default since 2026-08-28.** `PipelineDeps.routing` is `"estimate"`
+ * unless a caller asks otherwise, because this module charges per element and
+ * two matrices over every pair of a day's stops, spares and replacements came
+ * to 29,310 elements across a couple of weeks of demo trips — with no cache, so
+ * the same pair was bought again on every replan. Everything below still works
+ * and is still tested; it just has to be asked for. `travel-estimate.ts` is
+ * what answers otherwise, and its header has the accuracy either path buys you.
+ *
+ * What this replaces is a straight line and two constants: the old stand-in
  * measured great-circle metres, divided by 80 m/min, and called anything under
  * 1200 m a walk. That threshold decided the *mode* as well as the minutes, so a
  * 1035 m leg was a walk and a 1208 m leg was a bus, 173 metres apart, and

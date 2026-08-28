@@ -90,11 +90,32 @@ export const TYPE_DURATION_MINUTES: Record<string, number> = {
 /** min/max spread applied when a rung yields a single number (rungs 1, 3, 4). */
 const SPREAD = { min: 2 / 3, max: 1.5 } as const;
 
+/**
+ * How much longer than `preferred` a visit may ever be planned.
+ *
+ * `max` was `preferred * 1.5`, which punishes the longest stops hardest —
+ * exactly backwards. Measured on a live relaxed Singapore day: a 195-minute
+ * national gallery became 293 minutes, a 135-minute restaurant became 203, and
+ * four stops totalled 711 minutes against a 660-minute day *before a single
+ * minute of travel*. A stop that already runs three hours does not need another
+ * ninety; a forty-five minute cafe can absorb a little more.
+ *
+ * So the rule is **half again, but never more than half an hour longer**. It
+ * cannot lengthen any visit relative to the old multiplier — it only stops the
+ * long tail running away, which is why short stops are untouched.
+ */
+export const MAX_LIFT_MINUTES = 30;
+
+/** The ceiling of a visit's elastic range, given where it prefers to sit. */
+export function maxFor(preferred: number): number {
+  return preferred + Math.min(Math.round(preferred * (SPREAD.max - 1)), MAX_LIFT_MINUTES);
+}
+
 function fromScalar(preferred: number): VisitDuration {
   return quantizeDuration({
     min: Math.round(preferred * SPREAD.min),
     preferred,
-    max: Math.round(preferred * SPREAD.max),
+    max: maxFor(preferred),
   });
 }
 
@@ -140,7 +161,10 @@ export function resolveVisitDuration(
     base = fromScalar(place.stayDuration);
   } else if (enrichment) {
     const [low, high] = enrichment.avgVisitMinutes;
-    base = quantizeDuration({ min: low, preferred: Math.round((low + high) / 2), max: high });
+    // The model answers with a range and is capped by the same rule, so
+    // "90 to 300 minutes" cannot buy a five-hour stop that no other rung could.
+    const preferred = Math.round((low + high) / 2);
+    base = quantizeDuration({ min: low, preferred, max: Math.min(high, maxFor(preferred)) });
   } else {
     base = fromScalar(fromTypeHeuristic(place) ?? DEFAULT_VISIT_MINUTES);
   }

@@ -32,8 +32,9 @@
 
 import { metersBetween } from "./geo";
 import { MEMBER_RADIUS_SLACK, type ThemedCluster } from "./group";
+import { violatesDietaryNeed } from "./score";
 import { isRestaurant } from "./taxonomy";
-import { radiusFor } from "./theme";
+import { radiusFor, type DayTheme } from "./theme";
 import type { CandidatePlace } from "./types";
 
 /** Which rung of the ladder a day ended on. `ok` means it never needed one. */
@@ -53,6 +54,14 @@ export interface FeasibilityDeps {
   /** Meal-capable places a day needs. `FUNNEL_DEFAULTS.mealsPerCluster`. */
   mealsPerDay: number;
   /**
+   * The traveller's dietary needs, so "can this day feed itself" is asked about
+   * *this* traveller rather than about restaurants in general.
+   *
+   * Omitted means no needs, which counts exactly as this module counted before
+   * — that equivalence is what keeps every existing day planning identically.
+   */
+  dietary?: readonly string[];
+  /**
    * Search this theme's anchor again, wider. Returns whatever it found —
    * including places already in the cluster, which are deduped here.
    *
@@ -66,30 +75,69 @@ export interface FeasibilityDeps {
    * says so rather than being replaced by nothing.
    */
   geographicFor?: (dayIndex: number) => ThemedCluster | undefined;
-  /**
-   * `knobs.walkMaxMeters`. Bounds rung 2 by the same reach `groupByTheme` uses,
-   * so a borrowed restaurant is one the traveller could actually reach on the
-   * borrowing day.
-   *
-   * Without this bound the repair undoes the cap: membership refuses a place
-   * five kilometres from the anchor, and then merge hands over one from the
-   * next theme along. The day reads as fixed — it has its two restaurants —
-   * and the packer still spends the morning on transit.
-   *
-   * Optional, and absent means no distance bound, which is what this ladder did
-   * before the cap existed.
-   */
-  walkMaxMeters?: number;
+}
+
+/**
+ * One day that entered the ladder, and everything that happened to it.
+ *
+ * `repairs` only ever held rungs that *worked* — a repair is pushed when
+ * `after > before` — so a day that walked all three rungs and fixed nothing
+ * left no trace at all. A live Bali day did exactly that: zero places to eat,
+ * widened (found none), tried to borrow (no donor in reach), tried the
+ * geographic fallback (no better), and the only surviving evidence anywhere was
+ * `validateDay` reporting `lost_meal` at the very end of the run.
+ *
+ * Every day that needed the ladder is listed here, fixed or not. That is the
+ * same rule `SchedulingRecord` keeps and for the same reason: "it tried and
+ * failed" and "it never ran" are different answers, and a missing row cannot
+ * tell them apart.
+ */
+export interface FeasibilityAttempt {
+  dayIndex: number;
+  /** Meal-capable places when the day entered the ladder. */
+  before: number;
+  /** Meal-capable places when it left. Still short is a real outcome. */
+  after: number;
+  /** Meals the day needed — `after < needed` means it is still short. */
+  needed: number;
+  /** Rungs actually walked, in order. A rung that changed nothing is still here. */
+  tried: Exclude<FeasibilityRung, "ok">[];
+  /** True when the day left the ladder still unable to feed itself. */
+  unfixed: boolean;
 }
 
 export interface FeasibilityResult {
   clusters: ThemedCluster[];
   repairs: FeasibilityRepair[];
+  /** Every day that needed the ladder, whether or not it got what it needed. */
+  attempts: FeasibilityAttempt[];
 }
 
-/** How many places in this cluster could seat a meal. */
-export function mealCapacity(cluster: ThemedCluster): number {
-  return cluster.places.filter(isRestaurant).length;
+/**
+ * How many places in this cluster could seat a meal **for this traveller**.
+ *
+ * The dietary half is not decoration. Counting bare `isRestaurant` let a
+ * vegetarian's cluster of five steakhouses read as perfectly feasible: the
+ * ladder never fired, nothing was widened, nothing was borrowed, and the
+ * traveller met the problem at `selectMealCandidates` rung 3 — "limited
+ * vegetarian options, call ahead" — after every circle had been billed. The
+ * ladder can only repair a shortage it can see.
+ *
+ * `violatesDietaryNeed` is imported from `score.ts` rather than re-derived, so
+ * the stage that *counts* meal capacity and the stage that later *enforces* it
+ * cannot disagree. It is the same two-rung rule: Google's own boolean where it
+ * answered, the type list where it was silent.
+ *
+ * No needs counts exactly as before, which is what keeps every non-dietary
+ * traveller's plan identical.
+ */
+export function mealCapacity(cluster: ThemedCluster, dietary: readonly string[] = []): number {
+  return cluster.places.filter((place) => canSeatMeal(place, dietary)).length;
+}
+
+/** `isRestaurant`, narrowed to what this traveller may actually eat. */
+function canSeatMeal(place: CandidatePlace, dietary: readonly string[]): boolean {
+  return isRestaurant(place) && !dietary.some((need) => violatesDietaryNeed(place, need));
 }
 
 /**
@@ -104,23 +152,41 @@ export async function repairFeasibility(
 ): Promise<FeasibilityResult> {
   const working = clusters.map((cluster) => ({ ...cluster, places: [...cluster.places] }));
   const repairs: FeasibilityRepair[] = [];
+  const attempts: FeasibilityAttempt[] = [];
+  const dietary = deps.dietary ?? [];
 
   for (let index = 0; index < working.length; index++) {
     const cluster = working[index];
     if (!cluster.theme) continue;
-    if (mealCapacity(cluster) >= deps.mealsPerDay) continue;
+    if (mealCapacity(cluster, dietary) >= deps.mealsPerDay) continue;
 
     const dayIndex = cluster.theme.dayIndex;
-    const before = mealCapacity(cluster);
+    const before = mealCapacity(cluster, dietary);
+    // Pushed on entry and mutated as the ladder walks, so a day that falls out
+    // of any rung below via `continue` is still on the record.
+    const attempt: FeasibilityAttempt = {
+      dayIndex,
+      before,
+      after: before,
+      needed: deps.mealsPerDay,
+      tried: [],
+      unfixed: true,
+    };
+    attempts.push(attempt);
+    const settle = (): void => {
+      attempt.after = mealCapacity(working[index], dietary);
+      attempt.unfixed = attempt.after < deps.mealsPerDay;
+    };
 
     // Rung 1 — widen.
     if (deps.widen) {
+      attempt.tried.push("widened");
       const found = await deps.widen(cluster);
       const known = new Set(cluster.places.map((place) => place.placeId));
       const added = found.filter((place) => !known.has(place.placeId));
       if (added.length > 0) {
         cluster.places.push(...added);
-        const after = mealCapacity(cluster);
+        const after = mealCapacity(cluster, dietary);
         if (after > before) {
           repairs.push({
             dayIndex,
@@ -130,38 +196,47 @@ export async function repairFeasibility(
             reason: `searched wider and found ${after - before} more place${after - before === 1 ? "" : "s"} to eat`,
           });
         }
-        if (after >= deps.mealsPerDay) continue;
+        if (after >= deps.mealsPerDay) {
+          settle();
+          continue;
+        }
       }
     }
 
     // Rung 2 — borrow from the nearest theme that can spare it.
-    const borrowedFrom = borrow(working, index, deps.mealsPerDay, reachOf(cluster, deps));
+    attempt.tried.push("merged");
+    const borrowedFrom = borrow(working, index, deps.mealsPerDay, reachOf(cluster.theme), dietary);
     if (borrowedFrom !== undefined) {
       repairs.push({
         dayIndex,
         rung: "merged",
         before,
-        after: mealCapacity(cluster),
+        after: mealCapacity(cluster, dietary),
         reason: `took places to eat from ${working[borrowedFrom].theme?.title ?? "the nearest day"}`,
       });
-      if (mealCapacity(cluster) >= deps.mealsPerDay) continue;
+      if (mealCapacity(cluster, dietary) >= deps.mealsPerDay) {
+        settle();
+        continue;
+      }
     }
 
     // Rung 3 — give up the premise and take the geography.
+    if (deps.geographicFor) attempt.tried.push("geographic");
     const geographic = deps.geographicFor?.(dayIndex);
-    if (geographic && mealCapacity(geographic) > mealCapacity(cluster)) {
+    if (geographic && mealCapacity(geographic, dietary) > mealCapacity(cluster, dietary)) {
       working[index] = { ...geographic, theme: undefined };
       repairs.push({
         dayIndex,
         rung: "geographic",
         before,
-        after: mealCapacity(geographic),
+        after: mealCapacity(geographic, dietary),
         reason: "the theme could not seat a day, so this day is planned by neighbourhood instead",
       });
     }
+    settle();
   }
 
-  return { clusters: working, repairs };
+  return { clusters: working, repairs, attempts };
 }
 
 /**
@@ -180,14 +255,15 @@ function borrow(
   index: number,
   mealsPerDay: number,
   reach: number,
+  dietary: readonly string[],
 ): number | undefined {
   const borrower = clusters[index];
-  const need = mealsPerDay - mealCapacity(borrower);
+  const need = mealsPerDay - mealCapacity(borrower, dietary);
   if (need <= 0) return undefined;
 
   const donors = clusters
     .map((cluster, i) => ({ cluster, i }))
-    .filter(({ cluster, i }) => i !== index && mealCapacity(cluster) > mealsPerDay)
+    .filter(({ cluster, i }) => i !== index && mealCapacity(cluster, dietary) > mealsPerDay)
     .sort(
       (a, b) =>
         squaredDistance(borrower.centroid, a.cluster.centroid) -
@@ -195,10 +271,12 @@ function borrow(
     );
 
   for (const { cluster: donor, i } of donors) {
-    const spare = mealCapacity(donor) - mealsPerDay;
+    const spare = mealCapacity(donor, dietary) - mealsPerDay;
     if (spare <= 0) continue;
     const moving = donor.places
-      .filter(isRestaurant)
+      // What is borrowed has to be edible by the borrower. Lending a vegetarian
+      // five steakhouses satisfies the arithmetic and feeds nobody.
+      .filter((place) => canSeatMeal(place, dietary))
       .filter((place) => withinReach(place, borrower.centroid, reach))
       .sort(
         (a, b) =>
@@ -235,12 +313,19 @@ function pointOf(place: CandidatePlace): { latitude: number; longitude: number }
 
 /**
  * The reach a borrowed place must sit inside, matching `groupByTheme`'s cap so
- * one rule governs both halves. `Infinity` when the caller passed no
- * `walkMaxMeters` — the unbounded behaviour this ladder had before the cap.
+ * one rule governs both halves.
+ *
+ * There is no opt-out. It used to return `Infinity` when the caller passed no
+ * `walkMaxMeters`, which was a way for rung 2 to hand back exactly what
+ * membership had just refused — the day then reads as repaired, with its two
+ * restaurants, while the packer still spends the morning on transit.
+ *
+ * It takes the theme rather than the cluster because the loop above skips a
+ * themeless cluster outright, so "this day has no circle" was a branch nothing
+ * could reach.
  */
-function reachOf(cluster: ThemedCluster, deps: FeasibilityDeps): number {
-  if (deps.walkMaxMeters === undefined || !cluster.theme) return Infinity;
-  return radiusFor(cluster.theme.radiusHint, deps.walkMaxMeters) * MEMBER_RADIUS_SLACK;
+function reachOf(theme: DayTheme): number {
+  return radiusFor(theme.radiusHint) * MEMBER_RADIUS_SLACK;
 }
 
 /**

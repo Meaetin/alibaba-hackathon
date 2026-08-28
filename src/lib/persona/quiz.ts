@@ -538,25 +538,189 @@ export const ARCHETYPES: ArchetypeDefinition[] = [
 
 const DIMENSION_KEYS: DimensionKey[] = ["structure", "comfort", "focus", "social"];
 
-/** Sum the selected option vectors and average across all questions (0–100). */
-export function scoreAnswers(answers: QuizAnswers): DimensionScores {
-  const totals: DimensionScores = { structure: 0, comfort: 0, focus: 0, social: 0 };
+// ── scoring ──────────────────────────────────────────────────────────────────
 
-  answers.forEach((optionIndex, questionIndex) => {
-    if (optionIndex === null) return;
-    const { scores } = QUESTIONS[questionIndex].options[optionIndex];
-    for (const key of DIMENSION_KEYS) totals[key] += scores[key];
+/**
+ * ## Why a plain average could not work
+ *
+ * Averaging twelve option vectors is the central limit theorem applied to a
+ * personality quiz: whatever the options say, the mean of twelve of them piles
+ * up in the middle. Enumerating all 3^12 = 531,441 answer sets showed exactly
+ * that. The averaged `social` score never left 40..61 in *any* answer set, so
+ * an axis whose whole job is to separate "group all the way" from "happy on
+ * your own" separated nothing. Seven of the twelve archetypes had no answer set
+ * that reached them at all, 99% of answer sets landed on two of them, and 94%
+ * of travellers read `mid` on all four of the bands `knobs.ts` cuts at 33 and
+ * 66 — which is the band row that returns this planner's plain defaults. For
+ * nineteen travellers in twenty the quiz moved nothing.
+ *
+ * The archetype centres and the band cuts sit near the edges of the 0–100 box.
+ * The average never goes there. Two fixes are possible: move the targets onto
+ * the tiny reachable patch, or make the score cover the box. Moving the targets
+ * loses, because the bands read the raw axis numbers too — the whole planner
+ * would still read `mid` for nearly everyone.
+ *
+ * ## What replaces it
+ *
+ * Two steps, both derived from `QUESTIONS` rather than tuned by hand.
+ *
+ * 1. **Weight each question by how much it discriminates on that axis** — the
+ *    spread between its highest and lowest option, in steps of 15 points. A
+ *    question whose three options all score 50 on `social` (question one does
+ *    exactly that) now gets no vote on `social`, instead of one twelfth of it.
+ *    This is the continuous form of a rule the repo already applies:
+ *    `SIGNAL_QUESTIONS` in `src/lib/planner/persona-brief.ts` picks its four
+ *    diagnostic questions by the same spread table.
+ *
+ * 2. **Convert the weighted total to its percentile** among all 531,441
+ *    possible answer sets. The distribution is computed exactly, by counting
+ *    every answer set with a dynamic program over the twelve questions — no
+ *    sampling and no fitted curve. An axis score of 70 now means "more
+ *    spontaneous than 70% of the ways this quiz can be answered".
+ *
+ * The second step is what makes the tuning self-maintaining. A stretch factor
+ * chosen by staring at a table goes stale the moment somebody edits one
+ * option's numbers, and nothing fails when it does. The percentile table is
+ * rebuilt from `QUESTIONS` on load, so an edited option re-centres the scale
+ * for free.
+ *
+ * ## What it costs
+ *
+ * All twelve archetypes are reachable, every archetype takes between 4.8% and
+ * 15.4% of answer sets, all 81 band combinations occur and 1.5% of answer sets
+ * read neutral on all four bands. The price is that the quiz now *reacts*:
+ * changing one of twelve answers changes the archetype about 45% of the time,
+ * against 17% before. That is the same coin — a quiz that almost never changes
+ * its answer is a quiz that is not reading the answers. Run
+ * `npm run personas:reach` to re-measure any of this.
+ *
+ * One honest caveat: the reference population is "every answer set, equally
+ * likely", because that is the only population we have. Real travellers will
+ * not answer uniformly, so the real-world share per archetype will not be flat.
+ * What the percentile guarantees is that no archetype is *unreachable*.
+ */
+
+/**
+ * Spread is bucketed to this many points before it becomes a weight. Two
+ * reasons, and the second is the real one: a question whose options span 45
+ * points is not meaningfully more diagnostic than one spanning 50, and small
+ * integer weights keep the exact percentile tables at ~80 KB and ~1 ms to
+ * build instead of ~1.2 MB and ~28 ms. Measured: bucketing this coarsely moves
+ * every reachability number by less than a tenth of a percentage point.
+ */
+const AXIS_WEIGHT_STEP = 15;
+
+/** How loudly one question speaks about one axis. 0 = it says nothing. */
+function axisWeight(question: QuizQuestion, key: DimensionKey): number {
+  const values = question.options.map((option) => option.scores[key]);
+  return Math.round((Math.max(...values) - Math.min(...values)) / AXIS_WEIGHT_STEP);
+}
+
+/**
+ * Everything is scaled by three so that an **unanswered** question can
+ * contribute the mean of its three options and still be an integer. That is the
+ * honest contribution for "no information": it moves the traveller toward the
+ * middle of this axis rather than toward one option's opinion, and it keeps the
+ * total inside the range the percentile table covers.
+ */
+const UNANSWERED_SCALE = 3;
+
+interface AxisTable {
+  weights: number[];
+  /** Weighted total of the all-lowest-options answer set — index zero. */
+  offset: number;
+  /** Share of answer sets scoring below this total, plus half of those equal. */
+  percentile: Float32Array;
+}
+
+/**
+ * The exact distribution of one axis's weighted total, by dynamic program.
+ *
+ * `counts[i]` is how many of the 531,441 answer sets score `offset + i`. The
+ * mid-rank convention (half the ties) is what stops a heavily tied total from
+ * reading as either the bottom or the top of its own tie group.
+ */
+function buildAxisTable(key: DimensionKey): AxisTable {
+  const weights = QUESTIONS.map((question) => axisWeight(question, key));
+
+  let counts = Float64Array.from([1]);
+  let offset = 0;
+  QUESTIONS.forEach((question, index) => {
+    const adds = question.options.map(
+      (option) => UNANSWERED_SCALE * weights[index] * option.scores[key],
+    );
+    const low = Math.min(...adds);
+    const high = Math.max(...adds);
+    const next = new Float64Array(counts.length + (high - low));
+    for (let i = 0; i < counts.length; i += 1) {
+      const count = counts[i];
+      if (count === 0) continue;
+      for (const add of adds) next[i + add - low] += count;
+    }
+    offset += low;
+    counts = next;
   });
 
-  const answered = Math.max(
-    1,
-    answers.filter((a) => a !== null).length,
-  );
-  const averaged = {} as DimensionScores;
-  for (const key of DIMENSION_KEYS) {
-    averaged[key] = Math.round(totals[key] / answered);
+  const total = 3 ** QUESTIONS.length;
+  const percentile = new Float32Array(counts.length);
+  let below = 0;
+  for (let i = 0; i < counts.length; i += 1) {
+    // A total no answer set reaches gets `below / total`, which is the value of
+    // the nearest reachable total under it — exactly what a step CDF should say
+    // there, and what makes an unanswered question's fractional total safe.
+    percentile[i] = (below + counts[i] / 2) / total;
+    below += counts[i];
   }
-  return averaged;
+
+  return { weights, offset, percentile };
+}
+
+const AXIS_TABLES = new Map<DimensionKey, AxisTable>();
+
+function axisTable(key: DimensionKey): AxisTable {
+  let table = AXIS_TABLES.get(key);
+  if (!table) {
+    table = buildAxisTable(key);
+    AXIS_TABLES.set(key, table);
+  }
+  return table;
+}
+
+/**
+ * The answers as a 0–100 position on each axis — the percentile of this
+ * traveller's spread-weighted total among every possible answer set.
+ */
+export function scoreAnswers(answers: QuizAnswers): DimensionScores {
+  const scored = {} as DimensionScores;
+
+  for (const key of DIMENSION_KEYS) {
+    const { weights, offset, percentile } = axisTable(key);
+    // Every option on every question scores the same on this axis: it holds no
+    // opinion, so neither do we. Nothing in today's quiz hits this.
+    if (percentile.length <= 1) {
+      scored[key] = 50;
+      continue;
+    }
+
+    let totalScore = 0;
+    QUESTIONS.forEach((question, index) => {
+      const option = answers[index];
+      if (option == null || option < 0 || option >= question.options.length) {
+        totalScore += weights[index] * sumOfOptions(question, key);
+        return;
+      }
+      totalScore +=
+        UNANSWERED_SCALE * weights[index] * question.options[option].scores[key];
+    });
+
+    scored[key] = Math.round(100 * percentile[totalScore - offset]);
+  }
+
+  return scored;
+}
+
+function sumOfOptions(question: QuizQuestion, key: DimensionKey): number {
+  return question.options.reduce((sum, option) => sum + option.scores[key], 0);
 }
 
 function distance(a: DimensionScores, b: DimensionScores): number {

@@ -7,6 +7,7 @@ import {
   PACE_MULTIPLIERS,
   VISIT_STEP_MINUTES,
   type VisitDuration,
+  MAX_LIFT_MINUTES,
 } from './duration'
 
 function makePlace(overrides: Partial<CandidatePlace> = {}): CandidatePlace {
@@ -138,5 +139,48 @@ describe('fallback', () => {
     const d = resolveVisitDuration(makePlace({ types: [] }), undefined, 'balanced')
     expect(d.preferred).toBe(DEFAULT_VISIT_MINUTES)
     expectSane(d)
+  })
+})
+
+describe('the ceiling is capped, not multiplied', () => {
+  // The rule that stops a relaxed day over-committing before it starts. The old
+  // ceiling was preferred * 1.5, which grew fastest exactly where it hurt most.
+  it('never lifts a visit more than MAX_LIFT_MINUTES above preferred', () => {
+    for (const stay of [15, 23, 45, 60, 83, 120, 135, 165, 195, 300]) {
+      const { preferred, max } = resolveVisitDuration(
+        { placeId: 'p', name: 'p', types: [], stayDuration: stay },
+        undefined,
+        'balanced',
+      )
+      expect(max - preferred, `stay ${stay}`).toBeLessThanOrEqual(MAX_LIFT_MINUTES)
+      expect(max, `stay ${stay}`).toBeGreaterThanOrEqual(preferred)
+    }
+  })
+
+  it('shortens the long tail and leaves short visits alone', () => {
+    const long = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [], stayDuration: 195 },
+      undefined,
+      'balanced',
+    )
+    // 195 * 1.5 was 293. The gallery that ate a Singapore day.
+    expect(long.max).toBeLessThan(293)
+
+    const short = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [], stayDuration: 45 },
+      undefined,
+      'balanced',
+    )
+    expect(short.max).toBe(70) // unchanged: 45 * 1.5 rounds to the same step
+  })
+
+  it('caps a model-authored range too', () => {
+    // "90 to 300 minutes" must not buy a five-hour stop no other rung could.
+    const { preferred, max } = resolveVisitDuration(
+      { placeId: 'p', name: 'p', types: [] },
+      { avgVisitMinutes: [90, 300] },
+      'balanced',
+    )
+    expect(max - preferred).toBeLessThanOrEqual(MAX_LIFT_MINUTES)
   })
 })

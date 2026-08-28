@@ -15,23 +15,12 @@
 import OpenAI from "openai";
 
 import { getDb, type Database } from "@/lib/db/client";
-import { createEnrichmentBatchStore } from "@/lib/db/enrichment-batches";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
 import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
 import { createEnrichmentStore, createLocationStore, createSearchCache } from "@/lib/db/stores";
 import type { EnrichmentStore } from "@/lib/planner/enrich";
-import {
-  collectQueuedEnrichments,
-  enqueueEnrichmentMisses,
-  type EnrichmentBatchStore,
-} from "@/lib/planner/enrichment-queue";
 import type { FetchLike } from "@/lib/planner/http";
-import {
-  createBatchClient,
-  createResponsesClient,
-  type BatchClient,
-  type ResponsesClient,
-} from "@/lib/planner/openai";
+import { createResponsesClient, type ResponsesClient } from "@/lib/planner/openai";
 import { createS3PhotoBlobStore, s3ConfigFromEnv } from "@/lib/planner/photo-blobs";
 import type { PhotoBlobStore } from "@/lib/planner/photos";
 import { runPlan } from "@/lib/planner/pipeline";
@@ -50,10 +39,6 @@ export interface PlanRouteDeps {
   cache: SearchCache;
   locations: LocationStore;
   enrichments: EnrichmentStore;
-  enqueueEnrichments?: Parameters<typeof runPlan>[1]["enqueueEnrichments"];
-  /** The product default for live enrichment. See `PipelineDeps.enrichNow` —
-   *  it is off in the library on purpose, and chosen here. */
-  enrichNow?: boolean;
   responses: ResponsesClient;
   fetch?: FetchLike;
   blobs?: PhotoBlobStore;
@@ -68,8 +53,6 @@ function defaultPlanRouteDeps(): PlanRouteDeps {
 
   const blobConfig = s3ConfigFromEnv();
   const openai = new OpenAI({ apiKey: openaiKey });
-  const batches = createBatchClient(openai);
-  const enrichmentBatchStore = createEnrichmentBatchStore(db);
   return {
     store: createPlanStore(db),
     personas: createPersonaStore(db),
@@ -80,22 +63,7 @@ function defaultPlanRouteDeps(): PlanRouteDeps {
     cache: createSearchCache(db),
     locations: createLocationStore(db),
     enrichments: createEnrichmentStore(db),
-    enqueueEnrichments: async (subjects, now) => {
-      const result = await enqueueEnrichmentMisses(subjects, {
-        batches,
-        queue: enrichmentBatchStore,
-        now,
-      });
-      if (result.error) {
-        console.error("[enrichment batch] submission failed", result.error);
-      }
-    },
     responses: createResponsesClient(openai),
-    // Fetch what the cache missed before Pass B, rather than queueing it for
-    // tomorrow. Costs about a cent and ~11 seconds; buys a first trip to a new
-    // city whose visit lengths are estimates of the places rather than a type
-    // table. The batch is still there for pre-warming — see `enrichNow`.
-    enrichNow: true,
     blobs: blobConfig ? createS3PhotoBlobStore(blobConfig) : undefined,
   };
 }
@@ -116,44 +84,6 @@ export const itineraryRouteDeps: { create: () => { db: Database } } = {
 /** `GET /api/jobs/[id]` needs one thing, so it asks for one thing. */
 export const jobsRouteDeps: { create: () => { store: PlanStore } } = {
   create: () => ({ store: createPlanStore(getDb()) }),
-};
-
-/**
- * `POST /api/enrichments/collect` — the sweep that closes the loop on the
- * durable enrichment queue.
- *
- * Submission and collection are separated by up to 24 hours, which is the whole
- * reason `enrichment_batches` is a table rather than a promise. Nothing was
- * calling the collector, so every batch sat at `validating` forever and
- * `place_enrichments` stayed empty — which is invisible, because
- * `resolveVisitDuration` simply falls to the type heuristic and a trip still
- * comes out. Exactly the failure mode this codebase already knows about: a
- * degradation ladder is also a way for a real failure to look like success.
- *
- * Same seam as the others: reassign `create` in a test, production never
- * touches it.
- */
-export const enrichmentCollectRouteDeps: {
-  create: () => {
-    collect: typeof collectQueuedEnrichments;
-    batches: BatchClient;
-    queue: EnrichmentBatchStore;
-    enrichments: EnrichmentStore;
-    now: () => Date;
-  };
-} = {
-  create: () => {
-    const openaiKey = process.env.OPENAI_API_KEY;
-    if (!openaiKey) throw new Error("OPENAI_API_KEY is not set — batches cannot be collected.");
-    const db = getDb();
-    return {
-      collect: collectQueuedEnrichments,
-      batches: createBatchClient(new OpenAI({ apiKey: openaiKey })),
-      queue: createEnrichmentBatchStore(db),
-      enrichments: createEnrichmentStore(db),
-      now: () => new Date(),
-    };
-  },
 };
 
 /** `POST /api/persona`. Same shape and the same reason: one seam, no database

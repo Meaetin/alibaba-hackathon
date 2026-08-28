@@ -206,6 +206,20 @@ no vegan food, so `false` is sound for both. It does **not** read it at rung 2,
 because vegetarian is not vegan. That asymmetry is deliberate; both directions
 have a test.
 
+`DIETARY_CONFLICT_TYPES` is rung 2, and the rule for adding a type is **the
+animal has to be the cuisine, not an item on the menu**. `steak_house` is in
+because a steakhouse without steak is not a steakhouse. `chicken_restaurant`
+was added on 2026-08-26 after a live Singapore run seated a vegetarian at
+Poulet - VivoCity for dinner — Google was silent on `servesVegetarianFood` and
+a four-entry list had nothing to say about it.
+
+`sushi_restaurant` and `ramen_restaurant` were tried in the same change and
+**rejected**: both name the carbohydrate. Gate A's Kyoto fixture contains Vegan
+Ramen Uzu Kyoto, and the ramen rule deleted it — which is the whole reason that
+fixture exists. Where such a place genuinely serves nothing, Google's direct
+`false` catches it at rung 1, the rung that knows rather than guesses. Both
+directions have a test in `score.test.ts`.
+
 Measured on 20 live Singapore places (`scripts/output/singapore-place-details.json`):
 `servesVegetarianFood` present on 7, `goodForChildren` on 17, `editorialSummary`
 on 10, `reviewSummary` on **0**. `reviewSummary` is not broken — it returns full
@@ -218,8 +232,8 @@ role. Don't remove either guard.
 `retrieval.integration.test.ts` is the only thing that catches Google changing a
 response shape — `editorialSummary` is `{text}` but `reviewSummary` is
 `{text:{text}}`, and a silent change to either leaves every summary undefined
-with the whole offline suite still green. It bills real money, so it skips
-unless `GOOGLE_PLACES_API_KEY` is set: `npm run test:places`.
+with the whole offline suite still green. It bills real money, so the only way
+to run it is `npm run test:places` — `npm test` cannot see the file at all.
 
 ### Lint is `eslint .` on a flat config, and it is green at zero errors
 `next lint` is deprecated in Next 15 and gone in 16, so `npm run lint` calls the
@@ -244,8 +258,28 @@ Anything that redeclares `{ startPrice, endPrice, currency }` inline is drift �
 import the type. `normalizePlace` and
 `SEARCH_FIELDS` are module-private; export them if you need to test the mapping.
 
+### `npm test` cannot reach an integration test — that is the gate
+There are two Vitest configs. `vitest.config.ts` excludes
+`**/*.integration.test.ts` outright, so the default run is offline and free.
+`vitest.integration.config.ts` includes only those files, and the three scripts
+that use it (`test:db`, `test:blobs`, `test:places`) pass it with `-c`. A
+filename on the CLI only *filters* `include`; it cannot add back what `include`
+omits, which is why a second config exists rather than an `exclude` override.
+
+The `describe.skipIf(...)` guards are still there, but they are the second lock,
+not the first. Vitest does **not** read `.env.local` — only Node's
+`--env-file-if-exists=.env.local`, which those same three scripts pass, does.
+So a bare `npm test` sees no `DATABASE_URL` or `GOOGLE_PLACES_API_KEY` however
+full your `.env.local` is. Skipped is not the same as covered.
+
+`src/lib/db/itineraries.test.ts` is named in the integration config explicitly:
+it mixes pure row-shaper tests with one `DATABASE_URL`-gated `saveItinerary`
+block, so the filename convention alone would miss it. It is the only such
+exception — put new database or live-API tests in an `*.integration.test.ts`
+file and nothing needs listing.
+
 ### Tests are Vitest, colocated
-`npm test` (`vitest run`). Test files sit next to their module
+Test files sit next to their module
 (`src/lib/planner/score.test.ts`), fixtures in `__fixtures__/`. `__tests__/` is
 for **cross-module** work only — the invariant suite (`__tests__/invariants.ts`),
 the shared seeded rng, and the Gate A end-to-end run. Per-module tests don't go
@@ -373,6 +407,12 @@ simply stopped appearing in code search, with no warning to anyone. Write the
 escape — `\u0000` inside the template literal — never the byte. To sweep the
 repo, walk `src/` in Python and flag any byte below `0x09`.
 
+It came back. `src/lib/persona/profile.ts` shipped three of them in `0b87bd8` —
+the `SIGNALS_BY_ANSWER` key and its doc comment — so the file that decides a
+traveller's interests was invisible to `rg` for two days. Fixed 2026-08-28. Run
+the sweep after any change that copies a memo key from another module; copying
+the *escape* out of a rendered file gives you the byte.
+
 ### `itineraries.planner_debug` is where the models' own words go
 Two things used to be built and thrown away inside one request: Pass B's
 one-sentence `why` per stop (paid for on the expensive model, read by nobody)
@@ -385,35 +425,47 @@ It is **diagnostics, never content** — no card reads it, and it may be reshape
 without a migration because the column is `jsonb` and `PLANNER_DEBUG_VERSION`
 says which shape a row is. Per-stage counters deliberately are **not** in it:
 they are already durable on `jobs.result.stats`, and a second copy is a second
-thing to keep true. `enrichment_batches.failures` is the same idea one table
-over — what a terminal batch lost, including the lines that only ever appear in
-the provider's error file.
+thing to keep true.
 
-### The batch error file is a second download, and it is the only record of a refusal
-OpenAI puts requests it never ran in the batch's **error** file, not the output
-file. `collectEnrichmentBatch` downloads both; without the second one those
-places are invisible — they miss the cache forever and nothing says why. A batch
-where every request failed has **no output file at all**, so the absence of
-`outputFileId` must not be an early return. A failed error-file download is
-logged and shrugged off: diagnostics are not data, and holding a batch open for
-a file that may never arrive is worse than losing the reason.
+### `planner_debug.scheduling` exists because a day shipped empty and nothing said so
+A live Singapore run produced a three-day trip whose day three had **zero**
+stops. The day was in `itinerary_days` with a date and an area name; it just had
+no activities. Pass B had filled it and `sequenceDay` had routed it — 4.4 km,
+86 travel minutes — and then `validateDay` emptied it. The only surviving trace
+was `stats.scheduling.failedDays: 1`, which says how many days went wrong and
+never which, or why.
 
-### Everything in `enrich.ts` degrades except the store, so the store is wrapped
-`collectEnrichmentBatch` says "nothing here throws" and means it for every
-provider and parsing failure. The database is the exception: `place_enrichments`
-has a foreign key to `locations`, and submit and collect are separated by up to
-24 hours. A rejected write comes back as `storeError` and the batch stays
-**open**, so the next sweep retries it. `collectQueuedEnrichments` wraps each
-batch as well — a sweep exists to get through the list, and one bad batch must
-not cost the other nine.
+Every field needed was already on `DayValidation` — `repairs`, `failures`,
+`assumed` — and was thrown away when the request ended. `SchedulingRecord` keeps
+the per-day version of it now, and `pipeline.ts` `console.warn`s an empty or
+unfixed day as it happens, following the rule the assignment drops already
+follow: the dev terminal is where somebody is actually looking while a plan runs.
+
+`offered` counts Pass B's assignments **plus** the flex picks the packer may
+promote. Counting assignments alone was the first version of this field, and it
+rendered "kept 8 of 7" on a day where a spare was promoted.
+
+Every day is listed, clean ones included, and the field is optional on the type —
+so a plan made before it existed reads as "not recorded" rather than "nothing
+went wrong". Same rule `sequencing` keeps one field up, and the same reason.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **2**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately: a shape change should have
+to be conscious rather than absorbed.
 
 ### `EnrichmentSubject` is a `Pick`, which is compile-time only
-Hand the durable queue a whole `RetrievedPlace` and the whole thing gets
-persisted into `enrichment_batches.subjects` — coordinates, photo names, price
-range. `toEnrichmentSubject` projects at runtime; call it at every boundary that
-stores or sends a subject. Correctness is unaffected (`enrichmentSourceHash`
-only digests `buildEnrichmentInput`), so nothing fails — the row just quietly
-gets fat.
+Hand the enricher a whole `RetrievedPlace` and the whole thing reaches the
+prompt — coordinates, photo names, price range. `toEnrichmentSubject` projects
+at runtime; call it at every boundary that sends a subject. Correctness is
+unaffected (`enrichmentSourceHash` only digests `buildEnrichmentInput`), so
+nothing fails — the payload just quietly gets fat.
+
+**Everything in `enrich.ts` degrades except the store.** `enrichPlaces` says
+"nothing here throws" and means it for every provider and parsing failure: a
+place that fails falls to the type heuristic in `duration.ts`, exactly as a
+cache miss already did. A refused **store** write is reported as `storeError`
+rather than raised — the answers are already in hand and serve this plan; what
+is lost is the next plan's cache hit.
 
 ### `searchLocality` is how `country` reaches Google, and Singapore must not move
 `PlanRequest.country` used to be validated, stored on the itinerary row and
@@ -447,8 +499,7 @@ these tests passed with the feature removed until it also asserted the counter.
 
 ### `/itineraries/[id]/debug` is the app's only server component
 It reads `itineraries.planner_debug`, `funnel_stats`, the stored days, the
-`jobs.result.stats` blob and `enrichment_batches.failures`, and renders them as
-one page: the funnel's cuts, the stage counters, the days with Pass B's sentence
+`jobs.result.stats` blob, and renders them as one page: the funnel's cuts, the stage counters, the days with Pass B's sentence
 under each stop, the ids we refused, the narration fallbacks, and the enrichment
 misses. Every value is already on a row, so there is no query, no polling and no
 loading state — it ships 167 B of client JS.
@@ -566,6 +617,100 @@ The brief and the day premises go in `buildSharedPrefix`, **never** the per-stop
 payload — the other way round is fifteen cache misses. `promptCacheKeyFor` gained
 the four bands for the same reason.
 
+
+### An axis score is a percentile now, not an average — and that is why the quiz works
+Averaging twelve option vectors is the central limit theorem applied to a
+personality quiz. Enumerating all 3^12 = 531,441 answer sets showed what that
+cost: **seven of the twelve archetypes were unreachable by any answer set**,
+`culinary_nomad` and `bucket_list_chaser` took 99.1% between them, the averaged
+`social` score never left 40..61, and **94.3% of answer sets read `mid` on all
+four bands** — the row `resolvePlannerKnobs` answers with this planner's plain
+defaults. For nineteen travellers in twenty the quiz moved no knob at all, and
+every test was green because there is no assertion for an archetype nobody can
+reach.
+
+`scoreAnswers` does two things instead, both derived from `QUESTIONS` rather
+than tuned: it weights each question by the spread between its highest and
+lowest option on that axis (in steps of 15), then converts the weighted total to
+its **percentile** among all 531,441 answer sets, counted exactly by a dynamic
+program at first use. After: 12/12 reachable, every archetype between 4.8% and
+15.4%, all four axes span 0..100, all 81 band combinations occur, 1.5% all
+neutral. `npm run personas:reach` (`scripts/persona-reachability.ts`) prints the
+whole picture in about a minute.
+
+The percentile is what makes it self-maintaining. A stretch factor picked by
+staring at a table goes stale the moment somebody edits one option's numbers and
+nothing fails when it does; the table is rebuilt from `QUESTIONS`. The price is
+honest and worth stating: the quiz **reacts** now — one changed answer of twelve
+moves the archetype about 45% of the time against 17% before. A quiz that almost
+never changes its answer is a quiz that is not reading the answers.
+
+`matchArchetype`, the archetype centres and the band cuts at 33/66 are all
+unchanged. So is `knobs.ts` — an absent persona and every `mid` band still
+return today's constants, and no Gate A snapshot moved, because Gate A plans
+without a persona.
+
+**Re-scoring is automatic and that is the point.** `travel_personas` stores raw
+answers and `POST /api/plan` rebuilds with `calculatePersona` on every plan, so
+every stored persona now reads differently and most will show a different
+archetype. `itineraries.persona` snapshots the whole `TravelPersona` per plan
+(`request.persona ?? null` in `itineraries.ts`), so existing trips keep the
+archetype they were built with.
+
+### The archetype is a prior, not the traveller's taste
+Twelve answers became four numbers, four numbers became one archetype, and that
+archetype's fixed tag list became the whole trip. A real traveller who answered
+"find the wild side", "hostel, camp, or wherever", "street food adventures",
+"go immediately" and "an epic adventure" matched The Spontaneous Wanderer, whose
+tags are cafes / street art / local markets / walking tours, and got a Singapore
+trip of Orchard Road malls and art galleries. **No `outdoors` anywhere**, and
+nothing downstream could tell the persona had contradicted the person.
+
+`ANSWER_SIGNALS` in `profile.ts` reads the chosen options directly. Interests
+are what the answers named, ordered by weight, with the archetype only topping
+the list up to three; `typeAffinities` is the preset with the answers layered on
+top and the **strongest opinion per type winning**, the same rule
+`typeAffinityBonus` already applies. Pinned by question label **and** option
+title, like `SIGNAL_QUESTIONS` — an index would move onto the wrong answer
+silently.
+
+Only options that name *content* are in the table. "Spreadsheet time" and "one
+carry-on" describe a style and the four axes already read them; inventing a
+taste from a style answer is how the archetype got it wrong to begin with. Two
+options carry a **refusal** ("fuel for the journey", "politely decline") which
+cannot push an interest down — there is no negative weight — but does stop the
+archetype topping that interest back up.
+
+The list is capped at five and floored at three because `affinity` in `score.ts`
+is matched-over-total, so every extra interest dilutes the rest, and
+`buildSearchPlan` bills a text search per interest.
+
+Two gaps, named rather than papered over. The quiz never asks about evenings, so
+`nightlife` reaches a profile only through the festival answer or the Social
+Explorer preset. And a refusal does not yet damp the preset's *type* weights —
+a traveller who said food is not the point can still carry `restaurant: 1.5`
+from a culinary archetype.
+
+### Three scripts drive the persona layer, and only one of them spends money
+`npm run personas:reach` is the enumeration described two sections up — offline,
+free, about a minute, and the source of the witness answer sets that
+`quiz.reachability.test.ts` freezes. `npm run personas:plan` sends all seven travellers in
+`scripts/travellers.ts` through `POST /api/persona` and `POST /api/plan`
+against a running dev server, sequentially, and writes every result to the
+gitignored `scripts/output/persona-trips.json`. `npm run personas:report` reads
+that file back, so the comparison can be re-shaped without re-planning seven
+trips. The runner re-scores all seven answer sets first and refuses to start if
+any lands on a different archetype or different bands than it claims.
+
+Scripts run on bare Node, which cannot resolve `./presets` without an extension
+or `@/lib/...` at all — both are bundler conventions that everything under
+`src/` relies on. `scripts/lib/resolve-hooks.mjs` handles that, installed with
+`node --import`. It runs only **after** Node's own resolution has failed, so it
+cannot change what already resolves. Note that type-only imports are erased
+before resolution, which is why some `src/` modules import cleanly on bare Node
+and others do not — the difference is invisible until it bites.
+
+
 ### Themed planning: `PlanRequest.mode`, and every rung falls back
 `"themed"` replaces the statistical centroid with a semantic anchor. Four
 stages: `survey.ts` (deterministic city summary), `theme.ts` (one model call),
@@ -589,6 +734,273 @@ empty cluster would renumber every day after it.
 `runPlan` still defaults to `"geographic"`; the **client** sends `"themed"`. A
 library default that changes behaviour silently is a trap, so the product default
 lives in `createItineraryRouted` where somebody can see it.
+
+### A themed circle must ask for food, and must ask for the *nearest* food
+Two changes from one live Bali run. Day three, "Nusa Dua Museum Day", shipped
+**three stops and no lunch**: `validateDay` reported `lost_meal` because the
+nearest place Google calls a restaurant was **8 km away**, in Kuta. All 813
+tests were green.
+
+**`explorePlaces` sent `theme.includedTypes` and nothing else.** A museum day
+asked Google for museums and got them. The city-wide Text Searches never cover
+a resort strip either — "specialty coffee Bali" returns Kuta and Seminyak,
+because that is what is prominent — so the Nearby Search was the only thing that
+could have found Nusa Dua's food, and it was never asked. Every themed anchor
+now gets **two** circles: the premise circle and a meal circle carrying
+`mealSearchTypes(dietary)` from `taxonomy.ts`.
+
+Two circles and not one merged type list, because **a Nearby Search returns at
+most twenty places**. Shared between museums and restaurants that is ten of
+each, and the day needs both.
+
+`mealSearchTypes` deliberately skips the pool-vocabulary half of
+`isSearchableType`. That rule kills types a *model* invented; a constant in our
+own source is not invented, and requiring a cold city's first pool to already
+contain the word `restaurant` is how a day ends up with nothing to eat. It keeps
+the other half — a descriptive-only type still 400s the whole circle — and
+`taxonomy.test.ts` pins every entry against `NON_SEARCHABLE_TYPES` rather than
+filtering at runtime, because silently dropping one would trade a loud 400 for a
+quiet empty circle. A dietary need **widens** the list and never replaces it:
+Google types a vegetarian izakaya `izakaya_restaurant`, so asking only for
+`vegetarian_restaurant` is how a vegetarian gets nowhere to eat rather than
+somewhere to ask. Both directions have a test.
+
+**The meal circle's radius is identical to the premise circle's, and that is a
+decision.** The Bali day failed on types, not distance — its two nearest food
+places were 1.1 km inside a circle that was never asked about food. A wider meal
+circle would also return restaurants beyond `MEMBER_RADIUS_SLACK`, which
+`groupByTheme` then refuses to seat on the day anyway. One variable moves, which
+is what makes its effect measurable.
+
+**`rankPreference` was never set, so Google was ranking by `POPULARITY`.** That
+answers a different question from the one every circle here asks: the twenty
+most prominent places *anywhere in the circle*, not the twenty nearest. On a
+4 km circle round a Nusa Dua museum that is twenty places in Kuta. It is also
+why `feasibility.ts`'s **widen** rung could never fix a thin day — a bigger
+circle ranked by popularity walks further from the anchor, not closer, so
+"search wider" was reliably the wrong instrument. `NEARBY_RANK_PREFERENCE` is
+`DISTANCE` now.
+
+It lives on `NearbySearch` rather than as a bare constant in `runSearch`,
+because `searchCacheKey` has to include it: the same circle ranked two ways is
+two different answers, and a popularity-ranked entry written before this change
+must not serve a distance-ranked request.
+
+**Widening the circle is not the lever, and this is worth knowing before
+reaching for it.** Google's ceiling is 50 km and `NEARBY_MAX_RADIUS_METERS`
+already holds it, but a request returns at most 20 places however big the
+circle. More circles with different type sets is the answer; one bigger circle
+is not.
+
+### `food_court` seats a meal, and the fixtures said otherwise
+Of 20 `food_court` rows in the live store, **12 carry no `restaurant` type at
+all**: `food_court, food, point_of_interest, establishment` and nothing more.
+Satay Street @ Lau Pa Sat, Chinatown Food Street, Kopitiam Food Hall, Hill
+Street Hainanese Curry Rice. Every one is somewhere you eat lunch, and every one
+was invisible to `isRestaurant` — retrieved, scored, ranked, and then unable to
+hold the meal slot it exists to hold. The Bali warung failure at scale.
+
+`singapore-candidates.json` argues the opposite, which is why this is written
+down. All nine of its food courts are the big named hawker centres, and Google
+*does* type those `food_court, market, restaurant` — so both Gate A snapshots
+pass with or without the rule, and **neither fixture can protect it**.
+`taxonomy.test.ts` writes the bare four-type shape out by hand for that reason.
+
+`meal_takeaway` is searched for and deliberately **not** seated: all seven live
+rows carrying it already carry `restaurant`, so promoting it would assert
+something no evidence supports, and a takeaway counter is a weaker claim to a
+seventy-five-minute meal slot than a food hall is. Both directions have a test,
+and a test asserts the general rule — every type in `MEAL_SEARCH_TYPES` must
+either be seatable or be one of the two that hold a `cafe_break`. A search type
+nothing can seat is the warung bug written fresh.
+
+Adding this turned up two **private copies** of the predicate, in
+`funnel.test.ts` and `assign.test.ts`, which is exactly the "fifth copy" its
+doc comment warns about. Both went on asserting the old rule and both still
+passed. They import the real one now.
+
+### "Can this day feed itself" has to mean *this traveller*, and it runs before hydration
+`mealCapacity` counted bare `isRestaurant`, so a vegetarian's cluster of five
+steakhouses read as perfectly feasible. The ladder never fired, nothing was
+widened, nothing was borrowed — and the traveller met the problem at
+`selectMealCandidates` rung 3, "limited vegetarian options, call ahead", after
+every circle had been billed for. **A ladder can only repair a shortage it can
+see.** `mealCapacity(cluster, dietary)` now asks `violatesDietaryNeed`, imported
+from `score.ts` rather than re-derived, so the stage that *counts* meal capacity
+and the stage that later *enforces* it cannot disagree. `borrow` filters the
+same way: lending a vegetarian five steakhouses satisfies the arithmetic and
+feeds nobody. No dietary needs counts exactly as before, which is what keeps
+every other traveller's plan identical.
+
+**Only rung 2 is reachable here, and that is worth knowing before trusting it.**
+`repairFeasibility` runs inside `planThemedDays`, which is pipeline step 2;
+`servesVegetarianFood` arrives with `hydrateShortlist` at step 3. So Google's
+direct boolean is always `undefined` at this point and the count falls to
+`DIETARY_CONFLICT_TYPES` — the type guess. That catches a steakhouse district,
+which is the case that prompted this, and it will miss a place only Google knows
+about. Hydrating earlier is not the fix: hydration is the Atmosphere-tier call
+and it is shortlist-only on purpose.
+
+**The unit tests for this all passed with the pipeline wiring deleted.**
+`feasibility.test.ts` proves the ladder fires once it is *told* who the
+traveller is, and every one of those assertions stayed green when
+`dietary: request.profile.dietary` was removed from `pipeline.ts`. A unit test
+of a function nothing calls with the right argument is not coverage. The
+argument has its own test in `pipeline.test.ts` now — same pool, every
+restaurant turned into a steakhouse, and the vegetarian run must buy a widening
+search the omnivore does not.
+
+### Near AND notable is two circles, because `rankPreference` is one enum
+A themed anchor gets three Nearby Searches: the premise ranked by `DISTANCE`,
+the premise ranked by `POPULARITY`, and the meal circle by `DISTANCE`.
+
+Neither ranking is wrong; they answer different questions. Distance alone never
+returns the famous museum three kilometres out. Popularity alone returned twenty
+places in Kuta for a circle centred in Nusa Dua. The reason to buy both rather
+than pick one is that **which the traveller wants is already a persona
+decision** — `weights.popularity` is signed and `touristTrapPenalty` sets its
+direction, so a deep-immersion traveller wants the obscure place and a
+highlights traveller wants the famous one. Ranking at the Google layer discards
+one tail twenty places before `scorePlace` ever sees it, and no knob downstream
+can get it back. Union first, decide after. Overlap is free — `retrievePlaces`
+dedupes and counts `duplicatesDropped`.
+
+The meal circle stays distance-only: lunch has to be walkable from the rest of
+the day, and among the near ones the scorer can still prefer the popular one.
+
+`nearbyRequest`'s `query` field carries the rank (`nearby:museum@distance`)
+because two circles now differ by nothing else, and a `stats.failures` entry
+reading `nearby:museum` twice names neither of them.
+
+### A ladder that fails silently, and a counter that bills the wrong day
+Two halves of one blind spot, both found on the Bali run and both fixed together.
+
+**`repairs` only ever held rungs that worked.** A repair is pushed when
+`after > before`, so a day that walked all three rungs and fixed nothing left no
+trace whatsoever. Bali's day three did exactly that — zero places to eat,
+widened and found none, no donor within reach, no better geography — and the
+only surviving evidence in the entire run was `validateDay` reporting
+`lost_meal` at the very end. `FeasibilityAttempt` records every day that entered
+the ladder, fixed or not, with the rungs it walked in order. Same rule
+`SchedulingRecord` keeps: "it tried and failed" and "it never ran" are different
+answers and an absent row cannot tell them apart.
+
+The debug page rendered `repairs.length === 0` as **"No day needed the
+feasibility ladder"**, which on that run was false twice over. It reads
+`attempts` now, three-way: `undefined` is an older plan, `[]` is genuinely
+clean, and a non-empty list names each day and whether it is still short.
+
+**`explorePlaces` runs twice and only the first was counted.** The `widen`
+closure kept `wider.places` and dropped `wider.stats`, so
+`stats.explore.billedCalls` reported the opening circles and none of the extra
+searches bought for the days going worst — *the days that cost the most read as
+the cheapest*. Measured on the Kyoto themed fixture: **12 real `searchNearby`
+calls, 9 reported.** Each widen is three circles now rather than one, so the gap
+tripled when the premise/popularity/meal split landed. `mergeRetrievalStats`
+folds them in.
+
+`failures` matters more than the money there. A widening search that 400s — and
+a live Singapore run lost two of three circles to an unsearchable type — was
+discarded with the rest of the stats, so "the ladder tried and found nothing"
+and "the request was rejected" looked identical.
+
+**`groupByTheme`'s `unclaimed` is on the row now**, not just a `console.warn`
+nobody reads after the request ends. It was **87 of 151** on Bali. Note it is
+still only a *count*: the places themselves are discarded, which is what stops
+`validate.ts` reaching them when a day has nothing to eat.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **3**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately.
+
+One assertion here was written worthless and caught by mutation:
+`expect(unclaimed).toBeGreaterThanOrEqual(0)` passes for a dead counter. It
+asserts `> 0` against the Kyoto fixture, where three walkable circles cannot
+cover 86 places.
+
+### A starving day can reach the places no theme would claim
+`groupByTheme` refuses a place further from an anchor than `MEMBER_RADIUS_SLACK`
+allows. That rule is right and it leaves **over half the pool on the floor** —
+45 of 84 located on the Kyoto fixture, 87 of 151 on a live Bali run, every one
+already retrieved and already billed for. Meanwhile `alternatesFor` only ever
+offered the day's *own* cluster, so a themed day whose circle held nothing
+edible shipped `lost_meal` while the restaurants that would have fixed it sat
+unused three streets away.
+
+`GroupResult.unclaimed` is the **places** now, not a count — a count cannot be
+handed to a day that needs somewhere to eat.
+
+Three rules keep this from being the "5.7 km cafe" bug again:
+
+- **Meal-capable only, and this traveller's meals.** Filtered by
+  `mealSlotReason`, the same predicate `validate.ts` enforces — offering a
+  candidate the validator will refuse a moment later is how a repair path
+  silently does nothing.
+- **The containment is structural, not a promise.** `admits` refuses a
+  restaurant for a plain `activity` and `withFill` excludes restaurants
+  outright, so a list of restaurants can reach a meal slot or a `cafe_break`
+  and nothing else. Putting a *sight* in the reserve would have no such guard.
+- **A hard distance cap, deliberately wider than membership.** These places are
+  outside the membership reach by definition, so reusing that bound returns
+  nothing. It is `radiusFor(hint) * MEMBER_RADIUS_SLACK + walkMaxMeters` — the
+  day's own circle plus one hop as far as this traveller travels between stops.
+
+Sorted nearest-first and appended **last**, so the cluster's own ranked
+candidates are always spent first. Reserve entries score `0`: they never
+competed in the funnel, and a borrowed number would rank them against places
+that earned theirs.
+
+**Know how narrow this is before relying on it.** For a `walkable` theme the
+reserve's range (1800–3800 m) sits *inside* the widen rung's circle (4000 m),
+and widen pushes what it finds straight into the cluster without a membership
+check. So on the commonest theme size the reserve only earns its keep when
+widen **fails or comes back thin** — a 400 on an unsearchable type, or the
+20-result cap hiding a restaurant a text search already found. It is a genuine
+backstop for `tight` and `wide` themes, where the widen circle does not cover
+the reserve range, and a backstop for a failed widen everywhere else. That is
+less than it first sounds like, and it is the honest scope.
+
+**`reserve` is a required argument on purpose.** An empty reserve behaves
+exactly like no reserve, so a caller that quietly stopped passing it would keep
+every assertion green — a mutation test confirmed it. Making it a parameter
+turns that into a compile error. A caller with nothing to offer passes
+`NO_MEAL_RESERVE` and says so on the page.
+
+### A dietary need is a phrase, not just a type — and it is asked where the day is
+`includedTypes` is coarse on exactly this question. Google types a great
+vegetarian-friendly izakaya `izakaya_restaurant`, never
+`vegetarian_restaurant`, so a meal circle asking for types finds the places that
+**label** themselves and misses everywhere that simply has good vegetarian food.
+That is the long tail `taxonomy.ts` has always said Text Search is for.
+
+`dietaryBridgeFor(need).queries` already carried the phrases. They were only
+ever fired **city-wide**, by `buildSearchPlan`, where the results cluster
+wherever the city is busiest rather than where any given day actually is. On a
+three-day trip that is one neighbourhood's worth of answers standing in for
+three. Each themed anchor now also gets those phrases, biased to the same circle
+the premise and meal circles use — `textNearRequest` in `retrieval.ts`.
+
+**`locationBias` biases, it does not restrict** — Google may still answer with
+something outside the circle. That is safe rather than sloppy: an anchored find
+too far from the day is refused by `MEMBER_RADIUS_SLACK` at grouping, and the
+meal reserve caps its own reach. The stray result is dropped downstream instead
+of seated.
+
+It is in `searchCacheKey`. The same phrase asked in two neighbourhoods is two
+different answers, and neither may serve the city-wide call `buildSearchPlan`
+already made with the identical `textQuery`.
+
+Two rules on what gets asked, both with a test. **Only a traveller with a need
+pays** — an empty `dietary` fires nothing at all. And **a need with no phrases
+in the bridge fires nothing**, rather than a query we invented: an invented
+query is a billed call returning whatever Google makes of a word we chose.
+
+A negative never goes in one of these. "no seafood" matches seafood
+restaurants; refusals are `DIETARY_CONFLICT_TYPES`' job, after the search.
+
+Note the offline suite proves the **requests** and can prove nothing about the
+answers: `createFakeGoogle` pages through its fixture and ignores `textQuery`,
+`includedTypes`, `rankPreference` and `locationBias` alike. Every circle around
+one anchor comes back identical. Only a live run tests the response layer.
 
 ### Theme infeasibility is discovered after you have paid
 A thin geographic cluster is visible before a cent is spent (`shortfall`); a thin
@@ -710,15 +1122,15 @@ repairs closures afterwards. Measured on the three real days, reordering caused
 per day, and it is optional on the type so a plan made before it existed reads
 as "not recorded" rather than "saved nothing".
 
-**Nothing was sweeping the enrichment queue.** `collectQueuedEnrichments` was
-written, tested and called by no one, so every batch sat at `validating` forever
-and `place_enrichments` had **zero rows** — meaning every visit duration in
-every trip came off the type table in `duration.ts`. Merlion Park was 60 minutes
-because `park` is 60 minutes, and the trip looked complete. `POST
-/api/enrichments/collect` is the sweep; the first run stored 64 enrichments and
-Merlion Park became 30–60 while the Peranakan Museum became 120–180. This is the
-"a fallback is also a way for a failure to look like success" rule again, and it
-is why the route's test asserts on the counters rather than the status code.
+**Nothing was sweeping the enrichment queue.** Enrichment ran on OpenAI's Batch
+API, and the collector that downloads a finished batch was written, tested and
+called by no one — so every batch sat at `validating` forever, `place_enrichments`
+had **zero rows**, and every visit duration in every trip came off the type table
+in `duration.ts`. Merlion Park was 60 minutes because `park` is 60 minutes, and
+the trip looked complete. Collecting once stored 64 enrichments and Merlion Park
+became 30–60 while the Peranakan Museum became 120–180. The batch path is gone
+now (see below), but the rule it taught is the one this file keeps repeating: a
+fallback is also a way for a failure to look like success.
 
 **`places.googleMapsUri` is Pro tier and rides free.** `SEARCH_FIELD_MASK`
 already asks for `rating` and `regularOpeningHours`, which are Enterprise, so
@@ -735,6 +1147,56 @@ on a card. All four now render in the detail views (`LocationDetailView` in view
 mode, `LocationDetailPanel` in edit mode), above Google's `editorial_summary` —
 one is written for this traveller, the other is Google's blurb for everyone.
 
+### A day can also run long at the *end*, and `pickVictim` needs blame for that too
+The mirror of the late-lunch rule two sections up, found on a live Singapore
+trip for a cafés-and-nightlife persona: three days that were **offered 9, 8 and
+8 stops and shipped 2, 3 and 2**, with no repair, no failure and no meal missing
+its window. Every survivor was a meal. Nothing in the trip said why.
+
+`blockedBefore` narrows blame only when a *meal* misses its window. A day that
+instead runs past `dayEndMin` set nothing, so `pickVictim` fell back to the
+globally lowest-scored stop — and on a day with a hard anchor in it, that is
+almost always a stop whose removal moves the end of the day by **zero minutes**.
+Dinner re-anchors at 18:00 however early you arrive, so shedding the 9 AM coffee
+cannot bring a 23:15 nightcap home. The day shed its whole morning by score
+before it reached the two bars behind dinner that were the cause.
+
+`stampDay` returns `overrunFrom` now: the index of the last stop that **waited**
+for its window. A stop that waits swallows every spare minute in front of it, so
+blame is that stop and everything after it. Measured on the real day — the
+packer dropped six stops and kept three; dropping the one stop that actually
+caused the overrun keeps all eight others.
+
+Three things worth knowing before touching it:
+
+- **The waiting stop is inside its own blame set.** Dropping it does shorten the
+  tail, because everything after it then stops waiting too.
+- **`blockedBefore` wins when both are set.** A stamp that failed on a meal
+  window never reached the end of the day, so its overrun is not yet a fact.
+  Both are read from the *same* stamp in `fitDay` so they cannot describe
+  different attempts.
+- **Neither Gate A city can see this.** Both fixtures are sight-heavy, so no day
+  ends with a stop behind a waiting anchor. Instrumented, the new narrowing
+  fires on **32 of 53** drops across the two snapshots and changes the victim in
+  **none** of them — the path is well covered and simply agrees there. Neither
+  snapshot moved. A fixture that ships bars after dinner would close the gap.
+
+**Squeezing per segment was considered and rejected.** It changes no outcome.
+When a day eventually fits, `growDay` gives the wasted minutes straight back —
+a morning stop cut for nothing grows into idle time the lunch anchor was going
+to waste anyway, and growth before an anchor never competes with growth after
+it. When a day cannot fit, the squeeze is irrelevant: the search already reaches
+"every ordinary stop on its floor", shrinking never delays anything downstream,
+so if any set of sizes fits then the all-floors set fits. The proportional
+squeeze **cannot miss a feasible day**. What imprecision remains is `growDay`'s
+greedy grow-back within one segment, which is a different function's problem.
+
+One test in `pack.test.ts` was green for the wrong reason and is fixed:
+`'still drops by score when the day merely runs long'` claimed no meal missed
+its window while its dinner arrived at 1245 against a 1200 latest start. The
+fifteen-minute pace buffer on each leg is what hid it — it had been exercising
+`blockedBefore` and would have passed whatever the overrun rule said.
+
 ### A repair can undo the route order, and no fixture catches it
 `validate.ts` swaps a replacement into the failing stop's **index**, which is
 correct for the clock and blind to the map — so a day that left `sequence.ts` in
@@ -749,11 +1211,49 @@ every weekday, and a repair drops stops, so the shipped path is shorter than
 Pass B's either way. The wiring test asserts what it can and says so in a
 comment. A fixture that validates clean would close it.
 
-### Travel is measured now, not guessed — `routes.ts`
-`createStraightLineTravel` divided great-circle metres by 80 m/min and called
-anything under 1200 m a walk. That one threshold decided the **mode** as well as
-the minutes, so a 1035 m leg was a walk and a 1208 m leg was a bus, 173 metres
-apart and neither looked up. Measured against Google on day one of the Singapore
+### Travel: the matrix still exists, it is just no longer the default
+`PipelineDeps.routing` picks between `travel-estimate.ts` (free, a model) and
+`routes.ts` (billed, a measurement), and it defaults to **`"estimate"`**. That
+reverses this repo's usual rule about product defaults living at the caller, on
+purpose: the rule is about choices that change what a traveller gets, and this
+one changes what a run *spends*. A library whose default is to spend money bills
+whoever forgets it is there. `stats.travel.source` says which path answered, and
+is `undefined` when a caller injected `getTravelLeg` and neither ran — "zero
+requests" and "we never asked" are different answers.
+
+The trigger was 29,310 billed elements over a couple of weeks of demo trips. Two
+matrices per day over a day's stops **plus its spares plus six replacements** is
+about 650 elements a day; nothing cached a leg, so every replan of Singapore
+bought the same pairs again. If you turn the matrix back on, cache legs first —
+a `(from, to, mode, weekday)` table is the missing piece, not a smaller `N`.
+
+**The estimator was fitted, not guessed, and the fit is the interesting part.**
+Against 81 legs Google really routed (seven travellers, sixteen complete days,
+recovered from `scripts/output/persona-trips.json` joined to `locations`), the
+old `createStraightLineTravel` understated **53 of them and overstated 3**, and
+understated a whole day's travel by 525 minutes out of 2440. That is not noise:
+the packer believes the day is 22% emptier than it is, fills it, and the
+validator then drops what will not fit — so some of the "offered 8, shipped 2"
+days were this. The replacement is crow-flight × **1.5** (median measured 1.52),
+80 street m/min on foot, and 8 minutes plus 225 street m/min on transit. After:
+3.8 minutes of error per leg against 7.3, 434 m against 844 m, bias gone (18
+over, 19 under), a day's total out by 4% rather than 22%. Fitting on six
+travellers and testing on the seventh held (1.9–6.4 min), so it is not seven
+trips of overfitting.
+
+**What is genuinely lost is the mode.** Whether the bus beats the walk needs a
+timetable and nobody gives those away at city scale, so the choice is a
+threshold again — the exact thing `routes.ts` was written to stop. It agrees
+with Google on 89% of those 81 legs. The threshold is the traveller's own
+`walkMaxMeters`, plus the same `TRANSIT_MIN_SAVING_MINUTES` margin the matrix
+uses, which puts the crossover at 1614 street metres. Importing that margin from
+`routes.ts` rather than redeclaring it is deliberate: a measured leg and an
+estimated one must not disagree about when boarding is worth it.
+
+The rest of this section is about the matrix, and all of it still holds when you
+ask for it.
+
+Measured against Google on day one of the Singapore
 trip: the straight line understated distance by 30–100% every leg (1.0 km real
 1.3, 1.1 real 1.9, 2.2 real 3.0), and 28 of 72 pairs are genuinely faster by
 transit.
@@ -774,7 +1274,7 @@ Caps are per request and transit's is six times tighter: 625 elements walking,
 `MATRIX_ALTERNATES` of a day's replacements go in — the rest fall back and are
 counted rather than hidden.
 
-**Everything degrades to the straight line**, which is how this could fail
+**Everything degrades to the estimator**, which is how this could fail
 invisibly: a trip built entirely on fallbacks is indistinguishable from a routed
 one. `stats.travel.estimated` and `stats.travel.errors` are the only way to
 tell, so the tests assert on counters, not on "a leg came back".
@@ -831,49 +1331,33 @@ would double-charge the cached half and still look plausible. `addUsage` clamps.
 spent it. A stage that made no calls is **omitted**, not shown as a zero row:
 "Pass B was never reached" and "Pass B was free" are different answers.
 
-**Enrichment is not in a plan's cost, on purpose.** Its batch is queued by one
-plan and its answers serve every later trip touching those places, so charging
-it to the submitter would overstate that trip and let all the reusers read as
-free. It goes on `enrichment_batches.usage`, written at collect time, and the
-tokens are counted **before** the parse — a line that came back as a schema
-violation was still generated and still billed, so costing only the usable
-answers would make a batch look cheaper the worse it went.
+**Enrichment is in a plan's cost, and its tokens are counted before the parse.**
+The call is spent building this trip, so it is billed to it — even though the
+cached answer goes on to serve every later trip touching the same places. A line
+that came back as a schema violation was still generated and still billed, so
+costing only the usable answers would make a run look cheaper the worse it went.
 
-### Why enrichment needs a collect step at all
-It runs on OpenAI's **Batch API** — half price, up to 24 hours, and the answers
-sit in an output file until something downloads them. `runPlan` submits and does
-not wait; the trip ships on the type table in `duration.ts`. There is no webhook
-and no cron, so `POST /api/enrichments/collect` is the download. That is also
-why enrichment is a *cache warmer*: the real durations reach the **next** plan
-touching those places, never the one that paid to queue them.
+### Enrichment is fetched before Pass B, and the batch path is gone
+Enrichment used to run on OpenAI's Batch API — half price, up to 24 hours — which
+made it a cache *warmer*: its answers reached the next plan touching a place,
+never the one that queued them. So every first trip to a new city sized its
+visits from the type table in `duration.ts` (a park was 60 minutes because `park`
+is 60 minutes) and the itinerary looked complete doing it. Worse, the batch only
+paid off if something downloaded it, and for weeks nothing did.
 
-There is no synchronous path in `enrich.ts` — only submit and collect. Adding
-one would give real durations on the first plan at roughly double the price of a
-very cheap call.
+`enrichPlaces` sends the same request inside the run, in the stage that always
+claimed to be there. Measured on a real 58-place shortlist: 8 took 19.6s, **16
+took 11.4s**, 24 and 32 bought only a longer tail (32's worst call 8.9s against
+3.7s at 16). No 429 at any level — requests are not the binding limit (58 against
+500/min); **tokens are**, at ~48k of a 200,000/min budget per pass, so roughly
+three plans a minute however concurrency is set. `ENRICH_CONCURRENCY` is 16.
 
-### Enrichment is fetched before Pass B now, not queued for tomorrow
-The batch is half price and up to 24 hours, which made it a cache *warmer*: its
-answers reached the next plan touching a place, never the one that queued them.
-So every first trip to a new city sized its visits from the type table in
-`duration.ts` — a park was 60 minutes because `park` is 60 minutes — and the
-itinerary looked complete doing it.
-
-`enrichPlaces` sends the same request now, in the stage that always claimed to
-be there. Measured on a real 58-place shortlist: 8 took 19.6s, **16 took 11.4s**,
-24 and 32 bought only a longer tail (32's worst call 8.9s against 3.7s at 16).
-No 429 at any level — requests are not the binding limit (58 against 500/min);
-**tokens are**, at ~48k of a 200,000/min budget per pass, so roughly three plans
-a minute however concurrency is set. `ENRICH_CONCURRENCY` is 16.
-
-**`enrichNow` defaults to `false` in `runPlan` and is switched on in
-`defaultPlanRouteDeps`.** Same rule as `mode`: a library default that changes
-behaviour and spends money silently is a trap, so the product default lives
-where a reader of the route can see it.
-
-`buildEnrichmentRequest` is shared by both paths deliberately —
-`enrichmentSourceHash` digests `buildEnrichmentInput`, so a live answer and a
-batched one that phrased the same place differently would each read as stale to
-the other's reader.
+**There is no longer a way to defer enrichment.** Submit, collect, the durable
+`enrichment_batches` queue, `POST /api/enrichments/collect` and the Batch port in
+`openai.ts` were all removed on 2026-08-26 — the live path made every one of them
+dead weight, and a queue nothing sweeps is worse than no queue. The call is
+unconditional: there is no `enrichNow` flag to turn it off, because "off" would
+now mean "no enrichment at all", which nobody wants.
 
 Nothing throws: a failed place falls to the type heuristic, which is exactly
 what a cache miss already did. That is also why the tests assert on
@@ -881,8 +1365,11 @@ what a cache miss already did. That is also why the tests assert on
 itinerary. A refused **store** write is reported, not raised: the answers are
 already in hand and serve this plan; what is lost is the next plan's cache hit.
 
-Live enrichment **is** in `stats.cost`, unlike the batch. A live call was spent
-building this trip; a batch's answers serve every later one.
+One thing to know when testing this: `MODELS.enrich` and `MODELS.narrate` are the
+**same model id**, and enrichment now runs in every plan. Filtering a fake
+client's requests by model no longer picks out Pass C — `pipeline.test.ts` uses
+the block count as well, because a narration carries the shared prefix plus a
+per-stop block while an enrichment call is a system prompt and one place.
 
 ### `withBackoff` exists because `withRetry` retries instantly
 Immediate retry is right for a one-off flake and useless against a rate limit —

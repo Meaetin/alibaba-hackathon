@@ -51,15 +51,16 @@ describe("radiusFor", () => {
   it("keeps 'walkable' aligned with what the packer calls walking", () => {
     // A theme described as walkable must produce a day the packer also thinks
     // is walkable, or the two disagree about the same word.
-    expect(radiusFor("walkable", 1200)).toBe(RADIUS_METERS.walkable);
+    expect(radiusFor("walkable")).toBe(RADIUS_METERS.walkable);
   });
 
-  it("scales with the axis that owns distance", () => {
-    // `comfortTolerance` sets `walkMaxMeters`; the radius follows it rather
-    // than being a second table that can drift away from it.
-    expect(radiusFor("walkable", 800)).toBeLessThan(radiusFor("walkable", 1200));
-    expect(radiusFor("walkable", 2000)).toBeGreaterThan(radiusFor("walkable", 1200));
-    expect(radiusFor("tight", 2000)).toBeLessThan(radiusFor("wide", 800));
+  it("orders the three hints, and depends on nothing else", () => {
+    // It used to scale with `knobs.walkMaxMeters`, which meant a polished
+    // traveller silently searched two-thirds of the city — three Nearby
+    // Searches for three unique places on a live run. How far you will walk
+    // between two stops is not how much map to look at.
+    expect(radiusFor("tight")).toBeLessThan(radiusFor("walkable"));
+    expect(radiusFor("walkable")).toBeLessThan(radiusFor("wide"));
   });
 });
 

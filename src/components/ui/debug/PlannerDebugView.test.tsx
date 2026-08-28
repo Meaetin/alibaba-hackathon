@@ -85,7 +85,6 @@ function diagnostics(overrides: Partial<PlanDiagnostics> = {}): PlanDiagnostics 
       afterGlobalCap: 42,
     },
     job: { id: "job-1", status: "completed", error: null, stats: null },
-    enrichmentFailures: {},
     ...overrides,
   };
 }
@@ -171,6 +170,52 @@ describe("PlannerDebugView — route order", () => {
     expect(html).toContain("saved 23m");
     expect(html).toContain("already shortest");
     expect(html).toContain("6.0 km");
+  });
+});
+
+describe("PlannerDebugView — scheduling", () => {
+  // Same rule as route order one section up, and the reason it matters more
+  // here: "we never looked" and "we looked and every day was fine" are opposite
+  // answers, and this is the page somebody opens because a day came back empty.
+  it("says 'not recorded' for an itinerary planned before scheduling was captured", () => {
+    const html = render(diagnostics({ debug: debugRecord({ scheduling: undefined }) }));
+    expect(html).toContain("planned before scheduling was captured");
+    expect(html).not.toContain("shipped empty");
+  });
+
+  it("calls an empty day empty, and does not call it merely repaired", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          scheduling: [
+            { dayIndex: 0, areaName: "Civic Arts", offered: 6, scheduled: 5, repairs: [], failures: [] },
+            {
+              dayIndex: 2,
+              areaName: "Treetops and Reservoir Trails",
+              offered: 7,
+              scheduled: 0,
+              repairs: [
+                { rule: "closed", role: "activity", removed: "Rifle Range", inserted: null, reason: "closed during its slot" },
+              ],
+              failures: [
+                { rule: "lost_meal", role: "lunch", placeId: "place-x", name: "Balestier Market", reason: "travel ate the window" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    expect(html).toContain("shipped empty");
+    expect(html).toContain("Treetops and Reservoir Trails");
+    expect(html).toContain("kept 0 of 7");
+    // The repair and the unfixed failure are different lines with different
+    // meanings: one is the ladder working, the other is it running out.
+    expect(html).toContain("Rifle Range");
+    expect(html).toContain("dropped");
+    expect(html).toContain("unfixed lost_meal");
+    expect(html).toContain("travel ate the window");
+    // A clean day must not borrow the empty day's alarm.
+    expect(html).toContain("clean");
   });
 });
 
@@ -328,24 +373,22 @@ describe("narration", () => {
 });
 
 describe("enrichment misses", () => {
-  it("separates a place that was simply never asked from one that was refused", () => {
+  it("names every place the live fetch could not enrich", () => {
+    // A miss is the reason a stop's visit length came off the type table
+    // instead of an estimate of the place, so the ids have to be readable.
     const html = render(
       diagnostics({
         debug: debugRecord({ enrichment: { misses: ["place-a", "place-b"] } }),
-        enrichmentFailures: {
-          "place-b": {
-            placeId: "place-b",
-            reason: "api_error",
-            message: "rate_limit_exceeded: too many requests",
-            providerBatchId: "batch_9",
-            batchStatus: "completed",
-          },
-        },
       }),
     );
-    expect(html).toContain("no recorded failure");
-    expect(html).toContain("rate_limit_exceeded");
-    expect(html).toContain("batch_9");
+    expect(html).toContain("2 shortlisted places had no usable enrichment");
+    expect(html).toContain("place-a");
+    expect(html).toContain("place-b");
+  });
+
+  it("says so plainly when nothing missed", () => {
+    const html = render(diagnostics({ debug: debugRecord({ enrichment: { misses: [] } }) }));
+    expect(html).toContain("Every shortlisted place had a fresh cached enrichment.");
   });
 });
 
@@ -395,19 +438,55 @@ describe("the funnel", () => {
     expect(html).toContain("searched wider");
   });
 
+  const themesWith = (extra: Record<string, unknown>) =>
+    diagnostics({
+      debug: debugRecord({
+        themes: {
+          titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
+          fallbacks: [],
+          repairs: [],
+          ...extra,
+        },
+      }),
+    });
+
   it("says the ladder never ran rather than showing nothing", () => {
+    const html = render(themesWith({ attempts: [] }));
+    expect(html).toContain("No day needed the feasibility ladder");
+  });
+
+  /**
+   * The three-way distinction this section exists to keep, and the one it used
+   * to collapse. An empty `repairs` list rendered "No day needed the
+   * feasibility ladder" — which on the run that prompted this was false twice
+   * over: two days entered the ladder, walked every rung, and pushed no repair
+   * because a repair is only recorded when it *helped*.
+   */
+  it("does not call a day clean when the ladder ran and failed", () => {
     const html = render(
-      diagnostics({
-        debug: debugRecord({
-          themes: {
-            titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
-            fallbacks: [],
-            repairs: [],
-          },
-        }),
+      themesWith({
+        attempts: [
+          { dayIndex: 2, before: 0, after: 0, needed: 2, tried: ["widened", "merged", "geographic"], unfixed: true },
+        ],
       }),
     );
-    expect(html).toContain("No day needed the feasibility ladder");
+    expect(html).not.toContain("No day needed the feasibility ladder");
+    expect(html).toContain("widened, merged, geographic");
+    expect(html).toContain("still short");
+  });
+
+  it("distinguishes an older plan from a clean one", () => {
+    // `attempts: undefined` is a plan made before the field existed. "Nothing
+    // went wrong" and "we never wrote it down" are different answers, and this
+    // is the one page whose job is not to conflate them.
+    const html = render(themesWith({}));
+    expect(html).toContain("not recorded");
+    expect(html).not.toContain("No day needed the feasibility ladder");
+  });
+
+  it("reports places no theme would claim, which was a console.warn nobody read", () => {
+    const html = render(themesWith({ attempts: [], unclaimed: 87 }));
+    expect(html).toContain("87 places sat outside every theme");
   });
 
   it("spells out the size of every cut", () => {

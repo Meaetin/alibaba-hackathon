@@ -74,12 +74,6 @@ export interface GroupInput {
   totalDays: number;
   /** Injected. Only the geographic fallback consumes it. */
   rng: () => number;
-  /**
-   * `knobs.walkMaxMeters`. Scales every theme's radius exactly as it does in
-   * `explorePlaces`, so the circle a place must sit in to join a theme is the
-   * same circle that theme searched.
-   */
-  walkMaxMeters: number;
 }
 
 export interface GroupResult {
@@ -92,8 +86,15 @@ export interface GroupResult {
    * `MEMBER_RADIUS_SLACK` allows. Reported rather than merely subtracted: this
    * is a cut, and a cut that only shrinks a list is the bug this project
    * already knows about. On a themeless day they come back as leftovers.
+   *
+   * **The places, not a count.** It was a number, and on both the Kyoto fixture
+   * and a live Bali run that number was over half the pool — 45 of 84 located,
+   * and 87 of 151 — every one of them retrieved and billed for. A day that
+   * ends up with nothing it can eat is standing next to them, so
+   * `alternatesFor` offers the meal-capable ones as its last resort. A count
+   * cannot be offered to anybody.
    */
-  unclaimed: number;
+  unclaimed: CandidatePlace[];
 }
 
 /**
@@ -113,14 +114,14 @@ export function groupByTheme(input: GroupInput): GroupResult {
       {
         theme,
         anchor: { latitude: anchor.latitude, longitude: anchor.longitude },
-        reach: radiusFor(theme.radiusHint, input.walkMaxMeters) * MEMBER_RADIUS_SLACK,
+        reach: radiusFor(theme.radiusHint) * MEMBER_RADIUS_SLACK,
       },
     ];
   });
 
   const byDay = new Map<number, ThemedCluster>();
   const claimed = new Set<string>();
-  let unclaimed = 0;
+  const unclaimed: CandidatePlace[] = [];
 
   if (anchored.length > 0) {
     const members = new Map<number, CandidatePlace[]>();
@@ -128,7 +129,7 @@ export function groupByTheme(input: GroupInput): GroupResult {
       if (place.latitude === undefined || place.longitude === undefined) continue;
       const best = nearestTheme(place, anchored);
       if (best === undefined) {
-        unclaimed++;
+        unclaimed.push(place);
         continue;
       }
       claimed.add(place.placeId);

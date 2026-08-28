@@ -3,26 +3,17 @@
  * `docs/personalization-pipeline.md`. One profile-agnostic paragraph, a tag
  * list and a visit-length estimate per place, paid for once and cached 90 days.
  *
- * The shape of this module is dictated by one fact: enrichment runs on the
- * **Batch API**, whose turnaround is up to 24 hours, and a planning job has
- * 60–120 seconds. So it splits in two, and the planner only ever touches the
- * first half:
+ * Two paths, and the planner uses both inside one request:
  *
- *   read path   `readEnrichments(placeIds, deps)`      — cache lookup, no network
- *   write path  `submitEnrichmentBatch(places, deps)`  — build JSONL, create batch
- *               `collectEnrichmentBatch(id, deps)`     — download, validate, store
+ *   read path   `readEnrichments(placeIds, deps)`  — cache lookup, no network
+ *   write path  `enrichPlaces(subjects, deps)`     — ask now, store, return
  *
  * **A miss is not an error.** A place with no cached enrichment falls to the
  * type-heuristic rung of `resolveVisitDuration` and ships without a description.
- * Nothing here throws at the planner; failures are counted and returned. The
- * write path is the pre-warm job that runs the night before a demo, and the
- * only thing a missed pre-warm costs is a slightly duller trip.
+ * Nothing here throws at the planner; failures are counted and returned.
  *
- * Two rules worth stating out loud, because both fail silently:
+ * One rule worth stating out loud, because it fails silently:
  *
- * - **Results are keyed by `custom_id`, never by position.** The Batch API
- *   returns lines in whatever order it finishes them. Reading them positionally
- *   gives every place someone else's description and nothing crashes.
  * - **`avgVisitMinutes` is untrusted input.** `resolveVisitDuration` trusts
  *   rung 2 completely, so a model-authored `[0, 0]` becomes a zero-minute
  *   activity and `[120, 30]` becomes `preferred < min`. Everything leaving this
@@ -37,47 +28,18 @@ import {
   MODELS,
   PROMPT_VERSIONS,
   jsonSchemaFormat,
-  parseJsonl,
-  withRetry,
   withBackoff,
-  type BatchClient,
-  type BatchHandle,
   type ResponsesClient,
   type ResponsesRequest,
-  type ResponsesUsage,
 } from "./openai";
 import { mapWithConcurrency } from "./http";
 import { addUsage, emptyStageUsage, type StageUsage } from "./pricing";
 import type { RetrievedPlace } from "./retrieval";
 import type { PlaceEnrichment } from "./types";
 
-// ── the batch wire ───────────────────────────────────────────────────────────
-
-/** The Responses API, batched. Never Chat Completions — see `openai.ts`. */
-export const ENRICH_BATCH_ENDPOINT = "/v1/responses";
-
-/** The only window the Batch API offers, and the reason this is a pre-warm job
- *  rather than something the planner awaits. */
-export const ENRICH_COMPLETION_WINDOW = "24h";
-
-/** Statuses after which a batch will not change. Anything else means "come
- *  back later" and must not trigger a download. */
-export const ENRICHMENT_TERMINAL_STATUSES = [
-  "completed",
-  "failed",
-  "expired",
-  "cancelled",
-] as const;
-
-const TERMINAL_STATUSES = new Set<string>(ENRICHMENT_TERMINAL_STATUSES);
-
-export function isTerminalEnrichmentBatchStatus(status: string): boolean {
-  return TERMINAL_STATUSES.has(status);
-}
+// ── shared constants ─────────────────────────────────────────────────────────
 
 const DEFAULT_TTL_DAYS = 90;
-
-const BATCH_INPUT_FILENAME = "place-enrichment.jsonl";
 
 /** Review text is the enrichment's only real evidence, and five is what the
  *  shortlist mask stores. Matches `MAX_REVIEW_SNIPPETS` in `retrieval.ts`. */
@@ -159,12 +121,11 @@ export interface EnrichmentInput {
  * The subject, projected at **runtime**.
  *
  * `EnrichmentSubject` is a `Pick`, which exists only in the type checker — hand
- * `submitEnrichmentBatch` or the durable queue a whole `RetrievedPlace` and the
- * whole `RetrievedPlace` is what gets persisted, coordinates and photo names
- * and all. Nothing downstream reads those fields (`enrichmentSourceHash`
- * digests `buildEnrichmentInput` alone), so this is storage, not correctness —
- * but a batch of sixty full location rows is a jsonb column nobody meant to
- * write. Call this at every boundary that stores or sends a subject.
+ * the enricher a whole `RetrievedPlace` and the whole `RetrievedPlace` is what
+ * reaches the prompt, coordinates and photo names and all. Nothing downstream
+ * reads those fields (`enrichmentSourceHash` digests `buildEnrichmentInput`
+ * alone), so this is payload size, not correctness. Call it at every boundary
+ * that sends a subject.
  */
 export function toEnrichmentSubject(place: EnrichmentSubject): EnrichmentSubject {
   return {
@@ -368,8 +329,8 @@ export interface EnrichmentReadStats {
 
 export interface ReadEnrichmentsResult {
   enrichments: Map<string, PlaceEnrichment>;
-  /** Places worth handing to `submitEnrichmentBatch`. Ids absent from `pool`
-   *  are not here — there is no payload to enrich them from. */
+  /** Places worth handing to `enrichPlaces`. Ids absent from `pool` are not
+   *  here — there is no payload to enrich them from. */
   misses: string[];
   stats: EnrichmentReadStats;
 }
@@ -477,105 +438,26 @@ function toPlaceEnrichment(row: StoredEnrichment): PlaceEnrichment {
   };
 }
 
-// ── the write path: submit ───────────────────────────────────────────────────
+/** Why a place produced no stored enrichment. Everything here resolves to a
+ *  cache miss on the next read, which is how the retry happens. */
+export type EnrichmentFailureReason =
+  | "api_error"
+  | "no_output_text"
+  | "malformed_output"
+  | "schema_violation"
+  | "empty_description";
 
-export interface SubmitEnrichmentDeps {
-  batches: BatchClient;
-  model?: string;
-  promptVersion?: number;
-}
-
-export interface EnrichmentSubmitStats {
-  requested: number;
-  /** Distinct places written to the JSONL. */
-  submitted: number;
-  duplicatesDropped: number;
-}
-
-export interface SubmitEnrichmentResult {
-  /** Absent when the upload or the create call failed. */
-  batch?: BatchHandle;
-  /** Set instead of throwing. A failed pre-warm costs a duller trip, not a job. */
-  error?: string;
-  /** `place_id` → `sourceHash`, in submission order. Useful to a caller that
-   *  wants to record what it asked for; `collectEnrichmentBatch` recomputes. */
-  submitted: { placeId: string; sourceHash: string }[];
-  stats: EnrichmentSubmitStats;
+export interface EnrichmentFailure {
+  placeId: string;
+  reason: EnrichmentFailureReason;
+  message?: string;
 }
 
 /**
- * Builds the JSONL, uploads it and creates the batch. Returns the handle; it
- * does **not** wait, because the window is 24 hours.
- *
- * Feed this `readEnrichments(...).misses`, resolved back to their pool rows.
- */
-export async function submitEnrichmentBatch(
-  places: readonly EnrichmentSubject[],
-  deps: SubmitEnrichmentDeps,
-): Promise<SubmitEnrichmentResult> {
-  const model = deps.model ?? MODELS.enrich;
-
-  const unique: EnrichmentSubject[] = [];
-  const seen = new Set<string>();
-  for (const place of places) {
-    if (seen.has(place.placeId)) continue;
-    seen.add(place.placeId);
-    unique.push(place);
-  }
-
-  const stats: EnrichmentSubmitStats = {
-    requested: places.length,
-    submitted: unique.length,
-    duplicatesDropped: places.length - unique.length,
-  };
-  const submitted = unique.map((place) => ({
-    placeId: place.placeId,
-    sourceHash: enrichmentSourceHash(place),
-  }));
-
-  if (unique.length === 0) return { submitted, stats };
-
-  const body = unique.map((place) => JSON.stringify(batchLine(place, model))).join("\n");
-  const created = await withRetry(async () => {
-    const inputFileId = await deps.batches.uploadJsonl(body, BATCH_INPUT_FILENAME);
-    return await deps.batches.create({
-      inputFileId,
-      endpoint: ENRICH_BATCH_ENDPOINT,
-      completionWindow: ENRICH_COMPLETION_WINDOW,
-    });
-  });
-
-  if ("error" in created) return { error: created.error.message, submitted, stats };
-  return { batch: created.value, submitted, stats };
-}
-
-/**
- * One `/v1/responses` request line.
- *
- * `custom_id` is the `place_id` and nothing else — it is the only thing that
- * gets the answer back to the right place, since the Batch API returns lines in
- * completion order.
- *
- * `reasoning.effort` is `"none"` and is never omitted: the API default is
- * `medium`, so an unset effort quietly buys reasoning tokens for sixty tag
- * extractions.
- */
-function batchLine(place: EnrichmentSubject, model: string) {
-  return {
-    custom_id: place.placeId,
-    method: "POST",
-    url: ENRICH_BATCH_ENDPOINT,
-    body: buildEnrichmentRequest(place, model),
-  };
-}
-
-/**
- * The one request both paths send.
- *
- * Shared rather than written twice because the two are separated by a day and a
- * cache: `enrichmentSourceHash` digests `buildEnrichmentInput`, so a batch and a
- * live call that phrased the same place differently would produce two rows that
- * each look fresh to the other's reader. One builder, one question.
+ * The one request the live path sends, kept as its own function because
+ * `enrichmentSourceHash` digests `buildEnrichmentInput` — the request and the
+ * hash have to be built from the same shape or a stored row reads as stale to
+ * its own reader.
  */
 export function buildEnrichmentRequest(
   place: EnrichmentSubject,
@@ -766,319 +648,10 @@ function dedupeSubjects(subjects: readonly EnrichmentSubject[]): EnrichmentSubje
   return [...seen.values()];
 }
 
-// ── the write path: collect ──────────────────────────────────────────────────
-
-export interface CollectEnrichmentDeps {
-  batches: BatchClient;
-  store: EnrichmentStore;
-  /**
-   * The same rows that were submitted. Two jobs: it decides whether a returned
-   * `custom_id` was ever asked for, and it supplies the payload the
-   * `sourceHash` is recomputed from — submit and collect are separated by up to
-   * a day, so nothing can be held in memory between them.
-   */
-  pool: readonly EnrichmentSubject[];
-  /** Injected so `expiresAt` is decidable. Never `new Date()` inside. */
-  now: Date;
-  model?: string;
-  promptVersion?: number;
-  ttlDays?: number;
-}
-
-/** Why a returned line produced no stored row. Everything here resolves to a
- *  cache miss on the next read, which is how the retry happens — there is no
- *  inline retry against a 24-hour batch. */
-export type EnrichmentFailureReason =
-  | "api_error"
-  | "no_output_text"
-  | "malformed_output"
-  | "schema_violation"
-  | "empty_description";
-
-export interface EnrichmentFailure {
-  placeId: string;
-  reason: EnrichmentFailureReason;
-  message?: string;
-}
-
-export interface EnrichmentCollectStats {
-  status: string;
-  /** Non-blank lines in the output file. */
-  lines: number;
-  /** Lines that were not JSON at all. Dropped, not thrown. */
-  malformedLines: number;
-  /** Lines whose `custom_id` is in no pool row. Dropped, not thrown. */
-  unknownCustomId: number;
-  /** Lines read out of the batch's **error** file. Requests the provider never
-   *  ran at all; they appear in no output file, so without this download they
-   *  are invisible and `failed` undercounts by exactly this much. */
-  errorFileLines: number;
-  stored: number;
-  failed: number;
-  /** Rows offered to the `stay_duration` backfill. The store applies them only
-   *  where the column is null, and it doesn't report back how many took. */
-  stayDurationsOffered: number;
-  /**
-   * What the batch spent, read off each output line's `response.body.usage`.
-   *
-   * Deliberately **not** folded into the submitting plan's cost. A batch is
-   * queued by one itinerary and its answers serve every later trip that touches
-   * those places — charging it to the trip that happened to queue it would
-   * overstate that one and let all the others read as free. It belongs to the
-   * batch, so it is stored on the batch row.
-   */
-  usage: StageUsage;
-}
-
-export interface CollectEnrichmentResult {
-  batch: BatchHandle;
-  /** True while the batch is still running. Nothing was downloaded or stored. */
-  pending: boolean;
-  /** Provider/file transport failed. A durable collector must leave this batch
-   * open so a later run retries instead of losing a completed output file. */
-  transportError?: string;
-  /**
-   * The rows were validated but the database refused them — a `locations` row
-   * deleted under the foreign key, a connection dropped mid-write. Reported
-   * rather than thrown for the same reason as `transportError`: a collector
-   * sweeping ten batches must not lose the other nine to one bad write, and
-   * the batch has to stay open so the next sweep retries it.
-   */
-  storeError?: string;
-  stored: StoredEnrichment[];
-  failures: EnrichmentFailure[];
-  stats: EnrichmentCollectStats;
-}
-
 /**
- * Retrieves a batch and, once it is terminal, downloads the output file,
- * validates every line and writes the survivors.
- *
- * Nothing here throws. A batch that failed wholesale, an output file that won't
- * download, a line that isn't JSON, a `custom_id` nobody submitted — each is a
- * counter and, where a place can be named, a `failures` entry. The next
- * `readEnrichments` misses on all of them and the next batch asks again.
- */
-export async function collectEnrichmentBatch(
-  batchId: string,
-  deps: CollectEnrichmentDeps,
-): Promise<CollectEnrichmentResult> {
-  const now = deps.now;
-  const model = deps.model ?? MODELS.enrich;
-  const promptVersion = deps.promptVersion ?? PROMPT_VERSIONS.enrich;
-  const ttlDays = deps.ttlDays ?? DEFAULT_TTL_DAYS;
-  const expiresAt = new Date(now.getTime() + ttlDays * 24 * 60 * 60 * 1000);
-
-  const bySubject = new Map(deps.pool.map((place) => [place.placeId, place]));
-  const stats: EnrichmentCollectStats = {
-    status: "unknown",
-    lines: 0,
-    malformedLines: 0,
-    unknownCustomId: 0,
-    errorFileLines: 0,
-    stored: 0,
-    failed: 0,
-    stayDurationsOffered: 0,
-    usage: emptyStageUsage("enrich", model, true),
-  };
-
-  const retrieved = await withRetry(() => deps.batches.retrieve(batchId));
-  if ("error" in retrieved) {
-    return {
-      batch: { id: batchId, status: "unknown" },
-      pending: true,
-      transportError: retrieved.error.message,
-      stored: [],
-      failures: [],
-      stats,
-    };
-  }
-
-  const batch = retrieved.value;
-  stats.status = batch.status;
-  const done = TERMINAL_STATUSES.has(batch.status);
-  if (!done) return { batch, pending: true, stored: [], failures: [], stats };
-
-  const stored: StoredEnrichment[] = [];
-  const failures: EnrichmentFailure[] = [];
-
-  // The output file holds the requests the provider *ran*. A batch where every
-  // request was rejected has no output file at all, which is why its absence is
-  // not an early return any more — the error file below is then the only record
-  // that anything happened.
-  if (batch.outputFileId) {
-    const outputFileId = batch.outputFileId;
-    const downloaded = await withRetry(() => deps.batches.downloadJsonl(outputFileId));
-    if ("error" in downloaded) {
-      return {
-        batch,
-        pending: false,
-        transportError: downloaded.error.message,
-        stored: [],
-        failures: [],
-        stats,
-      };
-    }
-
-    const body = downloaded.value;
-    stats.lines = body.split("\n").filter((line) => line.trim().length > 0).length;
-    const parsed = parseJsonl(body);
-    stats.malformedLines = stats.lines - parsed.length;
-
-    for (const line of parsed) {
-      const row = line as BatchOutputLine;
-      const placeId = typeof row.custom_id === "string" ? row.custom_id : undefined;
-      // Position is never consulted. A line we can't name belongs to nobody.
-      if (!placeId || !bySubject.has(placeId)) {
-        stats.unknownCustomId += 1;
-        continue;
-      }
-
-      // Counted before the parse: a line that came back as a schema violation
-      // was still generated and still billed. Costing only the usable answers
-      // would make a batch look cheaper the worse it went.
-      stats.usage = addUsage(stats.usage, usageOf(row.response?.body));
-
-      const failure = readOutput(placeId, row);
-      if ("reason" in failure) {
-        failures.push(failure);
-        continue;
-      }
-      stored.push({
-        ...toEnrichment(failure.output),
-        placeId,
-        model,
-        promptVersion,
-        sourceHash: enrichmentSourceHash(bySubject.get(placeId)!),
-        expiresAt,
-      });
-    }
-  }
-
-  // The error file is where the provider puts requests it never ran. Without
-  // this download those places are invisible: they are in no output file, so
-  // nothing counts them, and the only symptom is that the same sixty places
-  // keep missing the cache forever with no recorded reason.
-  if (batch.errorFileId) {
-    const failed = await readErrorFile(batch.errorFileId, bySubject, deps, stats);
-    failures.push(...failed);
-  }
-
-  stats.failed = failures.length;
-
-  if (stored.length === 0) {
-    stats.stored = 0;
-    return { batch, pending: false, stored, failures, stats };
-  }
-
-  const backfill = stayDurationBackfill(stored);
-
-  // The store is the one dependency here that can still throw: `putMany` writes
-  // through a foreign key to `locations`, so a place whose location row was
-  // deleted between submit and collect rejects the whole insert. Reported, not
-  // raised — the collector sweeps every open batch in one pass and a database
-  // that refuses one of them must not cost the other nine.
-  try {
-    await deps.store.putMany(stored);
-    await deps.store.updateStayDuration(backfill);
-  } catch (error) {
-    console.error(`[enrichment ${batchId}] the store refused ${stored.length} rows`, error);
-    return {
-      batch,
-      pending: false,
-      storeError: messageOf(error) ?? "the enrichment store refused the write",
-      stored: [],
-      failures,
-      stats,
-    };
-  }
-
-  stats.stored = stored.length;
-  stats.stayDurationsOffered = backfill.length;
-  return { batch, pending: false, stored, failures, stats };
-}
-
-/**
- * The batch's error file, turned into one `api_error` failure per named place.
- *
- * Downloading it is diagnostics, not data — every place in here resolves to a
- * cache miss on the next read whether or not we know why. So a download that
- * fails is logged and shrugged off rather than holding the batch open: the
- * alternative is a batch that can never reach terminal because one file is
- * permanently ungettable.
- */
-async function readErrorFile(
-  errorFileId: string,
-  bySubject: ReadonlyMap<string, EnrichmentSubject>,
-  deps: CollectEnrichmentDeps,
-  stats: EnrichmentCollectStats,
-): Promise<EnrichmentFailure[]> {
-  const downloaded = await withRetry(() => deps.batches.downloadJsonl(errorFileId));
-  if ("error" in downloaded) {
-    console.error("[enrichment] could not download the batch error file", downloaded.error);
-    return [];
-  }
-
-  const failures: EnrichmentFailure[] = [];
-  for (const line of parseJsonl(downloaded.value)) {
-    stats.errorFileLines += 1;
-    const row = line as BatchOutputLine;
-    const placeId = typeof row.custom_id === "string" ? row.custom_id : undefined;
-    if (!placeId || !bySubject.has(placeId)) {
-      stats.unknownCustomId += 1;
-      continue;
-    }
-    failures.push({
-      placeId,
-      reason: "api_error",
-      message: providerErrorMessage(row.error),
-    });
-  }
-  return failures;
-}
-
-/** One line of a Batch output file. */
-interface BatchOutputLine {
-  custom_id?: unknown;
-  response?: { status_code?: number; body?: unknown } | null;
-  error?: unknown;
-}
-
-/** Everything between a returned line and a validated answer, in one place so
- *  each failure shape gets its own reason rather than a shared "bad row". */
-function readOutput(
-  placeId: string,
-  row: BatchOutputLine,
-): { output: EnrichmentOutput } | EnrichmentFailure {
-  const status = row.response?.status_code;
-  if (row.error != null || (typeof status === "number" && status >= 400)) {
-    return { placeId, reason: "api_error", message: messageOf(row.error) };
-  }
-
-  const text = outputTextOf(row.response?.body);
-  if (text === undefined) return { placeId, reason: "no_output_text" };
-
-  let json: unknown;
-  try {
-    json = JSON.parse(text);
-  } catch (error) {
-    return { placeId, reason: "malformed_output", message: messageOf(error) };
-  }
-
-  const validated = EnrichmentOutputSchema.safeParse(json);
-  if (!validated.success) {
-    return { placeId, reason: "schema_violation", message: validated.error.message };
-  }
-  // Structured output constrains shape, never usefulness. An empty description
-  // would leave Pass C's fallback with a bare name and a time.
-  if (!isUsable(validated.data)) return { placeId, reason: "empty_description" };
-  return { output: validated.data };
-}
-
-/**
- * The same validation, for a response that arrived over the wire rather than in
- * a file. Shared with `readOutput` so a schema change cannot be applied to one
- * path and forgotten on the other.
+ * One model answer, validated. Every rejection is a named `EnrichmentFailure`
+ * rather than a throw: a place that fails falls to the type heuristic, which is
+ * exactly what a cache miss already did.
  */
 function readResponseText(
   placeId: string,
@@ -1097,47 +670,6 @@ function readResponseText(
   }
   if (!isUsable(validated.data)) return { placeId, reason: "empty_description" };
   return { output: validated.data };
-}
-
-/** A batch line's body is a whole Responses payload, `usage` included. */
-function usageOf(body: unknown): ResponsesUsage | undefined {
-  const response = body as { usage?: ResponsesUsage } | null | undefined;
-  return response?.usage;
-}
-
-/**
- * `output_text` is an SDK convenience that does not exist in the raw JSON a
- * Batch output file carries, so the `output[].content[]` walk is the real path
- * and the flat field is the fallback for a hand-written fixture.
- */
-function outputTextOf(body: unknown): string | undefined {
-  const response = body as { output_text?: unknown; output?: unknown } | null | undefined;
-  if (typeof response?.output_text === "string" && response.output_text.length > 0) {
-    return response.output_text;
-  }
-  const output = Array.isArray(response?.output) ? response.output : [];
-  const parts = output.flatMap((item) => {
-    const content = (item as { content?: unknown }).content;
-    if (!Array.isArray(content)) return [];
-    return content.flatMap((part) => {
-      const typed = part as { type?: unknown; text?: unknown };
-      return typed.type === "output_text" && typeof typed.text === "string" ? [typed.text] : [];
-    });
-  });
-  return parts.length > 0 ? parts.join("") : undefined;
-}
-
-/**
- * An error-file line's `error` is `{ code, message }`, not an `Error` — running
- * it through `messageOf` would store the whole object as JSON and bury the one
- * sentence a person needs.
- */
-function providerErrorMessage(error: unknown): string {
-  const detail = error as { code?: unknown; message?: unknown } | null | undefined;
-  if (typeof detail?.message === "string" && detail.message.length > 0) {
-    return typeof detail.code === "string" ? `${detail.code}: ${detail.message}` : detail.message;
-  }
-  return messageOf(error) ?? "the provider rejected this request";
 }
 
 function messageOf(error: unknown): string | undefined {

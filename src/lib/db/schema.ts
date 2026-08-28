@@ -38,8 +38,6 @@ import type { FunnelStats } from "@/lib/planner/funnel";
 import type { PriceRange } from "@/lib/maps/price-range";
 import type { ReviewSnippet } from "@/lib/planner/retrieval";
 import type { TravelMode } from "@/lib/planner/pack";
-import type { EnrichmentFailure, EnrichmentSubject } from "@/lib/planner/enrich";
-import type { StageUsage } from "@/lib/planner/pricing";
 import type { PlannerDebug } from "@/lib/planner/debug";
 
 /** `itinerary_activities.travel_to_next`. `TravelLeg` plus the mode the packer
@@ -170,30 +168,6 @@ export const place_enrichments = pgTable(
       sql`${t.crowd_profile} in ('quiet','moderate','packed')`,
     ),
   ],
-);
-
-/** Durable OpenAI Batch handles. Subjects are retained because collection is
- * separated from submission by up to 24 hours and validates every custom id
- * and source hash against the exact payload originally sent. */
-export const enrichment_batches = pgTable(
-  "enrichment_batches",
-  {
-    provider_batch_id: text("provider_batch_id").primaryKey(),
-    status: text("status").notNull(),
-    subjects: jsonb("subjects").$type<EnrichmentSubject[]>().notNull(),
-    /** Every place this batch could not enrich, and why — including the lines
-     *  that only ever appear in the provider's error file. Written when the
-     *  batch goes terminal; the places themselves just miss the cache again. */
-    failures: jsonb("failures").$type<EnrichmentFailure[]>().notNull().default([]),
-    /** What the batch spent, written when it goes terminal. It lives here and
-     *  not on the itinerary that queued it: one batch's answers serve every
-     *  later trip touching those places, so charging it to the submitter would
-     *  overstate that trip and make all the others read as free. */
-    usage: jsonb("usage").$type<StageUsage>(),
-    created_at: timestamptz("created_at").notNull().defaultNow(),
-    updated_at: timestamptz("updated_at").notNull().defaultNow(),
-  },
-  (t) => [index("enrichment_batches_status_idx").on(t.status, t.created_at)],
 );
 
 export const area_guides = pgTable("area_guides", {
