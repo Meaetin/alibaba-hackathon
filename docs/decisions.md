@@ -577,3 +577,7 @@
 - **An unknown preference id is dropped, not rejected.** Why: a stale id from an older build is a preference that no longer exists — a reason to forget it, not to fail the save and lose the others.
 - **`createSavedPreferences` takes `now`.** Why: everything server-side here takes its clock rather than reading one.
 - **Preferences still do not reach the planner.** `createItineraryRouted` sends `LOCAL_DEMO_PROFILE`. Moving them server-side makes the wiring possible; it is not the wiring.
+- **2026-08-28 — saved preferences reach the planner through `interestOverrides`.** Why: that parameter has always documented itself as the seam for an interest-picking UI, and the preferences dialog is that UI. Interests override, dietary unions, type affinities merge strongest-per-type. Pace and budget are not taken, because their values there are the persona read through a stale copy.
+- **`GET /api/persona` rebuilds the result from the stored answers.** Why: same reason `travel_personas` keeps answers at all — a retuned `calculatePersona` must reach every traveller without re-asking twelve questions. Unscorable answers read as `null`, not 500.
+- **The profile page's `localStorage` persona copy is deleted.** Why: it could show one archetype while the planner used another, which is the exact failure `persona/storage.ts` avoids by holding only a pointer.
+- **`signedIn()` scopes user ids per call.** Why: two fixtures shared an id, which turns every cross-traveller ownership assertion into a comparison of a thing with itself.

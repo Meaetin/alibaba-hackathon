@@ -1533,3 +1533,63 @@ merged PR is in the tree.
 
 `feature/atlas-flight` is still unmerged — `/flights`, the seat map and
 `PRODUCT.md` are not on this branch.
+
+### Saved preferences fill `interestOverrides` — the seam that was waiting for them
+`PlanRequest.interestOverrides` has carried a comment since it was added saying
+it is "the named seam for when there is" an interest-picking UI. The preferences
+dialog is that UI. `POST /api/plan` reads `users.preferences` from the session
+and `composeProfile` folds it in, so a picked tag beats the archetype's inferred
+list — the same "a thing the user typed beats a thing the quiz inferred" rule
+the rest of the persona layer keeps.
+
+Three contributions, three different merge rules, and none of them is arbitrary:
+
+- **Interests become overrides.** A picked tag is a stated choice; the
+  archetype's list is an inference.
+- **Dietary is a union, never a replacement.** It is the one hard filter in the
+  funnel, and dropping half of one is how somebody is seated at a steakhouse.
+- **Type affinities merge, strongest opinion per type winning** — the rule
+  `deriveTypeAffinities` already uses to layer answers onto a preset and the one
+  `typeAffinityBonus` uses when a place carries several mapped types. Both maps
+  are on the **same scale** (1.0 neutral, read as an offset), so it is a merge
+  and not a conversion. `buildPreferenceProfile`'s 1.35 is +0.35, inside
+  `TYPE_AFFINITY_MAX`.
+
+**Pace and budget are deliberately not taken from preferences.** Their values in
+`SavedTravelPreferences.profile` are derived from the persona by
+`buildPreferenceProfile`, so reading them would be reading the persona through a
+stale copy — the persona itself is right there, and the trip form beats both.
+
+A traveller with preferences and **no** persona still gets them: routing
+everything through `buildProfile` would drop them silently, because that
+function needs a persona to run at all. There is a test for that path.
+
+**One test here was written vacuous and only a mutation caught it.** The
+registry's first `dietary` entry is literally `vegetarian`, which is also what
+`route.test.ts`'s fixture profile sends — so union and replacement produced the
+identical list and the assertion held whatever the rule said. It now picks a
+need that differs from the form's, on purpose. When testing a merge, make the
+two sides *distinguishable* first.
+
+### The persona is read from the server now, and `localStorage` holds only the pointer
+`GET /api/persona` returns `{ id, answers, result }` and **rebuilds the result
+from the answers**, never from the stored `dimensions` / `archetype` columns —
+which is why `travel_personas` keeps the answers at all. Answers this quiz can
+no longer score read as `null`, not a 500: a row written by an older question
+set is a persona we no longer have, not a server fault.
+
+The profile page used to keep a whole `PersonaResult` in `localStorage` beside
+that row, so it could show one archetype while the planner used another. That is
+precisely the cached copy `src/lib/persona/storage.ts` explains the browser
+avoids. Only `argo:profile-banner:` is left in `localStorage`, and it is a
+cosmetic index.
+
+### `signedIn()` scopes its user ids, and the reason is a bug it already caused
+Every call built a fresh `createInMemoryUserStore` whose id sequence restarts at
+1, so **two travellers in one test shared an id**. That silently turns every
+"somebody else cannot see this" assertion into a comparison of a thing with
+itself. A `GET /api/persona` test caught it by failing; the assertions that
+would have passed anyway are the worry, and there were already several.
+
+Ids are `00000000-0000-4000-8000-{call}{n}` now, still deterministic because the
+counter only moves forward and nothing there reads a clock or a random number.
