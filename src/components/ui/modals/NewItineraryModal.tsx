@@ -79,7 +79,7 @@ function NewItineraryModal({
   selectedLocationIds = [],
   source,
 }: NewItineraryModalProps) {
-  const [page, setPage] = useState<1 | 2>(1);
+  const [page, setPage] = useState<1 | 2 | 3>(1);
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(defaultPlace ?? null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [aiRecommendations, setAiRecommendations] = useState(false);
@@ -88,7 +88,7 @@ function NewItineraryModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Distinguishes a close-after-submit from a genuine abandonment.
   const submittedRef = useRef(false);
-  const pageRef = useRef<1 | 2>(1);
+  const pageRef = useRef<1 | 2 | 3>(1);
   pageRef.current = page;
 
   useEffect(() => {
@@ -157,11 +157,17 @@ function NewItineraryModal({
       return;
     }
 
-    // Page 2 → validate dates, then submit
-    if (!isStep2Valid) {
-      setShakingFields(new Set(["date"]));
+    // Page 2 → validate dates, then advance to optional AI setup
+    if (page === 2) {
+      if (!isStep2Valid) {
+        setShakingFields(new Set(["date"]));
+        return;
+      }
+      setPage(3);
       return;
     }
+
+    // Page 3 → AI recommendations are optional; submit either configuration.
     if (!onSubmit) return;
 
     setIsSubmitting(true);
@@ -187,7 +193,13 @@ function NewItineraryModal({
 
   return (
     <FormModal
-      className={cn(page === 2 ? "w-[min(42rem,92vw)]" : "", className)}
+      className={cn(
+        page === 2
+          ? "h-[min(46rem,calc(100dvh-3rem))] w-[min(42rem,92vw)] overflow-hidden"
+          : "",
+        className,
+      )}
+      contentClassName={page === 2 ? "flex-1 overflow-y-auto overscroll-contain px-1" : undefined}
       trigger={trigger}
       open={open}
       onOpenChange={handleOpenChange}
@@ -197,10 +209,10 @@ function NewItineraryModal({
       description="Compile your favorite spots into a trip plan"
       cancelLabel={page === 1 ? "Cancel" : "Back"}
       cancelCloses={page === 1}
-      submitLabel={page === 1 ? "Next" : "Start Planning"}
+      submitLabel={page === 3 ? "Start Planning" : "Next"}
       submittingLabel="Starting…"
       onSubmit={handleSubmit}
-      onCancel={page === 1 ? onCancel : () => setPage(1)}
+      onCancel={page === 1 ? onCancel : () => setPage(page === 3 ? 2 : 1)}
       isSubmitting={isSubmitting}
     >
       {/* Page 1: Trip Name + Region */}
@@ -236,7 +248,7 @@ function NewItineraryModal({
         </div>
       )}
 
-      {/* Page 2: Dates + Calendar + AI Toggle */}
+      {/* Page 2: Dates + Calendar */}
       {page === 2 && (
         <div className="new-itinerary-modal-step-2 flex flex-col gap-4 items-center w-full">
           <div
@@ -271,7 +283,12 @@ function NewItineraryModal({
               disabled={{ before: new Date() }}
             />
           </div>
+        </div>
+      )}
 
+      {/* Page 3: Optional AI Recommendations + Pace */}
+      {page === 3 && (
+        <div className="new-itinerary-modal-step-3 flex w-full flex-col items-center gap-5">
           {/* AI Recommendations Toggle */}
           <button
             type="button"
@@ -299,57 +316,64 @@ function NewItineraryModal({
               Start with AI recommendations
             </span>
           </button>
-          {aiRecommendations && (
-            <>
-              {/* Pace Control */}
-              <div
-                className="new-itinerary-modal-pace flex w-full max-w-80 flex-col gap-1.5"
-                data-region="new-itinerary-pace"
-              >
-                <span className="new-itinerary-modal-pace-label type-body-4 font-medium uppercase tracking-wide text-content-tertiary">
-                  Pace
-                </span>
-                <div
-                  className="new-itinerary-modal-pace-options flex w-full gap-1 rounded-xl border border-edge bg-surface-alt p-1"
-                  role="radiogroup"
-                  aria-label="Trip pace"
-                >
-                  {PACE_OPTIONS.map((option) => {
-                    const isSelected = pace === option.value;
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        role="radio"
-                        aria-checked={isSelected}
-                        title={option.hint}
-                        onClick={() => setPace(option.value)}
-                        className={cn(
-                          "new-itinerary-modal-pace-option flex-1 rounded-lg px-2 py-1.5 type-body-3 font-medium transition-colors",
-                          isSelected
-                            ? "bg-action-brand text-content-on-brand"
-                            : "text-content-secondary hover:bg-surface",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="new-itinerary-modal-pace-hint type-body-4 text-content-placeholder">
-                  {PACE_OPTIONS.find((option) => option.value === pace)?.hint}
-                </p>
-              </div>
 
-              <p
-                className={cn(
-                  "new-itinerary-modal-demo-profile max-w-80 text-center type-body-3 text-content-secondary",
-                )}
-              >
-                {LOCAL_DEMO_PROFILE_LABEL}
-              </p>
-            </>
-          )}
+          {/* Pace Control */}
+          <fieldset
+            disabled={!aiRecommendations}
+            aria-disabled={!aiRecommendations}
+            className={cn(
+              "new-itinerary-modal-pace flex w-full max-w-80 flex-col gap-1.5 transition-opacity",
+              !aiRecommendations && "opacity-50",
+            )}
+            data-region="new-itinerary-pace"
+          >
+            <legend className="new-itinerary-modal-pace-label mb-1.5 type-body-4 font-medium uppercase tracking-wide text-content-tertiary">
+              Pace
+            </legend>
+            <div
+              className="new-itinerary-modal-pace-options flex w-full gap-1 rounded-xl border border-edge bg-surface-alt p-1"
+              role="radiogroup"
+              aria-label="Trip pace"
+            >
+              {PACE_OPTIONS.map((option) => {
+                const isSelected = pace === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={isSelected}
+                    title={option.hint}
+                    onClick={() => setPace(option.value)}
+                    className={cn(
+                      "new-itinerary-modal-pace-option flex-1 rounded-lg px-2 py-1.5 type-body-3 font-medium transition-colors disabled:cursor-not-allowed",
+                      isSelected && aiRecommendations
+                        ? "bg-action-brand text-content-on-brand"
+                        : isSelected
+                          ? "bg-surface-muted-active text-content-secondary"
+                          : "text-content-secondary hover:bg-surface disabled:hover:bg-transparent",
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="new-itinerary-modal-pace-hint type-body-4 text-content-placeholder">
+              {aiRecommendations
+                ? PACE_OPTIONS.find((option) => option.value === pace)?.hint
+                : "Enable AI recommendations to choose a pace"}
+            </p>
+          </fieldset>
+
+          <p
+            className={cn(
+              "new-itinerary-modal-demo-profile max-w-80 text-center type-body-3 text-content-secondary transition-opacity",
+              !aiRecommendations && "opacity-50",
+            )}
+          >
+            {LOCAL_DEMO_PROFILE_LABEL}
+          </p>
         </div>
       )}
     </FormModal>

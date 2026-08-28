@@ -82,11 +82,17 @@ import { EditDayList, type EditDayListHandle } from "@/components/ui/itinerary/E
 import { CompactActivityCard, getActivityCardLayout } from "@/components/ui/itinerary/CompactActivityCard";
 import type { TransportMode } from "@/components/ui/itinerary/ItineraryDayColumn/constants";
 import { ItinerarySidePanel, type ItineraryPanelState } from "@/components/ui/itinerary/ItinerarySidePanel";
+import { FlightSeatSelectionWorkspace } from "@/components/ui/flights/FlightSeatSelectionWorkspace";
+import type { FlightBookingConfirmation } from "@/components/ui/detail-views/FlightBookingFlow";
 import type { DayActivityMarker } from "@/components/ui/itinerary/LocationDetailPanel";
 import { computeProposedOrder, cascadeTimes, type OptimizeRouteResult } from "@/components/ui/itinerary/overlap-utils";
 import { cascadeDayTimes, clearLegs } from "@/components/ui/itinerary/drag-utils";
 import { ConfirmActionDialog, ActivityChangeRow } from "@/components/ui/modals/ConfirmActionDialog";
 import type { ActivityNote } from "@/components/ui/itinerary/LocationDetailPanel";
+import { CHANGI_AIRPORT, type FlightAirport } from "@/lib/flights/airports";
+import type { FlightOffer, FlightPriceWatch } from "@/lib/flights/atlas";
+import { searchFlightOffers } from "@/lib/api/atlas-flights";
+import type { FlightSearchData } from "@/components/ui/detail-views/FlightForm";
 
 /** Drop-time cascade aligns starts/ends to this many minutes (matches the backend). */
 const DRAG_TIME_STEP_MIN = 10;
@@ -96,6 +102,7 @@ const MAX_ITINERARY_DAYS = 30;
 const ceilToDragStep = (mins: number) => Math.ceil(mins / DRAG_TIME_STEP_MIN) * DRAG_TIME_STEP_MIN;
 /** Distinguishes persisted rows from optimistic `temp-` ids. */
 const ACTIVITY_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const FLIGHT_PRICE_POLL_MS = 15 * 60 * 1000;
 
 /** Activity ids from `pivotId` onward in a sorted list — the cascade's downstream set. */
 function downstreamIds(sorted: ItineraryActivityDetail[], pivotId: string): string[] {
@@ -437,10 +444,14 @@ export default function ItineraryDetailPage() {
   );
   const [selectedLink] = useState<{ name: string; locations: Location[] } | null>(null);
   const [selectedLocationDetail] = useState<Location | null>(null);
-  const [showFlightSidebar] = useState(false);
   const [flights, setFlights] = useState<FlightCardProps[]>([]);
+  const [flightSearchOrigin, setFlightSearchOrigin] = useState<FlightAirport | null>(CHANGI_AIRPORT);
+  const [flightSearchDestination, setFlightSearchDestination] = useState<FlightAirport | null>(null);
+  const [flightPriceWatches, setFlightPriceWatches] = useState<FlightPriceWatch[]>([]);
+  const [flightBookingSeatMode, setFlightBookingSeatMode] = useState(false);
+  const [flightBookingSeatId, setFlightBookingSeatId] = useState<string | null>(null);
+  const [flightBookingPassengerName, setFlightBookingPassengerName] = useState("");
   const [flightUploading, setFlightUploading] = useState(false);
-  const [flightsLoaded, setFlightsLoaded] = useState(false);
   // Keyed by IATA code. Populated from the `locations` table (which the backend
   // upserts during flight processing) and used to render airport markers + route
   // polylines on the edit-mode map.
@@ -474,6 +485,55 @@ export default function ItineraryDetailPage() {
   const [editActiveTab, setEditActiveTab] = useState<ItineraryTab>("Itinerary");
   const [panelState, setPanelState] = useState<ItineraryPanelState>(null);
 
+  useEffect(() => {
+    if (panelState?.variant === "flight-booking") return;
+    setFlightBookingSeatMode(false);
+  }, [panelState?.variant]);
+
+  const beginFlightBooking = useCallback((offer: FlightOffer, search: { origin: string; destination: string; departureDate: string }) => {
+    setFlightBookingSeatId(null);
+    setFlightBookingSeatMode(false);
+    setFlightBookingPassengerName("");
+    setPanelState({ variant: "flight-booking", offer, search });
+  }, []);
+
+  const completeFlightBooking = useCallback((confirmation: FlightBookingConfirmation) => {
+    const { offer } = confirmation;
+    const bookedFlight: FlightCardProps = {
+      id: `atlas-${confirmation.bookingReference}`,
+      fromCode: offer.departureAirport,
+      fromCity: flightSearchOrigin?.code === offer.departureAirport ? flightSearchOrigin.city : offer.departureAirport,
+      toCode: offer.arrivalAirport,
+      toCity: flightSearchDestination?.code === offer.arrivalAirport ? flightSearchDestination.city : offer.arrivalAirport,
+      time: `${offer.departureTime} → ${offer.arrivalTime}`,
+      cost: String(confirmation.total),
+      confirmation: confirmation.bookingReference,
+      flightNumber: offer.flightNumbers.join(" · "),
+      departDate: offer.departureTime.slice(0, 10),
+      departTime: offer.departureTime.slice(11, 16),
+      arriveDate: offer.arrivalTime.slice(0, 10),
+      arriveTime: offer.arrivalTime.slice(11, 16),
+      airline: offer.carrier,
+      flightDuration: `${Math.floor(offer.durationMinutes / 60)}h ${offer.durationMinutes % 60}m`,
+      stops: offer.stops,
+      terminal: offer.departureTerminal,
+      baggageAllowance: confirmation.baggageLabel,
+      currency: offer.currency,
+      ticketNumber: confirmation.ticketNumber,
+    };
+    setFlights((current) => [bookedFlight, ...current.filter((flight) => flight.confirmation !== confirmation.bookingReference)]);
+    setFlightBookingSeatMode(false);
+    setFlightBookingSeatId(null);
+    setFlightBookingPassengerName("");
+    setPanelState({ variant: "flight" });
+    showToast({
+      title: `${offer.flightNumbers.join(" · ")} added to your itinerary`,
+      description: confirmation.seatId
+        ? `Ticket ${confirmation.ticketNumber} · Seat ${confirmation.seatId}`
+        : `Ticket ${confirmation.ticketNumber} · No seat selected`,
+    });
+  }, [flightSearchDestination, flightSearchOrigin, showToast]);
+
   // The edit workspace is intentionally desktop/tablet-only for now. If the
   // viewport crosses into the phone breakpoint while editing, return to the
   // stable view surface and clear the desktop-only panel state.
@@ -492,6 +552,23 @@ export default function ItineraryDetailPage() {
   const [editFocusedDayIndex, setEditFocusedDayIndex] = useState<number | null>(null);
   const [editDayFilterOpen, setEditDayFilterOpen] = useState(false);
   const [editFitBoundsKey, setEditFitBoundsKey] = useState(0);
+
+  const openFlightWorkspace = useCallback(() => {
+    if (isPhone) return;
+    setDetailActivity(null);
+    setQuickViewEditMode("edit");
+    setEditActiveTab("Flight");
+    setCollectionEnabled(false);
+    setPanelState({ variant: "flight" });
+    setEditFitBoundsKey((key) => key + 1);
+    navbarVisibility?.setNavbarHidden(true);
+    requestAnimationFrame(() => {
+      controlsRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }, [isPhone, navbarVisibility, prefersReducedMotion]);
 
   // ── Map Place Search ───────────────────────────────────────────────────────
   const [mapSearchOpen, setMapSearchOpen] = useState(false);
@@ -2338,25 +2415,6 @@ export default function ItineraryDetailPage() {
     return () => { setFilter(null); };
   }, [bannerUrl, itinerary?.id, itinerary?.name, setFilter]);
 
-  // Fetch existing flights when the transport sidebar opens
-  useEffect(() => {
-    if ((!showFlightSidebar && editActiveTab !== "Flight") || flightsLoaded || !itineraryId) return;
-
-    getFlights(itineraryId)
-      .then((data) => {
-        const rows = Array.isArray(data) ? data : [];
-        if (rows.length === 0) return;
-
-        const mapped: FlightCardProps[] = rows.map(mapExtractedFlightToCardProps);
-        setFlights(mapped);
-      })
-      .catch((err) => {
-        console.error("Failed to fetch existing flights:", err);
-        showToast({ title: "Couldn't load flights.", variant: "error" });
-      })
-      .finally(() => setFlightsLoaded(true));
-  }, [showFlightSidebar, editActiveTab, flightsLoaded, itineraryId]);
-
   // Load airport coords directly from the `locations` table (the backend upserts
   // them during flight upload/create via the resolveAirport helper). Used to draw
   // airport markers + route polylines in editFlightMapData below.
@@ -2564,8 +2622,119 @@ export default function ItineraryDetailPage() {
   // behind it and no `lodging_checkin` category for the cards it produced.
   const handleManualLodgingSubmit = useCallback(async (_data: LodgingFormData) => {}, []);
 
+  const trackedFlightOfferKeys = useMemo(
+    () => new Set(flightPriceWatches.map((watch) => watch.offer.offerKey)),
+    [flightPriceWatches],
+  );
+
+  const handleFlightTrackOffer = useCallback((offer: FlightOffer, search: FlightSearchData) => {
+    const alreadyTracked = flightPriceWatches.some((watch) => watch.offer.offerKey === offer.offerKey);
+    if (alreadyTracked) {
+      setFlightPriceWatches((current) => current.filter((watch) => watch.offer.offerKey !== offer.offerKey));
+      showToast({ title: `Stopped tracking ${offer.flightNumbers.join(" · ")}` });
+      return;
+    }
+    setFlightPriceWatches((current) => {
+      const now = new Date().toISOString();
+      return [...current, {
+        offer,
+        search: {
+          origin: search.origin.code,
+          destination: search.destination.code,
+          departureDate: search.departureDate,
+        },
+        initialPrice: offer.price,
+        latestPrice: offer.price,
+        previousPrice: offer.price,
+        lastCheckedAt: now,
+        status: "watching",
+      }];
+    });
+    showToast({
+      title: `Tracking ${offer.flightNumbers.join(" · ")}`,
+      description: "We'll refresh this fare every 15 minutes while this itinerary is open.",
+    });
+  }, [flightPriceWatches, showToast]);
+
+  const handleFlightPriceWatchRemove = useCallback((watch: FlightPriceWatch) => {
+    setFlightPriceWatches((current) => current.filter(
+      (candidate) => candidate.offer.offerKey !== watch.offer.offerKey,
+    ));
+    showToast({ title: `Stopped tracking ${watch.offer.flightNumbers.join(" · ")}` });
+  }, [showToast]);
+
+  // Session-scoped price listener. Atlas routing identifiers expire, so every
+  // refresh performs a new route search and matches the same flight signature.
+  // A durable watcher belongs in a server worker once notification delivery is wired.
+  useEffect(() => {
+    if (flightPriceWatches.length === 0) return;
+
+    const refreshPrices = async () => {
+      const snapshot = flightPriceWatches;
+      const updates = await Promise.all(snapshot.map(async (watch) => {
+        try {
+          const result = await searchFlightOffers(watch.search);
+          const currentOffer = result.offers.find((offer) => offer.offerKey === watch.offer.offerKey);
+          if (!currentOffer) {
+            return { key: watch.offer.offerKey, status: "unavailable" as const, checkedAt: result.searchedAt };
+          }
+          return {
+            key: watch.offer.offerKey,
+            status: currentOffer.price === watch.latestPrice ? "watching" as const : "changed" as const,
+            checkedAt: result.searchedAt,
+            offer: currentOffer,
+          };
+        } catch (error) {
+          console.error("[flight price watch]", error);
+          return { key: watch.offer.offerKey, status: "error" as const, checkedAt: new Date().toISOString() };
+        }
+      }));
+
+      setFlightPriceWatches((current) => current.map((watch) => {
+        const update = updates.find((candidate) => candidate.key === watch.offer.offerKey);
+        if (!update) return watch;
+        const nextOffer = "offer" in update ? update.offer : undefined;
+        if (!nextOffer) return { ...watch, status: update.status, lastCheckedAt: update.checkedAt };
+        return {
+          ...watch,
+          offer: nextOffer,
+          previousPrice: watch.latestPrice,
+          latestPrice: nextOffer.price,
+          lastCheckedAt: update.checkedAt,
+          status: update.status,
+        };
+      }));
+    };
+
+    const timer = window.setInterval(() => { void refreshPrices(); }, FLIGHT_PRICE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [flightPriceWatches]);
+
   const editFlightMapData = useMemo(() => {
-    if (editActiveTab !== "Flight" || flights.length === 0 || airportLocations.size === 0) return null;
+    if (editActiveTab !== "Flight") return null;
+
+    if (flightSearchOrigin || flightSearchDestination) {
+      const locations = [
+        flightSearchOrigin ? { id: `airport-${flightSearchOrigin.code}`, name: flightSearchOrigin.name, latitude: flightSearchOrigin.latitude, longitude: flightSearchOrigin.longitude, address: `${flightSearchOrigin.city}, ${flightSearchOrigin.country}` } : null,
+        flightSearchDestination ? { id: `airport-${flightSearchDestination.code}`, name: flightSearchDestination.name, latitude: flightSearchDestination.latitude, longitude: flightSearchDestination.longitude, address: `${flightSearchDestination.city}, ${flightSearchDestination.country}` } : null,
+      ].filter((location): location is NonNullable<typeof location> => location !== null);
+      return {
+        locations,
+        polylines: flightSearchOrigin && flightSearchDestination ? [{
+          id: `flight-search-route-${flightSearchOrigin.code}-${flightSearchDestination.code}`,
+          dayIndex: 0,
+          encodedPath: encodePolylinePair(flightSearchOrigin.latitude, flightSearchOrigin.longitude, flightSearchDestination.latitude, flightSearchDestination.longitude),
+          color: "var(--edge-brand)",
+        }] : [],
+      };
+    }
+
+    if (flights.length === 0 || airportLocations.size === 0) {
+      return {
+        locations: [{ id: "airport-SIN", name: CHANGI_AIRPORT.name, latitude: CHANGI_AIRPORT.latitude, longitude: CHANGI_AIRPORT.longitude, address: `${CHANGI_AIRPORT.city}, ${CHANGI_AIRPORT.country}` }],
+        polylines: [],
+      };
+    }
     const seen = new Map<string, { id: string; name: string; latitude: number; longitude: number; address?: string }>();
     const ordered: string[] = [];
     for (const f of flights) {
@@ -2590,12 +2759,12 @@ export default function ItineraryDetailPage() {
           id: `flight-route-${f.id ?? f.fromCode}-${f.toCode}`,
           dayIndex: 0,
           encodedPath: encodePolylinePair(from.latitude, from.longitude, to.latitude, to.longitude),
-          color: "#e05254",
+          color: "var(--edge-brand)",
         });
       }
     }
     return { locations, polylines };
-  }, [editActiveTab, flights, airportLocations]);
+  }, [editActiveTab, flights, airportLocations, flightSearchDestination, flightSearchOrigin]);
 
   // Edit-mode map markers, built directly from editLocalDays (the optimistic edit
   // state) rather than the server-synced mapLocations — so a just-added card shows
@@ -3395,6 +3564,8 @@ export default function ItineraryDetailPage() {
                     prev?.variant === "flight-form" ? { variant: "flight" } : { variant: "flight-form" }
                   )}
                   isAddingFlight={panelState?.variant === "flight-form"}
+                  flight={flights[0] ?? null}
+                  onFlightOpen={openFlightWorkspace}
                   onAddLodging={() => setPanelState((prev) =>
                     prev?.variant === "lodging-form" ? { variant: "lodging" } : { variant: "lodging-form" }
                   )}
@@ -3426,6 +3597,10 @@ export default function ItineraryDetailPage() {
                   onBack={() => {
                     if (panelState?.variant === "add-location") {
                       setPanelState(collectionEnabled ? { variant: "collection" } : null);
+                    } else if (panelState?.variant === "flight-booking") {
+                      setFlightBookingSeatMode(false);
+                      setFlightBookingSeatId(null);
+                      setPanelState({ variant: "flight-form" });
                     } else if (panelState?.variant === "flight-form" || panelState?.variant === "flight-edit") {
                       setPanelState({ variant: "flight" });
                     } else if (panelState?.variant === "lodging-form" || panelState?.variant === "lodging-edit") {
@@ -3623,6 +3798,40 @@ export default function ItineraryDetailPage() {
                   onFlightFileRemove={(id) => requestRemoveAttachment("flight", id)}
                   onFlightOpen={(id) => { void openAttachmentInNewTab("flight", id); }}
                   onFlightAddManual={() => setPanelState({ variant: "flight-form" })}
+                  onFlightSearchSubmit={async (data) => {
+                    const result = await searchFlightOffers({
+                      origin: data.origin.code,
+                      destination: data.destination.code,
+                      departureDate: data.departureDate,
+                    });
+                    return result.offers;
+                  }}
+                  onFlightSearchDestinationChange={(airport) => {
+                    setFlightSearchDestination(airport);
+                    setEditFitBoundsKey((key) => key + 1);
+                  }}
+                  onFlightSearchOriginChange={(airport) => {
+                    setFlightSearchOrigin(airport);
+                    setEditFitBoundsKey((key) => key + 1);
+                  }}
+                  onFlightTrackOffer={handleFlightTrackOffer}
+                  onFlightSelectOffer={(offer, search) => {
+                    beginFlightBooking(offer, {
+                      origin: search.origin.code,
+                      destination: search.destination.code,
+                      departureDate: search.departureDate,
+                    });
+                  }}
+                  trackedFlightOfferKeys={trackedFlightOfferKeys}
+                  flightPriceWatches={flightPriceWatches}
+                  onFlightPriceWatchSelect={(watch) => {
+                    beginFlightBooking(watch.offer, watch.search);
+                  }}
+                  onFlightPriceWatchRemove={handleFlightPriceWatchRemove}
+                  flightBookingSeatId={flightBookingSeatId}
+                  onFlightBookingSeatModeChange={setFlightBookingSeatMode}
+                  onFlightBookingPassengerNameChange={setFlightBookingPassengerName}
+                  onFlightBookingComplete={completeFlightBooking}
                   onFlightReanalyze={handleFlightReanalyze}
                   flightReanalyzing={flightUploading}
                   lodgings={lodgings}
@@ -3880,53 +4089,64 @@ export default function ItineraryDetailPage() {
               }
               rightContent={
                 <div className="itinerary-edit-map-wrapper relative size-full">
-                  {/* border/radius come from the right column wrapper; MapContainer's own are stripped (border-0 rounded-none) to avoid a double border */}
-                  <MapContainer
-                    locations={editFilteredMapLocations}
-                    polylines={editFilteredMapPolylines}
-                    defaultCenter={defaultCenter}
-                    highlightedLocationId={panelState?.variant === "location" ? panelState.activity.location?.id ?? null : null}
-                    interactive
-                    eager
-                    animateBounds
-                    singleLocationZoom={14}
-                    fitBoundsKey={editFitBoundsKey}
-                    height="100%"
-                    className="itinerary-edit-map h-full w-full border-0 rounded-none"
-                    hoverVariant="name"
-                    searchRequest={mapSearchRequest}
-                    onLocationClick={handleMapLocationClick}
-                    onSearchResultClick={handleSearchResultClick}
-                    onSearchLoadingChange={setMapSearchLoading}
-                    onPlaceDetailsFetcherReady={handlePlaceDetailsFetcherReady}
-                    onPlaceSearchReady={handlePlaceSearchReady}
-                  />
-                  {/* Map Controls: Days Tab + Search */}
-                  <div className="itinerary-edit-map-controls absolute top-3 left-3 right-3 z-10 flex items-start gap-2">
-                    {editLocalDays.length > 1 && (
-                      <DaysTab
-                        totalDays={editLocalDays.length}
-                        expanded={editDayFilterOpen}
-                        onToggle={() => setEditDayFilterOpen(v => !v)}
-                        focusedDayIndex={editFocusedDayIndex}
-                        onDayClick={handleEditDayFilterClick}
-                        className="itinerary-edit-days-tab shrink-0"
-                      />
-                    )}
-                    {/* Map Search */}
-                    <MapSearchBar
-                      open={mapSearchOpen}
-                      onOpenChange={handleMapSearchOpenChange}
-                      query={mapSearchQuery}
-                      onQueryChange={setMapSearchQuery}
-                      onSubmit={handleMapSearchSubmit}
-                      activeChipId={mapSearchChipId}
-                      onChipToggle={handleMapSearchChipToggle}
-                      onClear={handleMapSearchClear}
-                      loading={mapSearchLoading}
-                      className="itinerary-edit-map-search ml-auto min-w-0 flex-1"
+                  {flightBookingSeatMode && panelStateLive?.variant === "flight-booking" ? (
+                    <FlightSeatSelectionWorkspace
+                      offer={panelStateLive.offer}
+                      passengerName={flightBookingPassengerName || "Adult 1"}
+                      selectedSeatId={flightBookingSeatId}
+                      onSeatSelect={setFlightBookingSeatId}
                     />
-                  </div>
+                  ) : (
+                    <>
+                      {/* border/radius come from the right column wrapper; MapContainer's own are stripped (border-0 rounded-none) to avoid a double border */}
+                      <MapContainer
+                        locations={editFilteredMapLocations}
+                        polylines={editFilteredMapPolylines}
+                        defaultCenter={defaultCenter}
+                        highlightedLocationId={panelState?.variant === "location" ? panelState.activity.location?.id ?? null : null}
+                        interactive
+                        eager
+                        animateBounds
+                        singleLocationZoom={14}
+                        fitBoundsKey={editFitBoundsKey}
+                        height="100%"
+                        className="itinerary-edit-map h-full w-full border-0 rounded-none"
+                        hoverVariant="name"
+                        searchRequest={mapSearchRequest}
+                        onLocationClick={handleMapLocationClick}
+                        onSearchResultClick={handleSearchResultClick}
+                        onSearchLoadingChange={setMapSearchLoading}
+                        onPlaceDetailsFetcherReady={handlePlaceDetailsFetcherReady}
+                        onPlaceSearchReady={handlePlaceSearchReady}
+                      />
+                      {/* Map Controls: Days Tab + Search */}
+                      <div className="itinerary-edit-map-controls absolute top-3 left-3 right-3 z-10 flex items-start gap-2">
+                        {editLocalDays.length > 1 && (
+                          <DaysTab
+                            totalDays={editLocalDays.length}
+                            expanded={editDayFilterOpen}
+                            onToggle={() => setEditDayFilterOpen(v => !v)}
+                            focusedDayIndex={editFocusedDayIndex}
+                            onDayClick={handleEditDayFilterClick}
+                            className="itinerary-edit-days-tab shrink-0"
+                          />
+                        )}
+                        {/* Map Search */}
+                        <MapSearchBar
+                          open={mapSearchOpen}
+                          onOpenChange={handleMapSearchOpenChange}
+                          query={mapSearchQuery}
+                          onQueryChange={setMapSearchQuery}
+                          onSubmit={handleMapSearchSubmit}
+                          activeChipId={mapSearchChipId}
+                          onChipToggle={handleMapSearchChipToggle}
+                          onClear={handleMapSearchClear}
+                          loading={mapSearchLoading}
+                          className="itinerary-edit-map-search ml-auto min-w-0 flex-1"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               }
             />
@@ -4123,6 +4343,8 @@ export default function ItineraryDetailPage() {
             itinerary={itinerary}
             activityNotePreviews={activityNotePreviews}
             onActivityClick={openActivityDetail}
+            flight={flights[0] ?? null}
+            onFlightOpen={openFlightWorkspace}
           />
         </div>
       </>)}

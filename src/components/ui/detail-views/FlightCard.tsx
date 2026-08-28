@@ -26,6 +26,7 @@ interface FlightCardProps extends ComponentPropsWithoutRef<"div"> {
   airline?: string;
   fareClass?: string;
   flightDuration?: string;
+  stops?: number;
   terminal?: string;
   baggageAllowance?: string;
   currency?: string;
@@ -62,6 +63,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
       // Destructured only to keep it out of the DOM spread below.
       fareClass: _fareClass,
       flightDuration,
+      stops,
       terminal,
       baggageAllowance,
       currency,
@@ -113,7 +115,14 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
           toCode={toCode}
           toCity={toCity}
           toCountry={toCountry}
+          flightNumber={flightNumber}
+          cost={cost}
+          currency={currency}
+          departTime={departTime}
+          departDate={departDate}
+          arriveTime={arriveTime}
           flightDuration={flightDuration}
+          stops={stops}
         />
 
         {/* Details Section */}
@@ -130,6 +139,8 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
           terminal={terminal}
           ticketNumber={ticketNumber}
           currency={currency}
+          airline={airline}
+          compactTicket
           onEdit={onEdit}
           onDelete={onDelete}
         />

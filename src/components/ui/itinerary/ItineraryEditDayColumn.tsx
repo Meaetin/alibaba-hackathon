@@ -16,8 +16,10 @@ import { CompactActivityCard, getActivityCardLayout } from "./CompactActivityCar
 import type { DayTimeMarker } from "./DayTimePicker";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import { TransportDetailRow } from "./TransportDetailRow";
+import { InlineFlightRow } from "./InlineFlightRow";
 import { INSET_PX } from "./ItineraryDayColumn/constants";
 import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
+import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";
 import { motionTransitions } from "@/lib/motion/presets";
 
 interface ItineraryEditDayColumnProps {
@@ -71,6 +73,10 @@ interface ItineraryEditDayColumnProps {
   onResolveOverlaps?: (dayId: string) => void;
   /** True while travel times for a reorder are being priced — disables the button. */
   isResolvingOverlaps?: boolean;
+  /** Arrival-flight entry shown before day one's first activity. */
+  flight?: FlightCardProps | null;
+  /** Opens the itinerary's Flight workspace; the row never opens a form itself. */
+  onFlightOpen?: () => void;
 }
 
 function isTransportActivity(activity: ItineraryActivityDetail): boolean {
@@ -466,6 +472,8 @@ export function ItineraryEditDayColumn({
   onActivityOptimize,
   onResolveOverlaps,
   isResolvingOverlaps = false,
+  flight,
+  onFlightOpen,
 }: ItineraryEditDayColumnProps) {
   const { setNodeRef: setDropRef } = useDroppable({
     id: `edit-day-${day.id}`,
@@ -510,6 +518,18 @@ export function ItineraryEditDayColumn({
         .map(({ activity }) => activity),
     [day.activities],
   );
+
+  const flightInsertionIndex = useMemo(() => {
+    if (!flight || !onFlightOpen) return -1;
+    if (!flight.departTime) return 0;
+    const flightMinutes = parseTimeMins(flight.departTime, resolvedTimezone);
+    const index = sortedActivities.findIndex((activity) =>
+      activity.start_time
+        ? parseTimeMins(activity.start_time, resolvedTimezone) > flightMinutes
+        : false
+    );
+    return index >= 0 ? index : sortedActivities.length;
+  }, [flight, onFlightOpen, resolvedTimezone, sortedActivities]);
 
   // Day's activities as DayTimePicker markers (conflict detection on the inline time pill).
   const dayMarkers = useMemo<DayTimeMarker[]>(
@@ -654,9 +674,10 @@ export function ItineraryEditDayColumn({
       </div>
 
       {/* Activity List */}
-      <div className={cn("edit-day-activities", "flex flex-col gap-2")}>
+      <div className={cn("edit-day-activities", "flex flex-col gap-2")}> 
         {sortedActivities.length === 0 ? (
           <>
+            {flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
             {/* Keep the full empty card registered as index 0 so both activity and
                 external-location drags can reliably target an otherwise empty day. */}
             <EmptyDayDropTarget
@@ -706,6 +727,9 @@ export function ItineraryEditDayColumn({
 
               return (
                 <React.Fragment key={activity.id}>
+                  {i === flightInsertionIndex && flight && onFlightOpen ? (
+                    <InlineFlightRow flight={flight} onClick={onFlightOpen} />
+                  ) : null}
                   {/* Gap: before transport row (or directly before card if transport hidden) */}
                   <DropGap
                     dayId={day.id}
@@ -808,6 +832,9 @@ export function ItineraryEditDayColumn({
               );
               })}
             </SortableContext>
+            {flightInsertionIndex === sortedActivities.length && flight && onFlightOpen ? (
+              <InlineFlightRow flight={flight} onClick={onFlightOpen} />
+            ) : null}
             {/* Drop gap after the last card. It used to be hidden when a lodging
                 end-bookend took the slot; there is no lodging any more. */}
             {(

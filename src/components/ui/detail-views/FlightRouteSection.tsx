@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { cn } from "@/lib/utils";
 
@@ -10,7 +11,14 @@ interface FlightRouteSectionProps extends ComponentPropsWithoutRef<"div"> {
   toCode: string;
   toCity: string;
   toCountry?: string;
+  flightNumber?: string;
+  cost?: string;
+  currency?: string;
+  departTime?: string;
+  departDate?: string;
+  arriveTime?: string;
   flightDuration?: string;
+  stops?: number;
 }
 
 /** Show "City, Country" beneath the IATA code, falling back to "City" alone
@@ -23,8 +31,27 @@ function joinCityCountry(city: string, country?: string): string {
   return c || "—";
 }
 
+function formatPrice(cost?: string, currency?: string): string {
+  if (!cost) return "—";
+  const amount = Number(cost);
+  if (!currency || !Number.isFinite(amount)) return [currency, cost].filter(Boolean).join(" ");
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+  } catch {
+    return `${currency} ${cost}`;
+  }
+}
+
+function formatDate(date?: string): string {
+  if (!date) return "";
+  const value = new Date(`${date}T00:00:00`);
+  return Number.isNaN(value.getTime())
+    ? date
+    : value.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 const FlightRouteSection = forwardRef<HTMLDivElement, FlightRouteSectionProps>(
-  ({ className, fromCode, fromCity, fromCountry, toCode, toCity, toCountry, flightDuration, ...props }, ref) => {
+  ({ className, fromCode, fromCity, fromCountry, toCode, toCity, toCountry, flightNumber, cost, currency, departTime, departDate, arriveTime, flightDuration, stops, ...props }, ref) => {
     const fromLabel = joinCityCountry(fromCity, fromCountry);
     const toLabel = joinCityCountry(toCity, toCountry);
 
@@ -33,51 +60,50 @@ const FlightRouteSection = forwardRef<HTMLDivElement, FlightRouteSectionProps>(
         ref={ref}
         data-slot="flight-route-section"
         className={cn(
-          "flight-route-section flex items-center gap-2 rounded-xl bg-surface p-3 shadow-default",
+          "flight-route-section flex flex-col gap-3 rounded-xl bg-surface-alt p-3",
           className
         )}
         {...props}
       >
-        {/* Origin */}
-        <div className="flight-route-origin flex flex-col items-start shrink-0 min-w-[64px] max-w-[120px]">
-          <span className="flight-route-origin-code type-h3 type-secondary font-bold text-content tracking-tight">
-            {fromCode || "—"}
-          </span>
-          <span className="flight-route-origin-city type-body-3 text-content-tertiary truncate max-w-full">
-            {fromLabel}
-          </span>
+        {/* Ticket Header */}
+        <div className={cn("flex items-center justify-between gap-3 type-body-2 font-semibold text-content")}>
+          <span>{flightNumber || "Flight"}</span>
+          <span className={cn("tabular-nums")}>{formatPrice(cost, currency)}</span>
         </div>
 
-        {/* Center Path */}
-        <div className="flight-route-path flex flex-1 flex-col items-center gap-0.5 min-w-0">
-          <div className="flight-route-path-track flex w-full items-center gap-1.5">
-            <div className="flight-route-path-dot size-1.5 rounded-full bg-content-tertiary shrink-0" />
-            <div className="flight-route-path-line flex-1 h-px border-t border-dashed border-content-tertiary/40" />
-            <div className="flight-route-plane-wrapper relative shrink-0 size-16">
-              <img
-                src="/images/plane-3d.png"
-                alt=""
-                className="flight-route-plane-image absolute inset-0 size-full object-cover rounded-[7.2px] rotate-[155deg] -scale-y-100"
-              />
-            </div>
-            <div className="flight-route-path-line flex-1 h-px border-t border-dashed border-content-tertiary/40" />
-            <div className="flight-route-path-dot size-1.5 rounded-full bg-content-tertiary shrink-0" />
+        {/* Ticket Route */}
+        <div className={cn("grid grid-cols-[1fr_auto_1fr] items-center gap-3")}>
+          <div className={cn("min-w-0")} title={fromLabel}>
+            <p className={cn("type-h4 font-semibold tracking-tight text-content")}>{fromCode || "—"}</p>
+            <p className={cn("type-body-2 text-content-secondary")}>{departTime || "—"}</p>
           </div>
-          {flightDuration && (
-            <span className="flight-route-duration type-body-3 text-content-tertiary">
-              {flightDuration}
-            </span>
-          )}
+          <div className={cn("relative flex h-14 min-w-28 items-end justify-center pb-0.5")} aria-hidden="true">
+            <span className={cn("absolute inset-x-2 top-5 border-t border-dashed border-content-tertiary/60")} />
+            <span className={cn("absolute left-1.5 top-[1.06rem] size-2 rounded-full border-2 border-content-tertiary/60 bg-surface")} />
+            <span className={cn("absolute right-1.5 top-[1.06rem] size-2 rounded-full border-2 border-content-tertiary/60 bg-surface")} />
+            <Image
+              src="/images/stickers/Plane.svg"
+              alt=""
+              width={40}
+              height={40}
+              unoptimized
+              className={cn("absolute left-1/2 top-0 size-10 -translate-x-1/2 object-contain")}
+            />
+            {flightDuration ? <span className={cn("relative type-body-2 tabular-nums text-content-secondary")}>{flightDuration}</span> : null}
+          </div>
+          <div className={cn("min-w-0 text-right")} title={toLabel}>
+            <p className={cn("type-h4 font-semibold tracking-tight text-content")}>{toCode || "—"}</p>
+            <p className={cn("type-body-2 text-content-secondary")}>{arriveTime || "—"}</p>
+          </div>
         </div>
 
-        {/* Destination */}
-        <div className="flight-route-destination flex flex-col items-end shrink-0 min-w-[64px] max-w-[120px]">
-          <span className="flight-route-destination-code type-h3 type-secondary font-bold text-content tracking-tight">
-            {toCode || "—"}
-          </span>
-          <span className="flight-route-destination-city type-body-3 text-content-tertiary truncate max-w-full text-right">
-            {toLabel}
-          </span>
+        {/* Ticket Meta */}
+        <div className={cn("flex items-center gap-1.5 type-body-2 text-content-secondary")}>
+          {formatDate(departDate) ? <span>{formatDate(departDate)}</span> : null}
+          {formatDate(departDate) && typeof stops === "number" ? <span aria-hidden="true">·</span> : null}
+          {typeof stops === "number" ? (
+            <span>{stops === 0 ? "Direct" : `${stops} stop${stops === 1 ? "" : "s"}`}</span>
+          ) : null}
         </div>
       </div>
     );

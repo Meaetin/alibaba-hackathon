@@ -24,7 +24,14 @@ import { NotesTab } from "./tabs/NotesTab";
 import { Button } from "@/components/ui/primitives/Button";
 import { PanelFooterCTA } from "@/components/ui/detail-views/PanelFooterCTA";
 import { ConfirmActionDialog } from "@/components/ui/modals/ConfirmActionDialog";
-import { FlightForm, type FlightFormData } from "@/components/ui/detail-views/FlightForm";
+import { FlightBookingFlow, type FlightBookingConfirmation } from "@/components/ui/detail-views/FlightBookingFlow";
+import {
+  FlightAddComposer,
+  FlightForm,
+  type FlightAddMode,
+  type FlightFormData,
+  type FlightSearchData,
+} from "@/components/ui/detail-views/FlightForm";
 import { LodgingForm, type LodgingFormData } from "@/components/ui/detail-views/LodgingForm";
 import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import type { ActivityNote, ActivityAttachment, DayActivityMarker } from "./LocationDetailPanel";
@@ -34,6 +41,8 @@ import type { LodgingCardProps } from "@/components/ui/detail-views/LodgingCard"
 import type { Expense } from "@/components/ui/detail-views/ExpensesSidebar";
 import type { CollectionWithRole, CollectionWithLocations, Location } from "@/lib/api/collections";
 import type { PlaceSearchResult } from "@/lib/maps/place-search";
+import type { FlightAirport } from "@/lib/flights/airports";
+import type { FlightOffer, FlightPriceWatch, FlightSearchRequest } from "@/lib/flights/atlas";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
 import { useToast } from "@/contexts/ToastContext";
 import { PlaceDetailsBlock, placeSearchResultToPlaceView } from "./PlaceDetailsBlock";
@@ -48,6 +57,7 @@ export type ItineraryPanelVariant =
   | "add-location"
   | "flight"
   | "flight-form"
+  | "flight-booking"
   | "flight-edit"
   | "lodging"
   | "lodging-form"
@@ -63,6 +73,7 @@ export type ItineraryPanelState =
   | { variant: "add-location"; dayId: string; insertAtIndex?: number }
   | { variant: "flight" }
   | { variant: "flight-form" }
+  | { variant: "flight-booking"; offer: FlightOffer; search: FlightSearchRequest }
   | { variant: "flight-edit"; flightId: string }
   | { variant: "lodging" }
   | { variant: "lodging-form" }
@@ -171,6 +182,19 @@ interface ItinerarySidePanelProps {
   timezone?: string;
   // Flight form
   onFlightFormSubmit?: (data: FlightFormData, expandDates?: boolean) => void;
+  onFlightSearchSubmit?: (data: FlightSearchData) => Promise<FlightOffer[]>;
+  onFlightSearchDestinationChange?: (airport: FlightAirport | null) => void;
+  onFlightSearchOriginChange?: (airport: FlightAirport | null) => void;
+  onFlightTrackOffer?: (offer: FlightOffer, search: FlightSearchData) => void;
+  onFlightSelectOffer?: (offer: FlightOffer, search: FlightSearchData) => void;
+  trackedFlightOfferKeys?: Set<string>;
+  flightPriceWatches?: FlightPriceWatch[];
+  onFlightPriceWatchSelect?: (watch: FlightPriceWatch) => void;
+  onFlightPriceWatchRemove?: (watch: FlightPriceWatch) => void;
+  flightBookingSeatId?: string | null;
+  onFlightBookingSeatModeChange?: (active: boolean) => void;
+  onFlightBookingPassengerNameChange?: (name: string) => void;
+  onFlightBookingComplete?: (confirmation: FlightBookingConfirmation) => void;
   onFlightEditSubmit?: (flightId: string, data: FlightFormData, expandDates?: boolean) => void;
   onFlightEdit?: (flightId: string) => void;
   onFlightDelete?: (flightId: string) => void;
@@ -201,6 +225,7 @@ function getHeaderTitle(state: NonNullable<ItineraryPanelState>): string {
     case "add-location": return "Add Location";
     case "flight": return "Flights";
     case "flight-form": return "Add Flight";
+    case "flight-booking": return "Book Flight";
     case "flight-edit": return "Edit Flight";
     case "lodging": return "Lodging";
     case "lodging-form": return "Add Lodging";
@@ -800,6 +825,19 @@ export function ItinerarySidePanel({
   itineraryId,
   timezone,
   onFlightFormSubmit,
+  onFlightSearchSubmit,
+  onFlightSearchDestinationChange,
+  onFlightSearchOriginChange,
+  onFlightTrackOffer,
+  onFlightSelectOffer,
+  trackedFlightOfferKeys,
+  flightPriceWatches,
+  onFlightPriceWatchSelect,
+  onFlightPriceWatchRemove,
+  flightBookingSeatId,
+  onFlightBookingSeatModeChange,
+  onFlightBookingPassengerNameChange,
+  onFlightBookingComplete,
   onFlightEditSubmit,
   onFlightEdit,
   onFlightDelete,
@@ -809,10 +847,12 @@ export function ItinerarySidePanel({
   className,
 }: ItinerarySidePanelProps) {
   const prefersReducedMotion = useReducedMotion();
+  const { showToast } = useToast();
   const noteBackRef = useRef<(() => void) | null>(null);
   const notesTabBackRef = useRef<(() => void) | null>(null);
   const notesTabDeleteRef = useRef<(() => void) | null>(null);
   const [isEditingTabNote, setIsEditingTabNote] = useState(false);
+  const [flightAddMode, setFlightAddMode] = useState<FlightAddMode>("search");
   const [deleteConfirm, setDeleteConfirm] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null);
   const [showItineraryActivities, setShowItineraryActivities] = useState(true);
   const [collectionSearch, setCollectionSearch] = useState("");
@@ -911,6 +951,10 @@ export function ItinerarySidePanel({
     const prev = prevVariantRef.current;
     const curr = state?.variant ?? null;
     const isFromCollection = state?.variant === "location" && state.from === "collection";
+
+    if (curr === "flight-form" && prev !== "flight-form") {
+      setFlightAddMode("search");
+    }
 
     if (prev === "collection" && curr === "location" && isFromCollection) {
       staggerActivityRef.current = state.activity;
@@ -1130,7 +1174,7 @@ export function ItinerarySidePanel({
               </MenuContent>
             </Menu>
           </div>
-        ) : variant === "flight-form" || variant === "flight-edit" || variant === "lodging-form" || variant === "lodging-edit" ? (
+        ) : variant === "flight-form" || variant === "flight-booking" || variant === "flight-edit" || variant === "lodging-form" || variant === "lodging-edit" ? (
           <div className="edit-panel-title-row flex items-center gap-2 min-w-0">
             <Button variant="outline" size="sm" icon="only" onClick={onBack} aria-label="Back">
               <ChevronLeft className="edit-panel-back-button-icon size-4" />
@@ -1304,12 +1348,41 @@ export function ItinerarySidePanel({
                 onFlightEdit={onFlightEdit}
                 onFlightDelete={onFlightDelete}
                 onFlightOpen={onFlightOpen}
+                priceWatches={flightPriceWatches}
+                onPriceWatchSelect={onFlightPriceWatchSelect}
+                onPriceWatchRemove={onFlightPriceWatchRemove}
               />
             ) : variant === "flight-form" ? (
-              <FlightForm
+              <FlightAddComposer
+                mode={flightAddMode}
+                onModeChange={setFlightAddMode}
                 itineraryStartDate={itineraryStartDate}
                 itineraryEndDate={itineraryEndDate}
                 onSubmit={(data, expand) => onFlightFormSubmit?.(data, expand)}
+                onSearch={(data) => {
+                  if (onFlightSearchSubmit) {
+                    return onFlightSearchSubmit(data);
+                  }
+                  showToast({
+                    title: "Flight search is ready for the live data connection.",
+                    description: "Manual entry remains available while Atlas search is being connected.",
+                  });
+                  return Promise.resolve([]);
+                }}
+                onDestinationChange={onFlightSearchDestinationChange}
+                onOriginChange={onFlightSearchOriginChange}
+                onTrackOffer={onFlightTrackOffer}
+                onSelectOffer={onFlightSelectOffer}
+                trackedOfferKeys={trackedFlightOfferKeys}
+              />
+            ) : variant === "flight-booking" && state.variant === "flight-booking" ? (
+              <FlightBookingFlow
+                offer={state.offer}
+                search={state.search}
+                selectedSeatId={flightBookingSeatId ?? null}
+                onSeatSelectionActiveChange={(active) => onFlightBookingSeatModeChange?.(active)}
+                onPassengerNameChange={(name) => onFlightBookingPassengerNameChange?.(name)}
+                onComplete={(confirmation) => onFlightBookingComplete?.(confirmation)}
               />
             ) : variant === "flight-edit" && state.variant === "flight-edit" ? (
               <>
@@ -1539,8 +1612,14 @@ export function ItinerarySidePanel({
           <Button variant="secondary" size="md" className="edit-panel-flight-form-cancel flex-1" onClick={onBack}>
             Cancel
           </Button>
-          <Button variant="primary" size="md" className="edit-panel-flight-form-save flex-1" type="submit" form="flight-manual-form">
-            Save Flight
+          <Button
+            variant="primary"
+            size="md"
+            className="edit-panel-flight-form-save flex-1"
+            type="submit"
+            form={flightAddMode === "search" ? "flight-search-form" : "flight-manual-form"}
+          >
+            {flightAddMode === "search" ? "Search flights" : "Save flight"}
           </Button>
         </PanelFooterCTA>
       )}

@@ -1,51 +1,59 @@
-**Design QA**
+# Clipped Flight Ticket Edge Design QA
 
-- Source visual truth: `/Users/zile/Downloads/Plane.svg`
-- Project asset: `/Users/zile/Documents/ChatGPT/atlas-flight/public/assets/flights/plane.svg`
-- Browser-rendered implementation: `/Users/zile/Documents/ChatGPT/atlas-flight/artifacts/supplied-plane-svg-final.png`
-- Combined comparison: `/Users/zile/Documents/ChatGPT/atlas-flight/artifacts/supplied-plane-svg-comparison.jpg`
-- Route: `http://localhost:3001/flights`
-- Viewport: 1440 × 900 CSS px, desktop, light theme
-- Source dimensions: 891 × 1764 SVG viewBox
-- Implementation aircraft dimensions: 800 × 1584 CSS px, preserving the source aspect ratio
-- Comparison normalization: the SVG was rendered over white and both images were proportionally scaled to 600 px high.
-- State: supplied aircraft SVG with interactive seat 12A selected.
+- Source visual truth: `/var/folders/wr/_4bt8g251bjcqfc5pp1380x00000gn/T/codex-clipboard-4c39a8d9-94a6-4b18-9acf-93443cd21296.png`
+- Implementation screenshot: `/tmp/atlas-flight-clipped-ticket.png`
+- Focused implementation crop: `/tmp/atlas-flight-clipped-ticket-focused.png`
+- Combined comparison: `/tmp/atlas-flight-clipped-ticket-comparison.png`
+- Browser: Codex in-app Browser, existing itinerary tab only
+- Viewport: Laptop L, 1440 × 900 CSS px
+- State: Flight tab → Add Flight → populated SIN–BKK sandbox results
+- Source pixels: 492 × 55 at 1×
+- Implementation capture pixels: 2360 × 2044; focused crop 455 × 225
+- Density normalization: the reported issue crop and focused implementation were independently contained in equal comparison areas. The source documents the faulty unclipped edge; the requested target is the same ticket with content clipped to its rounded boundary.
 
-**Full-view Comparison Evidence**
+## Full-view comparison evidence
 
-The app now uses the exact supplied SVG asset rather than a traced or handcrafted substitute. The source and project copies have the same SHA-256 hash: `7ab389fb7854dd56a697bff45fb2f75cd722a514eea0b3156be7f9dfc783a42c`. The browser rendering preserves the original nose, cockpit band, fuselage, engine pods, wings, flaps, rear taper, and tailplanes without distortion.
+Clipping is scoped to each ticket. Result density, scrolling, the flight form, itinerary column, and map remain unchanged.
 
-**Focused Region Comparison Evidence**
+## Focused-region comparison evidence
 
-The browser loaded the asset at its natural 891 × 1764 dimensions and displayed it at 800 × 1584. The rendered fuselage spans x=399.15–568.85 while all 96 seat controls span x=408–560, leaving approximately 9 px of clearance on each side. The seat grid occupies y=300–740 and remains completely inside the straight cabin section.
+The combined comparison at `/tmp/atlas-flight-clipped-ticket-comparison.png` shows that the reported full circles no longer protrude beyond the ticket. Only the inward semicircular perforation remains visible, and the selected side border cannot continue behind content outside the rounded boundary.
 
-**Required Fidelity Surfaces**
+## Required fidelity surfaces
 
-- Fonts and typography: existing Argo typography remains unchanged.
-- Spacing and layout rhythm: the aircraft preserves its native 0.505 aspect ratio; the cabin overlay was narrowed and positioned below the supplied cockpit.
-- Colors and visual tokens: the aircraft uses the exact colors embedded in the user-supplied SVG; surrounding UI continues using Argo semantic tokens.
-- Image quality and asset fidelity: exact source SVG, unoptimized and resolution-independent, with no raster substitution.
-- Copy and content: seat-state, selection, and price content remains unchanged.
+- Fonts and typography: unchanged; all ticket content remains at least 14 px with no clipping or wrapping regressions.
+- Spacing and layout rhythm: the rounded ticket is now the clipping boundary. The perforation line and inward half-notches retain their existing alignment.
+- Interaction polish: every fare card now inherits the arrival card's restrained material response—a 1 px lift, very slight scale, and semantic shadow—while reduced-motion users receive no movement and card content never darkens.
+- Colors and tokens: ticket selection and semantic border colors are unchanged. Clipping prevents the selected border from showing behind protruding notch content.
+- Image quality and asset fidelity: the Argo plane sticker remains fully visible and sharp.
+- Copy and content: flight identity, route, duration, availability, and price CTA remain intact. Tracking uses visible `Track price` / `Stop tracking` labels with distinct bell / crossed-bell icons.
 
-**Findings**
+## Findings
 
-- No actionable P0, P1, or P2 differences remain.
+No actionable P0, P1, or P2 issue remains. The protruding full-circle artifact shown in the source crop is resolved.
 
-**Comparison History**
+## Interaction and runtime checks
 
-- Earlier implementations recreated the aircraft with custom paths and did not match the supplied visual.
-- Fix: removed the handcrafted paths, added the exact `Plane.svg` to the project, rendered it with its original aspect ratio, and realigned the seat controls to its fuselage.
-- Final evidence: identical file hashes, correct natural browser dimensions, visible source geometry, contained seats, and zero clean-page console errors.
+- Ticket content stays inside the rounded border in selected and unselected states.
+- Tracking and fare-selection actions remain interactive.
+- Track and untrack states expose distinct text, icons, accessible names, and tooltips.
+- Every tracked-fare summary row exposes its own crossed-bell `Stop tracking {flight}` action; using it removes only that watch and does not open the row.
+- Hover treatment is applied consistently to every fare-card surface without changing its actions or selected state.
+- Browser console error check returned no errors.
+- Type-check, lint, and `git diff --check` pass.
 
-**Primary Interactions Tested**
+## Comparison history
 
-- Selected seat 12A and verified the summary and price.
-- Verified all 96 seat controls render inside the supplied plane.
-- Confirmed the SVG loads successfully from `/assets/flights/plane.svg`.
-- Passed ESLint, TypeScript, diff validation, and clean browser-console verification.
+1. Moving the actions inside the ticket left the perforation circles positioned outside an unclipped selected container.
+2. The circles protruded as full detached shapes and exposed the selected side border behind them.
+3. The rounded ticket container now clips its descendants. Focused post-change evidence shows clean inward half-notches with no external overflow.
 
-**Follow-up Polish**
+## Implementation checklist
 
-- P3: future aircraft-specific seat maps can select different supplied SVG assets while retaining the same overlay system.
+- [x] Make the rounded ticket the clipping boundary
+- [x] Preserve the inward perforation treatment
+- [x] Prevent selected border bleed behind the notches
+- [x] Preserve ticket content and interactions
+- [x] Verify Laptop L rendering and console state
 
 final result: passed
