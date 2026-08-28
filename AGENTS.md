@@ -533,11 +533,18 @@ does **not** work — Vite 8 parses with oxc, not esbuild. `include` covers
 component with `renderToStaticMarkup` needs no DOM, and the planner suite
 depends on `node`.
 
-### `hhmm` is exported from `validate.ts`
+### `hhmm` lives in `pack.ts`, and `validate.ts` re-exports it
 Minutes from midnight to a clock face. There were already three copies
 (`validate.ts`, `__tests__/harness.ts`, `utils/calendar.ts`) and the debug view
 would have been a fourth. Note that `toHHMM` in `utils/calendar.ts` takes
 fractional **hours** — a different unit, not a duplicate.
+
+It moved out of `validate.ts` on 2026-08-28 because `pack.ts` had to render a
+clock too — a dropped stop now names the meal it blocked and the time that meal
+had to start by — and `pack.ts` may not import `validate.ts`, which imports it.
+`pack.ts` is the only module that stamps a clock, so it is the right home. The
+`export { hhmm } from "./pack"` line in `validate.ts` is there so the debug view
+and every other caller keep the import they already had.
 
 ### `.qoder/` is generated output and is gitignored — never commit it
 The repowiki under `.qoder/` is regenerated per branch, so two branches that
@@ -1583,6 +1590,147 @@ that row, so it could show one archetype while the planner used another. That is
 precisely the cached copy `src/lib/persona/storage.ts` explains the browser
 avoids. Only `argo:profile-banner:` is left in `localStorage`, and it is a
 cosmetic index.
+
+### A `cafe_break` before lunch used to destroy the whole morning
+`assign.ts` tells Pass B, in as many words, that "a role says what a stop is,
+never when it is — a scheduler stamps the times afterwards." So the model tags a
+coffee shop `cafe_break` because it **is** one, and puts it first in the day
+because that is when you drink coffee. `stampDay` then read the same role as a
+*time*: `DAY_SKELETON` gives `cafe_break` a window of 15:30–17:00 and the open
+end was a hard floor (`start = Math.max(arrival, opens)`), so that cafe could
+not be seated before 15:30, so lunch behind it could not start by 13:30, so
+`blockedBefore` fired and `pickVictim` dropped every stop in front of lunch.
+
+Measured on a live Ubud trip: **nine dropped stops across three days, every one
+of them pre-lunch, and not one stop after lunch dropped on any day.** All three
+days opened at 11:30 with lunch; two of them ended at 19:15 against a 21:00
+limit, having shed three stops each. Replayed with the real coordinates,
+durations and persona knobs, day one reproduces to the minute with the two
+morning cafes tagged `cafe_break` — and keeps all six stops, 09:00 to 20:30,
+with them tagged `activity`.
+
+**Only meals wait now.** A `cafe_break` starts when you arrive, exactly like an
+`activity`. The window still governs `fillIdle`, which is what it was written
+for and what its own doc comment describes: labelling an afternoon lull as a
+coffee, not moving a stop the traveller was given in an order somebody chose.
+The comment beside the old code already claimed "the cafe window is a preference
+that yields" — it yielded at the late end (`start = arrival`) and not at the
+early end, and that asymmetry was the bug.
+
+**Neither Gate A snapshot contains a single assigned `cafe_break`** — the
+harness never emits one — so both fixtures passed whatever this rule said, and
+neither moved when it changed. That is why `pack.test.ts` writes the case out by
+hand, the same reason `taxonomy.test.ts` hand-writes the bare `food_court`
+shape. The invariant suite only window-checks meals, and `admits` in
+`validate.ts` already tests a non-meal replacement against the segment's *real*
+times rather than the nominal window, so nothing else in the tree assumed a cafe
+sat between 15:30 and 17:00.
+
+**A drop now says which of the two things went wrong.** `packDay` stamped
+`OVER_BUDGET_REASON` on every removal, and on that Ubud trip the sentence "over
+budget — no room left in the day" was printed under days ending at 19:15 with a
+two-and-a-half-hour hole in the morning. `blockedMealReason` names the meal and
+its latest start instead; `OVER_BUDGET_REASON` is kept for the days that really
+did run past `dayEndMin`, which on that trip was exactly one of the three. Both
+directions have a test.
+
+### `city` is a string, and a string is not a place — `PlanRequest.base` is
+A live Bali trip planned as `city: "Bali"` came back as three days a province
+apart: Bedugul in the north, Ubud in the middle, Uluwatu on the southern cliffs,
+each about two hours' drive from the next. Nothing was broken. `buildSearchPlan`
+interpolated the word into "specialty coffee Bali", Google answered for an
+island 150 km across, and the themes anchored wherever the pool happened to be.
+`themes.unclaimed` was **215 of 388** — more than half the places we paid for
+sat outside every day's reach.
+
+The coordinate was there the whole time. `NewItineraryModal` runs a Google
+`PlaceAutocomplete` and puts `latitude` / `longitude` on its submit payload;
+`createItineraryRouted` passed them to the blank-itinerary path and **dropped
+them on the planning path**. Same shape as the Pass C bug this file already
+records — collected, carried, read by nobody.
+
+`PlanBase` is `{ latitude, longitude, radiusMeters? }`, defaulting to
+`DEFAULT_BASE_RADIUS_METERS` (25 km — Ubud to Denpasar, and Kyoto is 20 km
+across). Deliberately **not** a persona knob: `walkMaxMeters` answers "how far
+will you walk between two stops", which is a different question, and reading one
+as the other bounds a trip by somebody's tolerance for pavement.
+
+**One radius, used twice, clamped once.** `resolveBase` clamps to
+`NEARBY_MAX_RADIUS_METERS` because `textNearRequest` already clamps its own copy
+— without the same clamp a 200 km request would *search* a 50 km circle and then
+*keep* everything within 200 km, a bound looser than the search it enforces.
+
+- **The circle biases retrieval.** `buildSearchPlan` takes an optional `near`
+  and wraps every query in `textNearRequest`. A bias is not a restriction and
+  that is fine; the pool filter enforces.
+- **`withinReach` in `pipeline.ts` is the enforcement**, applied to the whole
+  pool immediately after retrieval — so a themed `anchorPlaceId`, which must
+  already be an id from the pool, is inside the circle **structurally**. Same
+  kind of guarantee as the hallucination defence, not a sentence in a prompt.
+  Nothing was added to the theme prompt for this and nothing should be.
+- **A place with no coordinates is kept.** Silence is not evidence of distance,
+  `runFunnel` already takes the unlocated as their own bucket, and nothing can
+  seat one on a day anyway.
+- **It returns two lists**, not a filtered one. These are places we paid Google
+  for and then refused; `stats.base.dropped` counts them and `runPlan` warns on
+  the terminal. A high number is not waste to optimise away — it is the
+  measurement saying the search string answers for a wider area than the
+  traveller is in.
+
+**Absent must plan exactly as before, byte for byte.** `buildSearchPlan` with no
+`near` produces identical requests *and identical cache keys* — a stray
+`locationBias` on every text search would orphan every pre-warmed city row at
+once, and nothing would report it: the run would just be slower and cost more.
+`stats.base` is **omitted** rather than zeroed when no base was sent, the same
+rule `StageUsage` keeps. Three tests pin all of it.
+
+The route validates the coordinate rather than passing it through, because it
+reaches `metersBetween` — which answers a *number* for a longitude of 3000. Every
+place would read as out of reach and the trip would come back empty with nothing
+to say why.
+
+**What this does not do**, so nobody assumes it: nothing models where you sleep
+in *time*. There are still no hotel legs at the start and end of a day and no
+travel between days, so a day ending at 21:00 an hour from the base costs
+nothing in the packer. That is the change that touches `pack.ts` and both Gate A
+snapshots, and it has not happened.
+
+### Most stops that go missing were dropped by the packer, and nothing said so
+A live Bali day rendered "kept 4 of 7 offered" with one repair line under it.
+Three stops had vanished and the debug page said nothing whatsoever about them —
+not a name, not a reason, no swap-in. The reasons existed the whole time.
+
+`packDay` cuts a stop when the day runs out of minutes and records it in
+`PackedDay.dropped` with a plain sentence ("over budget — no room left in the
+day"). `validateDay`'s `settle()` merges its own rung-2 cuts into that same list
+on purpose, so a reader never has to know which module removed a stop. Then
+`pipeline.ts` built `SchedulingRecord` from `repairs` and `failures` only and
+threw the list away. The single survivor was `stats.scheduling.dropped` — a
+trip-wide total, which is the "how many, never which" shape `SchedulingRecord`
+was written to replace. The fix landed for repairs and failures and stopped one
+field short.
+
+**A packer cut has no replacement and never will.** `validate.ts` swaps for
+three rules (`closed`, `meal_slot`, `lost_meal`); a cut for time is not one of
+them, because putting a different place in the same slot spends the same
+minutes. `pickVictim` removes and moves on. That is the pace knob working, not a
+failure — but it has to be *visible*, which is the whole of this change.
+
+`SchedulingRecord.dropped` is optional, so an older row reads "not recorded"
+rather than "nothing was dropped". Three chips, not two: `N dropped` when the
+list is non-empty, `drops not recorded` when it is absent and `scheduled <
+offered`, and `clean` only when the day really is. The first version of that
+chain called a day that lost three stops clean.
+
+The **view** dedupes and the record does not. A rung-2 cut is on a repair line
+already as "→ dropped" and is also in `PackedDay.dropped`; printing both reads
+as two stops lost. `cutsOf` filters by name — a repair records the removed stop
+by name, not by id. Keep the stored list complete and decide presentation in the
+component.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **4**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately. All four new guards are
+mutation-checked.
 
 ### `signedIn()` scopes its user ids, and the reason is a bug it already caused
 Every call built a fresh `createInMemoryUserStore` whose id sequence restarts at
