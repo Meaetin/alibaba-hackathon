@@ -707,7 +707,7 @@ describe('the diagnostic record', () => {
   it('stamps itself from the injected clock, never the wall clock', async () => {
     const { result } = await plan()
     expect(result.debug.recordedAt).toBe(NOW.toISOString())
-    expect(result.debug.version).toBe(3)
+    expect(result.debug.version).toBe(4)
   })
 
   // The record that would have answered "why did day three ship empty". Every
@@ -742,6 +742,33 @@ describe('the diagnostic record', () => {
     // Zeroes everywhere would satisfy the shape while proving nothing ran. The
     // Kyoto fixture repairs on every weekday, so at least one swap is real.
     expect(rows.some((row) => row.repairs.length > 0)).toBe(true)
+  })
+
+  // Most stops that go missing are not repairs: `packDay` cuts for time and has
+  // no swap-in to record, so a day reading "kept 4 of 7" with one repair line
+  // left three stops with no explanation anywhere. `stats.scheduling.dropped`
+  // is a trip-wide total and can never name a day, a stop or a reason.
+  it('records every stop a day dropped, packer cuts included', async () => {
+    const { result } = await plan()
+
+    const rows = result.debug.scheduling ?? []
+    for (const [index, row] of rows.entries()) {
+      expect(row.dropped).toEqual(
+        result.days[index].day.dropped.map((record) => ({
+          placeId: record.placeId,
+          name: record.name,
+          reason: record.reason,
+        })),
+      )
+    }
+
+    // An all-empty list satisfies the shape and proves nothing was carried.
+    const cuts = rows.flatMap((row) => row.dropped ?? [])
+    expect(cuts.length).toBeGreaterThan(0)
+    for (const cut of cuts) {
+      expect(cut.name).not.toBe('')
+      expect(cut.reason).not.toBe('')
+    }
   })
 
   it('warns on the terminal, not only into the column, when a day loses stops', async () => {

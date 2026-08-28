@@ -22,6 +22,7 @@
 import { AlertTriangle, Check, Info } from "lucide-react";
 
 import type { PlanDiagnostics } from "@/lib/db/diagnostics";
+import type { SchedulingDrop, SchedulingRecord } from "@/lib/planner/debug";
 import {
   PRICES_AS_OF,
   formatUsd,
@@ -533,22 +534,20 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
                   <span>
                     kept {day.scheduled} of {day.offered} offered
                   </span>
-                  {/* Empty is its own claim, and a louder one than "some were
-                      dropped" — nobody can use a day with nothing in it. */}
-                  {day.scheduled === 0 ? (
-                    <Chip label="shipped empty" tone="error" />
-                  ) : day.failures.length > 0 ? (
-                    <Chip label={`${day.failures.length} unfixed`} tone="warning" />
-                  ) : day.repairs.length > 0 ? (
-                    <Chip label={`${day.repairs.length} repaired`} />
-                  ) : (
-                    <Ok>clean</Ok>
-                  )}
+                  <SchedulingStatus day={day} />
                 </div>
                 {day.repairs.map((repair, index) => (
                   <p key={index} className="type-body-4 pl-4 text-content-tertiary">
                     {repair.rule} · {repair.removed}
                     {repair.inserted ? ` → ${repair.inserted}` : " → dropped"} ({repair.reason})
+                  </p>
+                ))}
+                {cutsOf(day).map((drop, index) => (
+                  <p
+                    key={`${drop.placeId}:${index}`}
+                    className="type-body-4 pl-4 text-content-tertiary"
+                  >
+                    dropped · {drop.name} ({drop.reason})
                   </p>
                 ))}
                 {day.failures.map((failure) => (
@@ -608,6 +607,47 @@ function Section({
       {children}
     </section>
   );
+}
+
+/**
+ * The one-word verdict on a day, in order of how loudly it needs reading.
+ *
+ * "Clean" is the claim to be careful with. A day that dropped three stops for
+ * time has no repair and no failure, so the first version of this chain called
+ * it clean — and a day planned before drops were recorded cannot honestly be
+ * called anything, which is why an absent list gets its own branch instead of
+ * falling through to the happy one.
+ */
+function SchedulingStatus({ day }: { day: SchedulingRecord }) {
+  // Empty is its own claim, and a louder one than "some were dropped" — nobody
+  // can use a day with nothing in it.
+  if (day.scheduled === 0) return <Chip label="shipped empty" tone="error" />;
+  if (day.failures.length > 0)
+    return <Chip label={`${day.failures.length} unfixed`} tone="warning" />;
+
+  const cuts = cutsOf(day).length;
+  if (cuts > 0) return <Chip label={`${cuts} dropped`} tone="warning" />;
+  if (day.repairs.length > 0) return <Chip label={`${day.repairs.length} repaired`} />;
+  if (day.dropped === undefined && day.scheduled < day.offered)
+    return <Chip label="drops not recorded" />;
+  return <Ok>clean</Ok>;
+}
+
+/**
+ * The stops removed from a day that no repair line already accounts for.
+ *
+ * `validateDay` merges its own rung-2 cuts into `PackedDay.dropped` along with
+ * the packer's, which is right for the stored record and wrong to render
+ * verbatim: a rung-2 cut is already on a repair line above as "→ dropped", and
+ * printing it twice reads as two stops lost rather than one. Matched by name
+ * because a repair records the removed stop by name and not by id.
+ */
+function cutsOf(day: SchedulingRecord): SchedulingDrop[] {
+  if (day.dropped === undefined) return [];
+  const named = new Set(
+    day.repairs.filter((repair) => repair.inserted === null).map((repair) => repair.removed),
+  );
+  return day.dropped.filter((drop) => !named.has(drop.name));
 }
 
 function Chip({ label, tone = "default" }: { label: string; tone?: "default" | "warning" | "error" }) {

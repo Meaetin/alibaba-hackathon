@@ -940,6 +940,15 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
           name: failure.name,
           reason: failure.reason,
         })),
+        // Most stops that go missing are not repairs. `packDay` cuts for time
+        // and there is no swap-in to record, so a day reading "kept 4 of 7"
+        // with one repair line left three stops unaccounted for on the page.
+        // `validateDay` has already merged its own cuts into this list.
+        dropped: validation.day.dropped.map((record) => ({
+          placeId: record.placeId,
+          name: record.name,
+          reason: record.reason,
+        })),
       };
 
       // Warned as it happens as well as stored, following the same rule the
