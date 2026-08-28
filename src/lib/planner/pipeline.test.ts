@@ -31,7 +31,10 @@ import {
   addDays,
   advanceWeekday,
   alternatesFor,
+  DEFAULT_BASE_RADIUS_METERS,
   NO_MEAL_RESERVE,
+  resolveBase,
+  withinReach,
   assignSerendipity,
   promptCacheKeyFor,
   parseIsoDate,
@@ -1451,5 +1454,134 @@ describe('themed mode', () => {
     )
     expect(prefixes.size).toBe(1)
     expect([...prefixes][0]).toMatch(/Each day of this trip is about one thing/)
+  })
+})
+
+// ── the base ─────────────────────────────────────────────────────────────────
+
+/**
+ * `city` is a string and a string is not a place. Planned as "Bali" this
+ * pipeline searched an island 150 km across and shipped three days two hours'
+ * drive apart, with 215 of 388 retrieved places joining no theme at all. The
+ * base is a coordinate the create modal already collected and threw away.
+ */
+describe('the base circle', () => {
+  const KYOTO = { latitude: 35.0116, longitude: 135.7681, radiusMeters: 25_000 }
+
+  describe('withinReach', () => {
+    it('keeps everything when there is no base', () => {
+      const places = [{ latitude: 0, longitude: 0 }, { latitude: 80, longitude: 80 }]
+      const reach = withinReach(places, undefined)
+      expect(reach.kept).toEqual(places)
+      expect(reach.dropped).toEqual([])
+    })
+
+    it('splits on the radius, and reports the casualties rather than shrinking a list', () => {
+      const near = { name: 'in town', latitude: 35.02, longitude: 135.77 }
+      const far = { name: 'another island', latitude: -8.5, longitude: 115.26 }
+      const reach = withinReach([near, far], KYOTO)
+      expect(reach.kept).toEqual([near])
+      expect(reach.dropped).toEqual([far])
+    })
+
+    // Silence is not evidence of distance. `runFunnel` already takes the
+    // unlocated as their own bucket, so dropping them here trades a known
+    // outcome for a guess — the same three-state instinct as
+    // `servesVegetarianFood`.
+    it('keeps a place with no coordinates rather than guessing it is far', () => {
+      const nowhere: { name: string; latitude?: number } = { name: 'no coordinates' }
+      expect(withinReach([nowhere], KYOTO).kept).toEqual([nowhere])
+      expect(withinReach([nowhere], KYOTO).dropped).toEqual([])
+    })
+  })
+
+  describe('resolveBase', () => {
+    it('is undefined without a base, so nothing downstream has a circle to enforce', () => {
+      expect(resolveBase(undefined)).toBeUndefined()
+    })
+
+    it('fills in the default radius', () => {
+      expect(resolveBase({ latitude: 1, longitude: 2 })?.radiusMeters).toBe(
+        DEFAULT_BASE_RADIUS_METERS,
+      )
+    })
+
+    // `textNearRequest` clamps its own copy to Google's ceiling. Without the
+    // same clamp here the search would cover 50 km while the filter kept
+    // everything within 200 km — a bound looser than the search it enforces,
+    // which is no bound at all.
+    it('clamps to the same ceiling the search circle is clamped to', () => {
+      expect(resolveBase({ latitude: 1, longitude: 2, radiusMeters: 200_000 })?.radiusMeters).toBe(
+        50_000,
+      )
+      expect(resolveBase({ latitude: 1, longitude: 2, radiusMeters: 0 })?.radiusMeters).toBe(1)
+    })
+  })
+
+  /** The Kyoto fixture with half its places moved two degrees north — about
+   *  222 km, well outside any radius this planner will accept. */
+  function scattered(): CandidatePlace[] {
+    return CANDIDATES.map((place, index) =>
+      index % 2 === 1 && place.latitude !== undefined
+        ? { ...place, latitude: place.latitude + 2 }
+        : place,
+    )
+  }
+
+  it('never seats a place outside the circle, however good it scores', async () => {
+    const { result } = await plan({
+      places: scattered(),
+      request: { base: { latitude: KYOTO.latitude, longitude: KYOTO.longitude } },
+    })
+
+    const seated = result.days.flatMap((day) =>
+      day.day.segments.flatMap((segment) => (segment.kind === 'activity' ? [segment.placeId] : [])),
+    )
+    expect(seated.length).toBeGreaterThan(0)
+    for (const placeId of seated) {
+      const place = result.places.get(placeId)!
+      expect(place.latitude!, `${place.name} is outside the base circle`).toBeLessThan(
+        KYOTO.latitude + 1,
+      )
+    }
+  })
+
+  // A cut that only shrinks a list is the failure this project keeps
+  // rediscovering. These are places we paid Google for and then refused, and
+  // the number is the measurement that says the search string is answering for
+  // a wider area than the traveller is in.
+  it('counts what the circle excluded, and says so on the terminal too', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { result } = await plan({
+      places: scattered(),
+      request: { base: { latitude: KYOTO.latitude, longitude: KYOTO.longitude } },
+    })
+    expect(result.stats.base?.radiusMeters).toBe(DEFAULT_BASE_RADIUS_METERS)
+    expect(result.stats.base!.dropped).toBeGreaterThan(0)
+    expect(result.stats.base!.kept).toBeGreaterThan(0)
+    expect(warn.mock.calls.map((call) => String(call[0])).join('\n')).toContain(
+      'from the base and were dropped',
+    )
+    warn.mockRestore()
+  })
+
+  // "No base" and "a base that excluded nothing" are different answers, and a
+  // zero row would claim the second when the first is true.
+  it('reports no base stat at all when none was sent', async () => {
+    const { result } = await plan({ places: scattered() })
+    expect(result.stats.base).toBeUndefined()
+  })
+
+  // The Gate A snapshots and every pre-warmed city cache depend on this. A
+  // request with no base must produce the identical trip it produced before
+  // bases existed — not a similar one.
+  it('plans the identical trip when no base is sent', async () => {
+    const before = await plan()
+    const after = await plan({ request: { base: undefined } })
+    const stops = (result: PlanResult) =>
+      result.days.flatMap((day) =>
+        day.day.segments.flatMap((s) => (s.kind === 'activity' ? [`${s.placeId}@${s.startMin}`] : [])),
+      )
+    expect(stops(after.result)).toEqual(stops(before.result))
   })
 })

@@ -157,6 +157,15 @@ export interface PlanItineraryParams {
    * server's default, which is geographic.
    */
   mode?: 'geographic' | 'themed'
+  /**
+   * Where the traveller is staying, from the create modal's place
+   * autocomplete. Bounds retrieval and every day to a circle around it.
+   *
+   * Omitted plans the whole city, which is what this app did before the field
+   * existed — and what it silently did *with* the field, because the coordinate
+   * was collected, passed to the blank-itinerary path, and dropped here.
+   */
+  base?: { latitude: number; longitude: number }
 }
 
 /**
@@ -550,6 +559,14 @@ export async function createItineraryRouted(
     // Pace is the one preference the traveller typed, so it overwrites the
     // demo default rather than sitting beside it.
     profile: { ...LOCAL_DEMO_PROFILE, pace: input.pace ?? LOCAL_DEMO_PROFILE.pace },
+    // The coordinate the traveller already picked. `city` is a string and a
+    // string is not a place: planned as "Bali" the pipeline searched an island
+    // 150 km across and built three days two hours' drive apart. Sent only when
+    // the autocomplete gave both halves — half a coordinate is not a location,
+    // and a request without one plans exactly as it did before.
+    ...(input.latitude !== undefined && input.longitude !== undefined
+      ? { base: { latitude: input.latitude, longitude: input.longitude } }
+      : {}),
     // The product default. `runPlan` still defaults to geographic — a library
     // default that changes behaviour silently is a trap — so the choice is
     // made here, once, where somebody can see it.

@@ -944,4 +944,38 @@ describe("buildSearchPlan", () => {
     expect(new Set(plan.map(searchCacheKey)).size).toBe(plan.length);
     expect(plan).toHaveLength(4); // 2 cafe + 2 vegetarian, each duplicate collapsed
   });
+
+  // The circle is what stops "specialty coffee Bali" answering for an island
+  // 150 km across. It is a bias and not a restriction, which is the point: the
+  // pool filter enforces, this only shapes what Google offers first.
+  it("leans every query on the base's circle when one is given", () => {
+    const near = { latitude: -8.5069, longitude: 115.2625, radiusMeters: 25_000 };
+    const plan = buildSearchPlan({ interests: ["cafes"], dietary: ["vegetarian"] }, "Bali", near);
+    expect(plan.length).toBeGreaterThan(0);
+    for (const request of plan) {
+      expect(request.locationBias).toEqual(near);
+      // A text bias, never a nearby circle — different endpoint, different SKU.
+      expect(request.nearby).toBeUndefined();
+    }
+  });
+
+  // A pre-warmed city's rows cost real money. A stray `locationBias` on every
+  // text search changes every cache key and orphans all of them at once, and
+  // nothing in the pipeline would report it — the run would simply be slower
+  // and more expensive. So "no base" has to mean byte-identical, not similar.
+  it("is byte-identical to the unbiased plan when no base is given", () => {
+    const profile = { interests: ["cafes" as const, "museums" as const], dietary: ["vegetarian"] };
+    const plain = buildSearchPlan(profile, "Kyoto");
+    expect(buildSearchPlan(profile, "Kyoto", undefined)).toEqual(plain);
+    for (const request of plain) expect(request.locationBias).toBeUndefined();
+
+    const biased = buildSearchPlan(profile, "Kyoto", {
+      latitude: 35.0116,
+      longitude: 135.7681,
+      radiusMeters: 25_000,
+    });
+    expect(biased.map((r) => r.query)).toEqual(plain.map((r) => r.query));
+    // Same questions, different answers — so they must not share a cache entry.
+    expect(biased.map((r) => searchCacheKey(r))).not.toEqual(plain.map((r) => searchCacheKey(r)));
+  });
 });

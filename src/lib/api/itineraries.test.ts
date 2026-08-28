@@ -57,6 +57,61 @@ describe("createItineraryRouted localhost planning", () => {
     });
   });
 
+  // The autocomplete has always returned this coordinate and it reached the
+  // blank-itinerary path while the planning path got the word "Bali" — which
+  // Google answers for an island 150 km across.
+  it("sends the destination's coordinate as the base to plan around", async () => {
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      json: async () => JOB,
+    })) as unknown as typeof globalThis.fetch;
+    vi.stubGlobal("fetch", fetch);
+
+    await createItineraryRouted({
+      source: "itineraries",
+      tripName: "Bali week",
+      country: "Indonesia",
+      region: "Ubud",
+      latitude: -8.5069,
+      longitude: 115.2625,
+      startDate: "2026-09-14",
+      totalDays: 3,
+      selectedLocationIds: [],
+      aiRecommendations: true,
+    });
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.base).toEqual({ latitude: -8.5069, longitude: 115.2625 });
+  });
+
+  // Half a coordinate is not a location. Sending one half would put the base on
+  // the equator or the prime meridian and bound the trip to a circle nowhere
+  // near the traveller — worse than having no base at all.
+  it("sends no base when the autocomplete gave only half a coordinate", async () => {
+    const fetch = vi.fn(async () => ({
+      ok: true,
+      status: 202,
+      json: async () => JOB,
+    })) as unknown as typeof globalThis.fetch;
+    vi.stubGlobal("fetch", fetch);
+
+    await createItineraryRouted({
+      source: "itineraries",
+      tripName: "Half a place",
+      country: "Indonesia",
+      region: "Ubud",
+      latitude: -8.5069,
+      startDate: "2026-09-14",
+      totalDays: 3,
+      selectedLocationIds: [],
+      aiRecommendations: true,
+    });
+
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.base).toBeUndefined();
+  });
+
   it("sends the pace the traveller chose, over the demo default", async () => {
     const fetch = vi.fn(async () => ({
       ok: true,

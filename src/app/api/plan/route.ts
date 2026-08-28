@@ -103,6 +103,24 @@ const PlanRequestSchema = z.object({
    * the product is. `createItineraryRouted` sends `"themed"`.
    */
   mode: z.enum(["geographic", "themed"]).optional(),
+  /**
+   * Where the traveller is staying. Bounds retrieval and every day to a circle
+   * around it — see `PlanBase` in `pipeline.ts` for why a `city` string alone
+   * built a Bali trip three provinces wide.
+   *
+   * Validated as a real coordinate rather than passed through: it reaches
+   * `metersBetween`, and a longitude of 3000 there returns a number rather than
+   * an error, so every place in the pool would read as out of reach and the
+   * trip would come back empty with nothing to say why. The radius is capped by
+   * `resolveBase`, not here — one clamp, in the module that uses it twice.
+   */
+  base: z
+    .object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      radiusMeters: z.number().positive().optional(),
+    })
+    .optional(),
   options: z
     .object({
       maxK: z.number().int().positive().optional(),

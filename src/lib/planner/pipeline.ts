@@ -114,6 +114,7 @@ import {
   textNearRequest,
   mergeRetrievalStats,
   nearbyRequest,
+  NEARBY_MAX_RADIUS_METERS,
   retrievePlaces,
   type LocationStore,
   type RetrievalStats,
@@ -147,6 +148,51 @@ import {
 
 // ── the request ──────────────────────────────────────────────────────────────
 
+/**
+ * Where the traveller is staying, and how far from it a day may reach.
+ *
+ * The gap this closes: `city` is a **string**, and a string is not a place. A
+ * live Bali trip planned as `city: "Bali"` came back as three days a province
+ * apart — Bedugul in the north, Ubud in the middle, Uluwatu on the southern
+ * cliffs, each about two hours' drive from the next and none of them near
+ * wherever the traveller was actually sleeping. Nothing in the pipeline was
+ * wrong: `buildSearchPlan` asked Google for "specialty coffee Bali", Google
+ * answered for the whole island, and the themes anchored wherever the pool was.
+ * 215 of the 388 places retrieved on that run joined no theme at all.
+ *
+ * A coordinate is the missing input, and the create modal has always had one —
+ * `PlaceAutocomplete` returns it for the destination the traveller picks. It
+ * was passed to the blank-itinerary path and dropped on the planning one.
+ *
+ * Two rules worth stating:
+ *
+ * - **It is optional, and absent must plan exactly as this pipeline planned
+ *   before it existed.** Same contract `persona` keeps, and for the same
+ *   reason: the Gate A snapshots and the pre-warmed city caches both depend on
+ *   a request without one producing byte-identical searches.
+ * - **The radius is one number used twice** — it biases every text search *and*
+ *   bounds the pool. Two numbers would drift, and a circle we search inside but
+ *   do not enforce is the "widen found nothing" failure written fresh.
+ */
+export interface PlanBase {
+  latitude: number;
+  longitude: number;
+  /** Metres. Omitted means {@link DEFAULT_BASE_RADIUS_METERS}. */
+  radiusMeters?: number;
+}
+
+/**
+ * How far a day may reach from the base when nobody says otherwise.
+ *
+ * 25 km is a morning's travel in most cities and comfortably holds a
+ * metropolitan area — Ubud to Denpasar is 25 km, Kyoto is 20 km across. It is
+ * deliberately not a persona knob: `walkMaxMeters` answers "how far will you
+ * walk between two stops", which is a different question with a different
+ * answer, and reading one as the other is how a trip ends up bounded by
+ * somebody's tolerance for pavement.
+ */
+export const DEFAULT_BASE_RADIUS_METERS = 25_000;
+
 export interface PlanRequest {
   city: string;
   country?: string;
@@ -177,6 +223,11 @@ export interface PlanRequest {
    * to `"geographic"`, so the worst case is the default.
    */
   mode?: PlanMode;
+  /**
+   * Where the traveller is staying. Absent plans the whole city, as before.
+   * See {@link PlanBase}.
+   */
+  base?: PlanBase;
 }
 
 export type PlanMode = "geographic" | "themed";
@@ -377,6 +428,70 @@ export function searchLocality(city: string, country?: string): string {
   return nation.toLowerCase() === place.toLowerCase() ? place : `${place}, ${nation}`;
 }
 
+// ── the base, and what it excludes ───────────────────────────────────────────
+
+/**
+ * The base with its radius decided, clamped to Google's circle ceiling.
+ *
+ * Clamped **here** and not at either call site, because the same number has to
+ * bias the search and bound the pool. `textNearRequest` clamps its own copy to
+ * `NEARBY_MAX_RADIUS_METERS` anyway, so a 200 km request would otherwise search
+ * a 50 km circle and then keep everything within 200 km of the base — a filter
+ * looser than the search it is supposed to enforce, which is no filter at all.
+ */
+export function resolveBase(
+  base: PlanBase | undefined,
+): { latitude: number; longitude: number; radiusMeters: number } | undefined {
+  if (!base) return undefined;
+  const wanted = base.radiusMeters ?? DEFAULT_BASE_RADIUS_METERS;
+  return {
+    latitude: base.latitude,
+    longitude: base.longitude,
+    radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(wanted))),
+  };
+}
+
+/**
+ * Splits a retrieved pool into what the traveller can reach from their base and
+ * what they cannot.
+ *
+ * Two rules, both of which change the answer:
+ *
+ * - **No base keeps everything.** Not "keeps everything within a default
+ *   radius" — a request without a base is the pipeline as it shipped before
+ *   bases existed, and it must stay that.
+ * - **A place with no coordinates is kept.** Silence is not evidence of
+ *   distance. `runFunnel` already takes the unlocated as their own bucket and
+ *   nothing can seat one on a day anyway, so dropping them here would trade a
+ *   known outcome for a guess. Same three-state instinct as
+ *   `servesVegetarianFood`.
+ *
+ * Returned as two lists rather than one filtered list on purpose. A cut that
+ * only shrinks a list is the failure this project keeps rediscovering — the
+ * caller needs the casualties to count and to warn about.
+ */
+export function withinReach<T extends { latitude?: number; longitude?: number }>(
+  places: readonly T[],
+  base: { latitude: number; longitude: number; radiusMeters: number } | undefined,
+): { kept: T[]; dropped: T[] } {
+  if (!base) return { kept: [...places], dropped: [] };
+
+  const kept: T[] = [];
+  const dropped: T[] = [];
+  for (const place of places) {
+    if (place.latitude === undefined || place.longitude === undefined) {
+      kept.push(place);
+      continue;
+    }
+    const away = metersBetween(base, {
+      latitude: place.latitude,
+      longitude: place.longitude,
+    });
+    (away <= base.radiusMeters ? kept : dropped).push(place);
+  }
+  return { kept, dropped };
+}
+
 // ── travel legs ──────────────────────────────────────────────────────────────
 
 /**
@@ -503,6 +618,20 @@ export interface PlanStats {
     unfixed: number;
     /** Places that sat outside every theme's reach and joined no day. */
     unclaimed: number;
+  };
+  /**
+   * What the base's circle excluded. **Absent when no base was sent** — "no
+   * base" and "a base that excluded nothing" are different answers, and a zero
+   * row would claim the second when the first is true.
+   *
+   * `dropped` is retrieved places we paid for and then refused. A high number
+   * is not waste to be optimised away, it is the measurement that says the
+   * search string is answering for a wider area than the traveller is in.
+   */
+  base?: {
+    radiusMeters: number;
+    kept: number;
+    dropped: number;
   };
   clustering: {
     /** Candidates with coordinates, which is all clustering can place. */
@@ -711,7 +840,12 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
 
   // 1 — retrieval. Cache first; only misses reach Google.
   await report("retrieve");
-  const searchPlan = buildSearchPlan(profile, searchLocality(request.city, request.country));
+  const base = resolveBase(request.base);
+  const searchPlan = buildSearchPlan(
+    profile,
+    searchLocality(request.city, request.country),
+    base,
+  );
   const retrieval = await retrievePlaces(searchPlan, {
     apiKey: deps.googleApiKey,
     cache: deps.cache,
@@ -719,7 +853,20 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     fetch: deps.fetch,
     now: deps.now,
   });
-  const pool = retrieval.places;
+  // The circle biases what Google offers; this is what enforces it. Applied to
+  // the whole pool before anything reads it, so a themed anchor is inside the
+  // circle *structurally* — `DayTheme.anchorPlaceId` must already be an id from
+  // the pool, which makes the containment the same kind of guarantee as the
+  // hallucination defence rather than a sentence in a prompt.
+  const reach = withinReach(retrieval.places, base);
+  const pool = reach.kept;
+  if (reach.dropped.length > 0) {
+    console.warn(
+      `[plan] ${reach.dropped.length} of ${retrieval.places.length} retrieved places are ` +
+        `further than ${base?.radiusMeters}m from the base and were dropped ` +
+        `(e.g. ${reach.dropped.slice(0, 3).map((place) => place.name).join(", ")})`,
+    );
+  }
 
   // 2 — what each day is about, and where to look for it. Themed mode only;
   //     every rung of it falls through to the geographic path below.
@@ -1097,6 +1244,15 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       // ran, so there is no honest answer to "where did these minutes come
       // from" and a zeroed row would read as one.
       ...travelStatsFor(routing, deps.getTravelLeg !== undefined, travelStats, estimate.stats),
+      ...(base
+        ? {
+            base: {
+              radiusMeters: base.radiusMeters,
+              kept: pool.length,
+              dropped: reach.dropped.length,
+            },
+          }
+        : {}),
       clustering: {
         located: located.length,
         unlocated: unlocated.length,

@@ -587,6 +587,37 @@ describe('POST /api/plan', () => {
     expect(harness.store.saved[0].itinerary.profile).toEqual(PROFILE)
   })
 
+  // `city` is a string and a string is not a place. The create modal has always
+  // had the coordinate — `PlaceAutocomplete` returns one — and it reached the
+  // blank-itinerary path while the planning path got the word "Bali" and
+  // searched an island.
+  it('carries the base coordinate through to the pipeline', async () => {
+    let seen: PlanRequest | undefined
+    const harness = await install({
+      runPlan: async (request, deps) => {
+        seen = request
+        return runPlan(request, deps)
+      },
+    })
+    const base = { latitude: 35.0116, longitude: 135.7681 }
+    const job = (await (await post({ ...BODY, base })).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    expect(seen?.base).toEqual(base)
+  })
+
+  // It reaches `metersBetween`, which answers a number for a longitude of 3000
+  // rather than an error — so every place in the pool would read as out of
+  // reach and the trip would come back empty with nothing to say why.
+  it('refuses a coordinate that is not one', async () => {
+    await install()
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const response = await post({ ...BODY, base: { latitude: 35, longitude: 3000 } })
+
+    expect(response.status).toBe(400)
+    expect(errors).toHaveBeenCalled()
+  })
+
   it('still completes when Pass B is down', async () => {
     const harness = await install({ failPassB: true })
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
