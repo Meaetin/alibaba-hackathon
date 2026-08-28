@@ -438,19 +438,55 @@ describe("the funnel", () => {
     expect(html).toContain("searched wider");
   });
 
+  const themesWith = (extra: Record<string, unknown>) =>
+    diagnostics({
+      debug: debugRecord({
+        themes: {
+          titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
+          fallbacks: [],
+          repairs: [],
+          ...extra,
+        },
+      }),
+    });
+
   it("says the ladder never ran rather than showing nothing", () => {
+    const html = render(themesWith({ attempts: [] }));
+    expect(html).toContain("No day needed the feasibility ladder");
+  });
+
+  /**
+   * The three-way distinction this section exists to keep, and the one it used
+   * to collapse. An empty `repairs` list rendered "No day needed the
+   * feasibility ladder" — which on the run that prompted this was false twice
+   * over: two days entered the ladder, walked every rung, and pushed no repair
+   * because a repair is only recorded when it *helped*.
+   */
+  it("does not call a day clean when the ladder ran and failed", () => {
     const html = render(
-      diagnostics({
-        debug: debugRecord({
-          themes: {
-            titles: [{ dayIndex: 0, title: "Around Fushimi Inari", anchorPlaceId: "place-a" }],
-            fallbacks: [],
-            repairs: [],
-          },
-        }),
+      themesWith({
+        attempts: [
+          { dayIndex: 2, before: 0, after: 0, needed: 2, tried: ["widened", "merged", "geographic"], unfixed: true },
+        ],
       }),
     );
-    expect(html).toContain("No day needed the feasibility ladder");
+    expect(html).not.toContain("No day needed the feasibility ladder");
+    expect(html).toContain("widened, merged, geographic");
+    expect(html).toContain("still short");
+  });
+
+  it("distinguishes an older plan from a clean one", () => {
+    // `attempts: undefined` is a plan made before the field existed. "Nothing
+    // went wrong" and "we never wrote it down" are different answers, and this
+    // is the one page whose job is not to conflate them.
+    const html = render(themesWith({}));
+    expect(html).toContain("not recorded");
+    expect(html).not.toContain("No day needed the feasibility ladder");
+  });
+
+  it("reports places no theme would claim, which was a console.warn nobody read", () => {
+    const html = render(themesWith({ attempts: [], unclaimed: 87 }));
+    expect(html).toContain("87 places sat outside every theme");
   });
 
   it("spells out the size of every cut", () => {

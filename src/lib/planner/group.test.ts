@@ -184,9 +184,10 @@ describe("the reach cap", () => {
     const ids = clusters[0].places.map((p) => p.placeId);
     expect(ids).toContain("near");
     expect(ids).not.toContain("far");
-    // Counted, not merely subtracted: a cut that only shrinks a list is the bug
-    // this project already knows about.
-    expect(unclaimed).toBe(1);
+    // Kept, not merely counted: a cut that only shrinks a list is the bug this
+    // project already knows about, and a count cannot be handed to a day that
+    // needs somewhere to eat. `alternatesFor` offers the meal-capable ones.
+    expect(unclaimed.map((p) => p.placeId)).toEqual(["far"]);
   });
 
   it("does not let a type match buy extra reach", () => {
@@ -200,7 +201,7 @@ describe("the reach cap", () => {
       1,
     );
     expect(clusters[0].places.map((p) => p.placeId)).not.toContain("distant-cafe");
-    expect(unclaimed).toBe(1);
+    expect(unclaimed.map((p) => p.placeId)).toEqual(["distant-cafe"]);
   });
 
   it("reaches further for a wider theme, and for nothing else", () => {
@@ -221,7 +222,7 @@ describe("the reach cap", () => {
       [theme(0, "north-anchor")],
       2,
     );
-    expect(unclaimed).toBe(1);
+    expect(unclaimed.map((p) => p.placeId)).toEqual(["far"]);
     expect(clusters[1].places.map((p) => p.placeId)).toContain("far");
   });
 

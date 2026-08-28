@@ -508,8 +508,14 @@ function inspect(
   return failures;
 }
 
-/** Why this place may not hold a meal slot, or `undefined` if it may. */
-function mealSlotReason(place: CandidatePlace, profile: PreferenceProfile): string | undefined {
+/**
+ * Why this place may not hold a meal slot, or `undefined` if it may.
+ *
+ * Exported so `alternatesFor`'s meal reserve filters on the same predicate this
+ * module enforces. Offering a day a candidate it will refuse a moment later is
+ * how a repair path silently does nothing.
+ */
+export function mealSlotReason(place: CandidatePlace, profile: PreferenceProfile): string | undefined {
   if (!isRestaurant(place)) return "not somewhere you can eat a meal";
   return hardFilterReason(place, profile, { mealSlot: true });
 }

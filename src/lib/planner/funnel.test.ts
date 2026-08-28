@@ -14,6 +14,7 @@ import {
   type FunnelStats,
 } from './funnel'
 import { resolvePlannerKnobs } from './knobs'
+import { isRestaurant } from './taxonomy'
 
 function makePlace(placeId: string, overrides: Partial<CandidatePlace> = {}): CandidatePlace {
   return {
@@ -45,8 +46,6 @@ function fillCluster(prefix: string, n: number, types: string[] = ['tourist_attr
   )
 }
 
-const isRestaurant = (p: CandidatePlace) =>
-  p.types.some((t) => t === 'restaurant' || t.endsWith('_restaurant'))
 
 /** Which fixture cluster a shortlisted place came from ("c3" for "c3-p42"). */
 function clusterOf(placeId: string): string {
@@ -112,9 +111,6 @@ describe('global cap + quotas', () => {
     )
     return [makeCluster([...restaurants, ...others])]
   }
-
-  const isRestaurant = (p: CandidatePlace) =>
-    p.types.some((t) => t === 'restaurant' || t.endsWith('_restaurant'))
 
   it('caps the shortlist at 60 with ≤ 40% restaurants even on 90%-restaurant input', () => {
     const result = runFunnel(restaurantHeavyClusters(), makeProfile(), { perClusterCap: 200 })

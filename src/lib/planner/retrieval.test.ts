@@ -7,6 +7,9 @@ import {
   createInMemoryLocationStore,
   createInMemorySearchCache,
   hydrateShortlist,
+  NEARBY_MAX_RADIUS_METERS,
+  nearbyRequest,
+  textNearRequest,
   retrievePlaces,
   searchCacheKey,
   type CachedSearch,
@@ -317,6 +320,80 @@ describe("searchCacheKey", () => {
   it("treats case and stray whitespace as the same search — paying twice for that is waste", () => {
     expect(searchCacheKey({ city: "  kyoto ", query: "Specialty  Coffee Kyoto" })).toBe(
       searchCacheKey(KYOTO_CAFE),
+    );
+  });
+
+  it("changes with the rank preference — the same circle, ordered differently, is a different answer", () => {
+    const distance = nearbyRequest("Kyoto", CENTRE, 1_200, ["museum"]);
+    const popularity: SearchRequest = {
+      ...distance,
+      nearby: { ...distance.nearby!, rankPreference: "POPULARITY" },
+    };
+    expect(searchCacheKey(popularity)).not.toBe(searchCacheKey(distance));
+  });
+});
+
+// ── nearby circles ───────────────────────────────────────────────────────────
+
+const CENTRE = { latitude: 35.0116, longitude: 135.7681 };
+
+describe("nearbyRequest", () => {
+  /**
+   * Google defaults to `POPULARITY`, which answers a different question from
+   * the one every circle in this planner asks. A 4 km circle round a museum in
+   * Nusa Dua returned twenty places in Kuta, 8 km away, and the anchor's own
+   * neighbourhood never appeared — which is also why the feasibility ladder's
+   * "widen" rung could not fix a day with nothing to eat. A bigger circle
+   * ranked by popularity walks further from the anchor, not closer.
+   */
+  it("asks for the nearest places, not the most popular ones", () => {
+    expect(nearbyRequest("Kyoto", CENTRE, 1_200, ["museum"]).nearby?.rankPreference).toBe(
+      "DISTANCE",
+    );
+  });
+
+  it("changes with the location bias — the same phrase in two neighbourhoods is two answers", () => {
+    const here = textNearRequest("Kyoto", "vegetarian restaurants Kyoto", CENTRE, 1_200);
+    const there = textNearRequest(
+      "Kyoto",
+      "vegetarian restaurants Kyoto",
+      { latitude: 35.03, longitude: 135.72 },
+      1_200,
+    );
+    expect(searchCacheKey(here)).not.toBe(searchCacheKey(there));
+    // And a biased search is not the same call as the city-wide one it shares
+    // a phrase with — that one was already fired by `buildSearchPlan`.
+    expect(searchCacheKey(here)).not.toBe(
+      searchCacheKey({ city: "Kyoto", query: "vegetarian restaurants Kyoto" }),
+    );
+  });
+
+  it("sends the bias as a circle Google understands, on the text endpoint", async () => {
+    const bodies: string[] = [];
+    const doFetch: FetchLike = async (_url, init) => {
+      bodies.push(init.body ?? "");
+      return { ok: true, status: 200, async text() { return "{}"; }, async json() { return { places: [] }; } };
+    };
+    await retrievePlaces([textNearRequest("Kyoto", "vegetarian restaurants Kyoto", CENTRE, 1_200)], {
+      apiKey: "k",
+      cache: createInMemorySearchCache(),
+      store: createInMemoryLocationStore(),
+      fetch: doFetch,
+      now: NOW,
+    });
+    const body = JSON.parse(bodies[0]);
+    expect(body.textQuery).toBe("vegetarian restaurants Kyoto");
+    expect(body.locationBias).toEqual({
+      circle: { center: { latitude: CENTRE.latitude, longitude: CENTRE.longitude }, radius: 1_200 },
+    });
+    // Bias, never `nearby` — they are different endpoints and mixing them would
+    // silently send a text query to the circle API.
+    expect(body.locationRestriction).toBeUndefined();
+  });
+
+  it("clamps the radius to Google's ceiling rather than 400ing", () => {
+    expect(nearbyRequest("Kyoto", CENTRE, 9_000_000, []).nearby?.radiusMeters).toBe(
+      NEARBY_MAX_RADIUS_METERS,
     );
   });
 });

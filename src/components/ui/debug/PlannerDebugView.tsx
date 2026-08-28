@@ -144,7 +144,7 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
             </ul>
           )}
 
-          {debug.themes.repairs.length > 0 ? (
+          {debug.themes.repairs.length > 0 && (
             <ul className="planner-debug-theme-repairs flex flex-col gap-1">
               {debug.themes.repairs.map((repair) => (
                 <li
@@ -156,8 +156,38 @@ export function PlannerDebugView({ diagnostics }: PlannerDebugViewProps) {
                 </li>
               ))}
             </ul>
-          ) : (
+          )}
+
+          {/*
+            An empty `repairs` list used to render "No day needed the
+            feasibility ladder", which on the run that prompted all of this was
+            simply false: two days entered the ladder, walked every rung, fixed
+            nothing, and pushed no repair because a repair is only recorded when
+            it *helped*. `attempts` is the honest list, and `undefined` means an
+            older plan that never recorded one — not a clean run.
+          */}
+          {debug.themes.attempts === undefined ? (
+            <Empty>Feasibility attempts were not recorded for this itinerary.</Empty>
+          ) : debug.themes.attempts.length === 0 ? (
             <Ok>No day needed the feasibility ladder.</Ok>
+          ) : (
+            <ul className="planner-debug-theme-attempts flex flex-col gap-1">
+              {debug.themes.attempts.map((attempt) => (
+                <li key={attempt.dayIndex} className="type-body-3 text-content-secondary">
+                  Day {attempt.dayIndex + 1} — tried {attempt.tried.join(", ") || "nothing"}:{" "}
+                  {attempt.before} → {attempt.after} of {attempt.needed} places to eat
+                  {attempt.unfixed ? " — still short, this day ships without a full meal plan" : ""}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {debug.themes.unclaimed !== undefined && debug.themes.unclaimed > 0 && (
+            <p className="planner-debug-theme-unclaimed type-body-3 text-content-secondary">
+              {debug.themes.unclaimed} place
+              {debug.themes.unclaimed === 1 ? "" : "s"} sat outside every theme&rsquo;s reach and
+              joined no day.
+            </p>
           )}
         </Section>
       )}

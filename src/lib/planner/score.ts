@@ -243,8 +243,14 @@ const DIETARY_GOOGLE_FIELD: Record<string, (place: CandidatePlace) => boolean | 
  * a place that serves no vegetarian food serves no vegan food either — so `false`
  * is sound for both. `true` is weaker for vegan than vegetarian, which is why it
  * clears the hard filter but doesn't promote a place up the ladder in `funnel.ts`.
+ *
+ * Exported for `feasibility.ts`, which has to ask the same question a whole
+ * stage earlier. Counting a day's meal capacity as "restaurants" let a
+ * vegetarian's cluster of five steakhouses read as perfectly feasible; the
+ * ladder never fired, and the traveller found out at `selectMealCandidates`
+ * rung 3 — after every circle was billed. One definition, asked twice.
  */
-function violatesDietaryNeed(place: CandidatePlace, need: string): boolean {
+export function violatesDietaryNeed(place: CandidatePlace, need: string): boolean {
   const googleAnswer = Object.hasOwn(DIETARY_GOOGLE_FIELD, need)
     ? DIETARY_GOOGLE_FIELD[need](place)
     : undefined;

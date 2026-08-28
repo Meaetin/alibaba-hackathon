@@ -15,6 +15,7 @@ import type { ScoredCluster } from "./funnel";
 import type { Weekday } from "./hours";
 import type { ResponsesClient, ResponsesRequest } from "./openai";
 import { DAY_START_MIN, PACE_PLANS } from "./pack";
+import { isRestaurant } from "./taxonomy";
 import type { CandidatePlace, OpeningPeriod, PlaceEnrichment, PreferenceProfile } from "./types";
 
 /** Thursday. Nothing in the planner derives a weekday; it is always injected. */
@@ -852,10 +853,11 @@ describe("only a restaurant may hold a meal", () => {
     const candidates = payload.clusters.flatMap((c) => c.candidates)
     expect(candidates.length).toBeGreaterThan(0)
     for (const candidate of candidates) {
-      const isRestaurant = candidate.types.some(
-        (t) => t === "restaurant" || t.endsWith("_restaurant"),
-      )
-      expect(candidate.can_hold_a_meal).toBe(isRestaurant)
+      // The real predicate, imported. A private copy here is the "fifth copy"
+      // `isRestaurant` warns about: when `food_court` was added to it, a local
+      // reimplementation went on asserting the old rule and would have passed
+      // while claiming `can_hold_a_meal` matched something it no longer did.
+      expect(candidate.can_hold_a_meal).toBe(isRestaurant(candidate))
     }
     // Both answers have to occur, or the flag is a constant and proves nothing.
     expect(candidates.some((c) => c.can_hold_a_meal)).toBe(true)

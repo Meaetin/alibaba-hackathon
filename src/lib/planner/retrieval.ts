@@ -160,7 +160,32 @@ export interface NearbySearch {
   radiusMeters: number;
   /** Places types to return. Empty means "whatever is there". */
   includedTypes: readonly string[];
+  /**
+   * How Google orders the twenty places it will return.
+   *
+   * It is on the request rather than a constant because it is part of what was
+   * asked, and `searchCacheKey` has to say so — a circle ranked by popularity
+   * and the same circle ranked by distance are different searches with the same
+   * centre, and one must not serve the other out of the cache.
+   */
+  rankPreference: NearbyRankPreference;
 }
+
+export type NearbyRankPreference = "DISTANCE" | "POPULARITY";
+
+/**
+ * Distance, and not Google's default.
+ *
+ * Every circle we search is centred on a theme's anchor, and the question being
+ * asked is always "what is near this place". Google defaults to `POPULARITY`,
+ * which answers a different question: the twenty most prominent places
+ * *anywhere in the circle*. On a 4 km circle round a museum in Nusa Dua that is
+ * twenty places in Kuta, 8 km away — the anchor's own neighbourhood never
+ * appears, and widening the circle makes it worse rather than better. It is
+ * also why `feasibility.ts`'s widen rung could not fix a day with nothing to
+ * eat: a bigger circle ranked by popularity walks further from the anchor.
+ */
+export const NEARBY_RANK_PREFERENCE: NearbyRankPreference = "DISTANCE";
 
 /**
  * One billable search. Cache identity also includes the page size supplied to
@@ -181,6 +206,46 @@ export interface SearchRequest {
   includedType?: string;
   /** Present ⇒ this is a Nearby Search around a circle, not a Text Search. */
   nearby?: NearbySearch;
+  /**
+   * A circle a **Text Search** leans toward. Ignored when `nearby` is set —
+   * they are different endpoints and a nearby circle is already a restriction.
+   *
+   * Bias, not restriction: Google may still return something outside it. That
+   * is safe here and not sloppiness — `MEMBER_RADIUS_SLACK` refuses a place too
+   * far from an anchor to join its day, and the meal reserve caps its own
+   * reach, so a stray distant result is dropped downstream rather than seated.
+   */
+  locationBias?: { latitude: number; longitude: number; radiusMeters: number };
+}
+
+/**
+ * A Text Search leaning on a circle — how a *phrase* gets asked near a place.
+ *
+ * `includedTypes` is coarse by design: Google types a great vegetarian-friendly
+ * izakaya `izakaya_restaurant`, never `vegetarian_restaurant`, so a meal circle
+ * asking for types finds the places that *label* themselves and misses the long
+ * tail. `dietaryBridgeFor` already carries the phrases that catch it — they were
+ * only ever fired city-wide, which for a three-day trip means the results
+ * cluster wherever the city is busiest and not where the traveller will be.
+ *
+ * A negative never belongs in one of these. "no seafood" matches seafood
+ * restaurants; refusals are `DIETARY_CONFLICT_TYPES`' job, after the search.
+ */
+export function textNearRequest(
+  city: string,
+  query: string,
+  centre: { latitude: number; longitude: number },
+  radiusMeters: number,
+): SearchRequest {
+  return {
+    city,
+    query,
+    locationBias: {
+      latitude: centre.latitude,
+      longitude: centre.longitude,
+      radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
+    },
+  };
 }
 
 /**
@@ -194,17 +259,21 @@ export function nearbyRequest(
   centre: { latitude: number; longitude: number },
   radiusMeters: number,
   includedTypes: readonly string[],
+  rankPreference: NearbyRankPreference = NEARBY_RANK_PREFERENCE,
 ): SearchRequest {
   return {
     city,
     // Not a query, and deliberately not empty: this string is what a failure in
-    // `stats.failures` is identified by, and "" tells nobody anything.
-    query: `nearby:${includedTypes.join("+") || "any"}`,
+    // `stats.failures` is identified by, and "" tells nobody anything. The rank
+    // is in it because two circles now differ by nothing else, and a failure
+    // reading `nearby:museum` twice names neither of them.
+    query: `nearby:${includedTypes.join("+") || "any"}@${rankPreference.toLowerCase()}`,
     nearby: {
       latitude: centre.latitude,
       longitude: centre.longitude,
       radiusMeters: Math.max(1, Math.min(NEARBY_MAX_RADIUS_METERS, Math.round(radiusMeters))),
       includedTypes: [...includedTypes].sort(),
+      rankPreference,
     },
   };
 }
@@ -233,6 +302,15 @@ export function searchCacheKey(
           request.nearby.longitude.toFixed(5),
           String(request.nearby.radiusMeters),
           [...request.nearby.includedTypes].sort().join("+"),
+          request.nearby.rankPreference,
+        ].join(",")
+      : "",
+    // The same phrase asked in two neighbourhoods is two different answers.
+    request.locationBias
+      ? [
+          request.locationBias.latitude.toFixed(5),
+          request.locationBias.longitude.toFixed(5),
+          String(request.locationBias.radiusMeters),
         ].join(",")
       : "",
   ];
@@ -486,6 +564,39 @@ export interface RetrievalStats {
 export interface RetrievalResult {
   places: RetrievedPlace[];
   stats: RetrievalStats;
+}
+
+/**
+ * Adds a second run's counters to a first's.
+ *
+ * Exists because a themed plan searches Google **twice**: once for every
+ * theme's circles, and again inside the feasibility ladder's `widen` rung for
+ * each day that cannot feed itself. The second call's stats used to be dropped
+ * on the floor, so `stats.explore.billedCalls` reported the opening circles and
+ * none of the extra searches bought for the days that went worst — the days
+ * that cost the most read as the cheapest. Measured on the Kyoto themed
+ * fixture: 12 real `searchNearby` calls, 9 reported.
+ *
+ * `failures` matters more than the money. A widening search that 400s — and a
+ * live Singapore run lost two of three circles to an unsearchable type — was
+ * discarded with everything else, so "the ladder tried and found nothing" and
+ * "the request was rejected" looked identical. They need different fixes.
+ */
+export function mergeRetrievalStats(
+  first: RetrievalStats,
+  second: RetrievalStats,
+): RetrievalStats {
+  return {
+    requested: first.requested + second.requested,
+    unique: first.unique + second.unique,
+    cacheHits: first.cacheHits + second.cacheHits,
+    cacheMisses: first.cacheMisses + second.cacheMisses,
+    billedCalls: first.billedCalls + second.billedCalls,
+    seen: first.seen + second.seen,
+    duplicatesDropped: first.duplicatesDropped + second.duplicatesDropped,
+    missingFromStore: first.missingFromStore + second.missingFromStore,
+    failures: [...first.failures, ...second.failures],
+  };
 }
 
 /**
@@ -771,6 +882,7 @@ async function runSearch(
   const body: Record<string, unknown> = nearby
     ? {
         maxResultCount: ctx.pageSize,
+        rankPreference: nearby.rankPreference,
         ...(nearby.includedTypes.length > 0
           ? { includedTypes: [...nearby.includedTypes] }
           : {}),
@@ -785,6 +897,19 @@ async function runSearch(
         textQuery: request.query,
         pageSize: ctx.pageSize,
         ...(request.includedType ? { includedType: request.includedType } : {}),
+        ...(request.locationBias
+          ? {
+              locationBias: {
+                circle: {
+                  center: {
+                    latitude: request.locationBias.latitude,
+                    longitude: request.locationBias.longitude,
+                  },
+                  radius: request.locationBias.radiusMeters,
+                },
+              },
+            }
+          : {}),
       };
 
   const response = await ctx.doFetch(url, {

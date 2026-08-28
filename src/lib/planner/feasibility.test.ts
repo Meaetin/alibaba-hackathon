@@ -13,6 +13,23 @@ function eatery(placeId: string, latitude = 35.0, longitude = 135.7): CandidateP
   return { placeId, name: placeId, types: ["ramen_restaurant", "restaurant"], latitude, longitude };
 }
 
+/** A restaurant a vegetarian cannot eat in: rung 2 of `violatesDietaryNeed`. */
+function steakhouse(placeId: string, latitude = 35.0, longitude = 135.7): CandidatePlace {
+  return { placeId, name: placeId, types: ["steak_house", "restaurant"], latitude, longitude };
+}
+
+/** A restaurant Google itself says serves no vegetarian food: rung 1. */
+function refusedByGoogle(placeId: string, latitude = 35.0, longitude = 135.7): CandidatePlace {
+  return {
+    placeId,
+    name: placeId,
+    types: ["ramen_restaurant", "restaurant"],
+    latitude,
+    longitude,
+    servesVegetarianFood: false,
+  };
+}
+
 function theme(dayIndex: number): DayTheme {
   return {
     dayIndex,
@@ -239,5 +256,166 @@ describe("repairFeasibility", () => {
     await repairFeasibility([thin, donor], { mealsPerDay: MEALS });
     expect(thin.places).toHaveLength(1);
     expect(donor.places).toEqual(donorPlacesBefore);
+  });
+});
+
+/**
+ * The ladder can only repair a shortage it can see.
+ *
+ * `mealCapacity` counted bare `isRestaurant`, so a vegetarian's day of five
+ * steakhouses read as perfectly feasible: nothing widened, nothing was
+ * borrowed, and the traveller met the problem at `selectMealCandidates` rung 3
+ * — "limited vegetarian options, call ahead" — after every circle had been
+ * billed for.
+ */
+describe("a day that cannot feed *this* traveller", () => {
+  it("counts a steakhouse for a traveller with no needs and not for a vegetarian", () => {
+    const day = cluster(0, [sight("a"), steakhouse("s1"), steakhouse("s2")]);
+    expect(mealCapacity(day)).toBe(2);
+    expect(mealCapacity(day, ["vegetarian"])).toBe(0);
+  });
+
+  it("reads Google's direct refusal, not just the type list", () => {
+    // Rung 1 of `violatesDietaryNeed`: a ramen shop is no kind of conflict by
+    // type, and Google saying `false` outright is what convicts it.
+    const day = cluster(0, [refusedByGoogle("r1"), refusedByGoogle("r2")]);
+    expect(mealCapacity(day)).toBe(2);
+    expect(mealCapacity(day, ["vegetarian"])).toBe(0);
+  });
+
+  it("fires the ladder for a vegetarian on a day that looked fed", async () => {
+    const steakDay = cluster(0, [sight("a"), steakhouse("s1"), steakhouse("s2")]);
+    const widen = vi.fn(async () => [eatery("veg-1"), eatery("veg-2")]);
+
+    // With no needs the day is already feasible and must not buy a search.
+    const untroubled = await repairFeasibility([cluster(0, [sight("a"), steakhouse("s1"), steakhouse("s2")])], {
+      mealsPerDay: MEALS,
+      widen,
+    });
+    expect(untroubled.repairs).toEqual([]);
+    expect(widen).not.toHaveBeenCalled();
+
+    const repaired = await repairFeasibility([steakDay], {
+      mealsPerDay: MEALS,
+      dietary: ["vegetarian"],
+      widen,
+    });
+    expect(widen).toHaveBeenCalledTimes(1);
+    expect(repaired.repairs).toHaveLength(1);
+    expect(repaired.repairs[0].rung).toBe("widened");
+    expect(repaired.repairs[0].before).toBe(0);
+    expect(repaired.repairs[0].after).toBe(2);
+  });
+
+  /**
+   * Lending a vegetarian five steakhouses satisfies the arithmetic and feeds
+   * nobody. The donor must be themeless, or it gets repaired on the next pass
+   * of the loop and borrows its own restaurants straight back — an assertion
+   * written against two themed clusters passes whatever the rule says.
+   */
+  it("borrows only what the borrower can actually eat", async () => {
+    const hungry = cluster(0, [sight("a")]);
+    const donor = cluster(
+      1,
+      // Four edible places, so the donor can spare two and still keep its own
+      // two — the rule that makes this a repair rather than a robbery. The
+      // three steakhouses are the point: they are nearer in the list and would
+      // have been lent first under the old count.
+      [
+        steakhouse("s1"),
+        steakhouse("s2"),
+        steakhouse("s3"),
+        eatery("veg-1"),
+        eatery("veg-2"),
+        eatery("veg-3"),
+        eatery("veg-4"),
+      ],
+      { latitude: 35.0, longitude: 135.7 },
+      false,
+    );
+
+    const { clusters, repairs } = await repairFeasibility([hungry, donor], {
+      mealsPerDay: MEALS,
+      dietary: ["vegetarian"],
+    });
+
+    expect(repairs.map((r) => r.rung)).toEqual(["merged"]);
+    const borrowed = clusters[0].places.filter((p) => p.placeId !== "a");
+    expect(borrowed).toHaveLength(2);
+    for (const place of borrowed) {
+      expect(place.types, `${place.placeId} is not edible by a vegetarian`).not.toContain(
+        "steak_house",
+      );
+    }
+  });
+});
+
+/**
+ * `repairs` only ever held rungs that worked, so a day that walked all three
+ * and fixed nothing left no trace. A live Bali day did exactly that — nothing
+ * to eat, widened and found none, no donor within reach, no better geography —
+ * and the only surviving evidence in the whole run was `validateDay` reporting
+ * `lost_meal` at the very end.
+ */
+describe("what the ladder tried, not just what worked", () => {
+  it("records a day that walked every rung and fixed nothing", async () => {
+    const hopeless = cluster(0, [sight("a")]);
+    const { repairs, attempts } = await repairFeasibility([hopeless], {
+      mealsPerDay: MEALS,
+      widen: async () => [],
+      geographicFor: () => cluster(0, [sight("z")]),
+    });
+
+    // The old record: silence.
+    expect(repairs).toEqual([]);
+
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({
+      dayIndex: 0,
+      before: 0,
+      after: 0,
+      needed: MEALS,
+      unfixed: true,
+    });
+    expect(attempts[0].tried).toEqual(["widened", "merged", "geographic"]);
+  });
+
+  it("lists a day it did fix, and does not call it unfixed", async () => {
+    const thin = cluster(0, [sight("a"), eatery("e1")]);
+    const { attempts } = await repairFeasibility([thin], {
+      mealsPerDay: MEALS,
+      widen: async () => [eatery("found")],
+    });
+
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toMatchObject({ before: 1, after: 2, unfixed: false });
+    // It stopped at the rung that worked rather than walking the rest.
+    expect(attempts[0].tried).toEqual(["widened"]);
+  });
+
+  /**
+   * A day that never needed the ladder must not appear. This is the opposite
+   * error from the one above and just as bad on a page somebody reads to find
+   * the day that went wrong.
+   */
+  it("says nothing about a day that could already feed itself", async () => {
+    const fed = cluster(0, [sight("a"), eatery("e1"), eatery("e2")]);
+    const { attempts } = await repairFeasibility([fed], { mealsPerDay: MEALS });
+    expect(attempts).toEqual([]);
+  });
+
+  it("records the rung it stopped at when borrowing was enough", async () => {
+    const hungry = cluster(0, [sight("a")]);
+    const donor = cluster(
+      1,
+      [eatery("d1"), eatery("d2"), eatery("d3"), eatery("d4")],
+      { latitude: 35.0, longitude: 135.7 },
+      false,
+    );
+    const { attempts } = await repairFeasibility([hungry, donor], { mealsPerDay: MEALS });
+
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0].tried).toEqual(["merged"]);
+    expect(attempts[0].unfixed).toBe(false);
   });
 });
