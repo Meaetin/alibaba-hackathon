@@ -32,7 +32,7 @@ import { getOpeningHoursStatus } from "./opening-hours-status";
 // Cards re-render constantly under drag; this keeps the warning an impression
 // event rather than a render counter.
 const reportedHoursWarnings = new Set<string>();
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

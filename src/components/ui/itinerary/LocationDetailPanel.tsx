@@ -36,7 +36,7 @@ import {
   PlacePhotoAttribution,
 } from "./PlaceDetailsBlock";
 import { NoteEditor, type NoteItem } from "@/components/ui/notes/InlineNoteEditor";
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 // ───── Types ─────────────────────────────────────────────────────────────────
 

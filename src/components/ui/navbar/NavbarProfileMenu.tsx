@@ -4,7 +4,8 @@ import { type ReactNode } from "react";
 import { CreditCard, LogOut, Settings, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/api/auth";
+import { queryClient } from "@/lib/query/queryClient";
 import { Button } from "@/components/ui/primitives/Button";
 import {
   Menu,
@@ -22,9 +23,12 @@ function NavbarProfileMenu({ avatar }: NavbarProfileMenuProps) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/home");
+    await signOut();
+    // The session query is cached across the app, so clearing it is what makes
+    // every component re-read "signed out" instead of the user it saw a moment
+    // ago. Without this the navbar still shows an avatar on the login page.
+    queryClient.clear();
+    router.push("/login");
   };
 
   return (

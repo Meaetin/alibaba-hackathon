@@ -1,4 +1,3 @@
-import { createClient } from '@/lib/supabase/client'
 import { unwrap, ensureOk } from './client'
 import type { CascadeResult } from '@/lib/api/itineraries'
 
@@ -48,18 +47,17 @@ export interface ExtractedLodging {
   updated_at: string
 }
 
-async function getAuthToken(): Promise<string> {
-  const supabase = createClient()
-  const { data, error } = await supabase.auth.getSession()
-  if (error || !data.session) throw new Error('Not authenticated')
-  return data.session.access_token
-}
+/**
+ * These calls go to the old REST backend on `NEXT_PUBLIC_API_URL`, which is
+ * gone, so they fail whatever they send. The Supabase bearer token they used
+ * to carry is gone with it; the session is an httpOnly cookie now and the
+ * browser attaches it for same-origin requests without being asked.
+ */
 
 export async function extractLodgingsFromPDF(
   itineraryId: string,
   file: File
 ): Promise<ExtractLodgingsResult> {
-  const token = await getAuthToken()
   const formData = new FormData()
   formData.append('file', file)
 
@@ -67,7 +65,7 @@ export async function extractLodgingsFromPDF(
     `${API_URL}/api/itineraries/${itineraryId}/lodgings/extract`,
     {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
       body: formData,
     }
   )
@@ -78,10 +76,9 @@ export async function extractLodgingsFromPDF(
 }
 
 export async function getLodgings(itineraryId: string): Promise<ExtractedLodging[]> {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/lodgings`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { credentials: 'same-origin' }
   )
 
   return unwrap<ExtractedLodging[]>(res, 'Failed to fetch lodgings')
@@ -102,14 +99,12 @@ export async function updateLodging(
     currency?: string
   }
 ): Promise<LodgingMutationResult> {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/lodgings/${lodgingId}`,
     {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(lodging),
     }
@@ -122,12 +117,11 @@ export async function deleteLodging(
   itineraryId: string,
   lodgingId: string
 ): Promise<void> {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/lodgings/${lodgingId}`,
     {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: 'same-origin',
     }
   )
 
@@ -148,14 +142,12 @@ export async function createLodging(
     currency?: string
   }
 ): Promise<LodgingMutationResult> {
-  const token = await getAuthToken()
   const res = await fetch(
     `${API_URL}/api/itineraries/${itineraryId}/lodgings`,
     {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(lodging),
     }

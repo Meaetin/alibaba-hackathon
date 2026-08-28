@@ -76,7 +76,7 @@ import type {
   TimelineSegment,
   TravelLegProvider,
 } from "./pack";
-import { DAY_START_MIN, isMealRole, packDay, slotWindow } from "./pack";
+import { DAY_START_MIN, hhmm, isMealRole, packDay, slotWindow } from "./pack";
 import { type Weekday, hasKnownHours, isOpenDuring } from "./hours";
 import { hardFilterReason } from "./score";
 import { isRestaurant } from "./taxonomy";
@@ -651,11 +651,12 @@ function windowLabel(role: DaySlot["role"]): string {
 }
 
 /**
- * Minutes from midnight as a 24-hour clock face. Exported because the debug
- * view renders the same unit, and a fourth copy of this three-line function is
- * a fourth place for it to drift.
+ * Minutes from midnight as a 24-hour clock face.
+ *
+ * It lives in `pack.ts` now and is re-exported here, unchanged, because the
+ * packer had to render one too — a dropped stop says which meal it blocked and
+ * by when. `pack.ts` is the only module that stamps a clock, so the function
+ * that renders one belongs there; this line exists so the debug view and every
+ * other caller keep the import they already had.
  */
-export function hhmm(minutes: number): string {
-  const clamped = ((minutes % 1440) + 1440) % 1440;
-  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
-}
+export { hhmm } from "./pack";

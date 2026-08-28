@@ -19,7 +19,6 @@ import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itinerarie
 import { useToast } from "@/contexts/ToastContext";
 import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } from "@/lib/api/client";
 import { createCollection } from "@/lib/api/collections";
-import { createClient } from "@/lib/supabase/client";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
@@ -34,9 +33,7 @@ import { useModalAnimation } from "@/hooks/useModalAnimation";
 import { deleteContent } from "@/lib/api/content";
 import { deleteCollection } from "@/lib/api/collections";
 import { deleteItinerary } from "@/lib/api/itineraries";
-import type { RecentContentItem } from "@/lib/supabase/queries/home";
-import { getContentLocationIds } from "@/lib/supabase/queries/home";
-import { addLocationsToCollection } from "@/lib/supabase/queries";
+import type { RecentContentItem } from "@/lib/domain-types";
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 import { useProfileQuery } from "@/hooks/queries/useProfileQuery";
 import { useLinkUsageQuery } from "@/hooks/queries/useLinkUsageQuery";
@@ -599,38 +596,27 @@ export default function DashboardPage() {
     }
   }, [deleteModal, removeItem, showToast]);
 
-  // Resolve a card item's locations, then open AddToDestinationModal. Only links
-  // and locations carry locations directly; other types don't offer this action.
+  // Resolve a card item's locations, then open AddToDestinationModal.
+  //
+  // Only links and locations ever carried locations directly, and the dashboard
+  // now lists itineraries only, so nothing on this grid can reach the second
+  // branch. Both halves of the flow — resolving a link's locations, and writing
+  // them into a collection — read Supabase tables this build does not have.
+  // They say so rather than resolving quietly into a success toast.
   const handleAddToDestination = useCallback(
     async (item: RecentContentItem, mode: "collection" | "itinerary") => {
-      const supabase = createClient();
-      const resolvedLocationIds: string[] = [];
-
-      if (item.type === "location") {
-        resolvedLocationIds.push(item.id);
-      } else if (item.type === "link") {
-        const contentLocIds = await getContentLocationIds(supabase, [item.id]);
-        resolvedLocationIds.push(...contentLocIds);
-      }
-
-      if (resolvedLocationIds.length === 0) {
-        showToast({ title: "No locations found to add.", variant: "error" });
+      if (item.type !== "location") {
+        showToast({ title: "This isn't available in this build.", variant: "error" });
         return;
       }
-
-      setAddToDestModal({ open: true, mode, locationIds: resolvedLocationIds });
+      setAddToDestModal({ open: true, mode, locationIds: [item.id] });
     },
     [showToast],
   );
 
-  const handleAddToDestinationConfirm = useCallback(
-    async (destinationId: string, locationIds: string[], collectionId?: string) => {
-      const supabase = createClient();
-      const targetCollectionId = collectionId ?? destinationId;
-      await addLocationsToCollection(supabase, targetCollectionId, locationIds);
-    },
-    [],
-  );
+  const handleAddToDestinationConfirm = useCallback(async () => {
+    throw new Error("Collections are not available in this build.");
+  }, []);
 
   // Renders the appropriate entity card for a feed/latest item, wiring its kebab /
   // right-click actions per type (delete + add-to-destination where applicable).

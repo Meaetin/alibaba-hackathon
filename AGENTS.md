@@ -533,11 +533,18 @@ does **not** work — Vite 8 parses with oxc, not esbuild. `include` covers
 component with `renderToStaticMarkup` needs no DOM, and the planner suite
 depends on `node`.
 
-### `hhmm` is exported from `validate.ts`
+### `hhmm` lives in `pack.ts`, and `validate.ts` re-exports it
 Minutes from midnight to a clock face. There were already three copies
 (`validate.ts`, `__tests__/harness.ts`, `utils/calendar.ts`) and the debug view
 would have been a fourth. Note that `toHHMM` in `utils/calendar.ts` takes
 fractional **hours** — a different unit, not a duplicate.
+
+It moved out of `validate.ts` on 2026-08-28 because `pack.ts` had to render a
+clock too — a dropped stop now names the meal it blocked and the time that meal
+had to start by — and `pack.ts` may not import `validate.ts`, which imports it.
+`pack.ts` is the only module that stamps a clock, so it is the right home. The
+`export { hhmm } from "./pack"` line in `validate.ts` is there so the debug view
+and every other caller keep the import they already had.
 
 ### `.qoder/` is generated output and is gitignored — never commit it
 The repowiki under `.qoder/` is regenerated per branch, so two branches that
@@ -1378,3 +1385,359 @@ sixty concurrent calls that all 429 will all retry in the same millisecond.
 5xx, plus anything with no status at all (transport). A 400 is our request being
 wrong, and asking again buys the same answer at twice the price. `sleep` is
 injected for the same reason `now` and `rng` are.
+
+### Auth is ours, it lives in Neon, and Supabase is gone
+Accounts are `users` + `sessions` beside the trips they own. Email and password,
+`scrypt` from `node:crypto` (no dependency), and an **opaque** session token in
+an httpOnly cookie whose **sha256 is what the row stores** — a `sessions` row
+cannot be replayed as a login, so a database dump is not a set of live sessions.
+Signing out is a delete, which is the thing a stateless JWT cannot offer.
+
+**Every handler reads the cookie off `request.headers`, never through
+`next/headers`.** That is the same rule that put `personaId` in the plan route's
+body: a handler stays a pure `Request → Response` and `route.test.ts` drives it
+with no request scope. `userFor(request, deps)` in `app/api/deps.ts` is the one
+place a request becomes a person, and it takes the store so the seam holds. The
+single exception is `/itineraries/[id]/debug`, a server component with no
+`Request` to read — and no handler test either.
+
+`middleware.ts` checks that a cookie **exists** and nothing more. It runs on the
+Edge runtime, which cannot reach Neon, so it is a redirect for looks and every
+route that guards something checks for real. This is also why
+`SESSION_COOKIE_NAME` lives alone in `src/lib/auth/cookie.ts`: importing it from
+`session.ts` drags in `node:crypto` and the middleware fails to build — a
+failure `tsc` cannot see, because it is a runtime constraint.
+
+**The persona is no longer named on the wire.** `POST /api/plan` reads it from
+the session via `personas.getByUser`, and `travel_personas.user_id` is unique,
+which is what the table's own prose has always promised. A client-supplied
+`personaId` survives in exactly one place — sign-up and sign-in — where it
+claims a persona taken *before* this app had accounts. That is a migration path,
+not a general seam.
+
+**`saveItinerary(result, ownerId)` takes the owner as a second argument.** The
+planner never learns that users exist: `runPlan` builds the result, and the
+route handler — the only thing holding a session — says whose it is.
+
+**Somebody else's trip is a 404, never a 403.** A 403 confirms the id names a
+real itinerary, which is the one fact an outsider wants. An itinerary with a
+**null** owner is nobody's and is also a 404.
+
+The Supabase strip removed `src/lib/supabase/**` and both `@supabase/*`
+packages. Two things to know about what is left:
+
+- **The types outlived the queries.** `FilterType`, `RecentContentItem`,
+  `SearchResponse`, `LocationReference`, `ProfileRow` and friends moved to
+  `src/lib/domain-types.ts`, which is where `Surface` and `QuotaType` already
+  sat after the PostHog strip. `ItineraryDetail` and friends now come straight
+  from `src/lib/db/itinerary-detail.ts` — the re-export through
+  `supabase/queries/home.ts` is gone and twenty imports moved.
+- **A hook with no backend returns empty and says so in its doc comment.**
+  `useSearchQuery`, `useRecentlyViewedQuery`, `useLocationReferencesQuery`,
+  `useEntityLocationsQuery`, `useCollaboratorProfilesQuery`, `useRecordView` and
+  `usePaginatedContent` are all in that state. That is not the same as the old
+  behaviour, which was a *failing request* that looked identical from the
+  outside — the difference is that the emptiness is now written down.
+
+  **A write does the opposite: it throws.** `src/lib/api/attachments.ts` and the
+  add-to-collection paths raise a plain sentence rather than resolving. An empty
+  list is a true statement; an upload that silently stores nothing is a lie the
+  traveller finds out about later.
+
+`useMapClusters` and `useDashboardRecent` were genuinely rewired rather than
+emptied — both read `GET /api/itineraries`, which is the one list that exists.
+`RawMapLocation` moved into `locality-pins.ts`, with the function that consumes
+it, so deleting a backend can never again take an input type with it.
+
+### `GET /api/itineraries` is new, and its absence is why the grid looked empty
+`getItineraries()` called the dead REST backend on `:8080`, the query failed, and
+`data = []` renders exactly like "no itineraries yet". Auth without this endpoint
+scopes nothing anybody can see.
+
+`readItineraryList` (`src/lib/db/itinerary-list.ts`) is three aggregate queries,
+not `readItineraryDetail` in a loop — a grid of twenty cards needs a name, a
+date, a photo and a count, not every opening period in the trip. Three fields
+are decisions and all three **call into `itinerary-detail.ts`** rather than
+restating it: `end_date` via `endDateFor`, `overview` via `overviewFrom`, and
+`thumbnail_url` as the first stop with a resolved photo. A card and the page it
+opens disagreeing about a trip's end date is the bug nobody reports and
+everybody notices.
+
+`updated_at` reports the creation time, because `itineraries` has no
+`updated_at` and the page is read-only. `is_public`, `is_bookmarked`,
+`is_archived` and `collection_id` are pinned to their off value: they belong to
+features that left with the old backend, and the card components still take them.
+
+### The first account claims the trips that have no owner, once
+Thirty-seven itineraries were planned before this app had accounts. The first
+sign-up takes them, and **the guard is inside the SQL** —
+`(select count(*) from users) = 1` in the same `update` — because the Neon HTTP
+driver has no read-then-write transaction, the same constraint `saveItinerary`
+documents about itself. Two simultaneous sign-ups: at most one claims.
+
+It is one-shot and spent on first use. **If you create a throwaway account to
+test something, delete it before handing the app over**, or the real first
+sign-up inherits nothing. `itineraries.user_id` is `on delete set null`
+precisely so that undoing this is possible; `travel_personas.user_id` is
+`cascade`, so a deleted account takes its persona with it.
+
+### Mutation-checking with `git checkout --` will eat your work
+The rule in this file says to break a rule and confirm a test goes red. Doing
+that with `git checkout -- <file>` to revert reverts the file to **HEAD**, which
+throws away every real change in it, not just the mutation — and on an untracked
+file it fails outright and leaves the mutation in place. Both happened here.
+Revert with the exact inverse edit instead.
+
+All eight guards in this change are mutation-checked: the two 401 gates, the
+owner check, the one-shot claim, the password length guard, session expiry, the
+logout delete, and the persona being keyed on the user rather than on the id the
+browser sent.
+
+### Travel preferences live on `users.preferences`, and the server owns the derivation
+A jsonb column, not a table: exactly one set per person, no history wanted, and
+`users` is already the per-person row. Same decision as `itineraries.persona`
+being a snapshot rather than a join.
+
+**Only `selectedIds` crosses the wire.** The planner-ready `profile` inside
+`SavedTravelPreferences` is derived by `createSavedPreferences` from the picked
+ids *and* the traveller's persona, and `PUT /api/preferences` rebuilds it on
+every write from its own copy of the persona. So a retuned
+`buildPreferenceProfile`, or a retaken quiz, reaches the stored row instead of
+being frozen at whatever some browser computed on the day. It is the rule
+`POST /api/persona` already keeps about `calculatePersona`, applied a second
+time. A client-sent `profile` is ignored and a test sends one.
+
+An id the registry no longer knows is **dropped, not rejected** — a stale id
+from an older build is a preference that is gone, which is a reason to forget it
+rather than to fail the save and lose the eleven beside it.
+
+**Nothing plans with them yet.** `createItineraryRouted` still sends
+`LOCAL_DEMO_PROFILE`, so `preferences.profile` is computed, stored and read by
+nobody but the profile page's chips. That is the same shape as the Pass C bug
+this file already records — four things written, three rendered nowhere. Moving
+them server-side is what makes the wiring possible; the wiring itself has not
+happened.
+
+### The profile page still keeps two things in `localStorage`, and one is a duplicate
+`argo:profile-banner:` is a cosmetic index and per-browser is defensible.
+
+`argo:persona:` is **not**. It caches a whole `PersonaResult` under the user id
+while `travel_personas` holds the answers server-side, so the profile page can
+show one archetype while the planner uses another — exactly the failure mode
+`src/lib/persona/storage.ts` documents when it explains why the browser holds
+only a pointer: "a cached copy of the scores would quietly out-live a change to
+the scoring tables and there would be no way to tell." `PersonaQuizDialog`
+already POSTs the answers to `/api/persona`; the profile page then writes its
+own second copy. Fixing it needs a `GET /api/persona`, which does not exist.
+
+### PRs merged into a feature branch are not on `main`
+`gh pr view` reports a PR as `MERGED` when it lands in **its own base branch**.
+PR #5 (preferences) targeted `feature/travel-persona` and PR #6 (flights)
+targeted `feature/atlas-flight`; only PR #7 targeted `main`. So for two weeks
+the preferences module was "merged" and absent from every branch anybody worked
+on. Check `baseRefName`, or `git merge-base --is-ancestor`, before assuming a
+merged PR is in the tree.
+
+`feature/atlas-flight` is still unmerged — `/flights`, the seat map and
+`PRODUCT.md` are not on this branch.
+
+### Saved preferences fill `interestOverrides` — the seam that was waiting for them
+`PlanRequest.interestOverrides` has carried a comment since it was added saying
+it is "the named seam for when there is" an interest-picking UI. The preferences
+dialog is that UI. `POST /api/plan` reads `users.preferences` from the session
+and `composeProfile` folds it in, so a picked tag beats the archetype's inferred
+list — the same "a thing the user typed beats a thing the quiz inferred" rule
+the rest of the persona layer keeps.
+
+Three contributions, three different merge rules, and none of them is arbitrary:
+
+- **Interests become overrides.** A picked tag is a stated choice; the
+  archetype's list is an inference.
+- **Dietary is a union, never a replacement.** It is the one hard filter in the
+  funnel, and dropping half of one is how somebody is seated at a steakhouse.
+- **Type affinities merge, strongest opinion per type winning** — the rule
+  `deriveTypeAffinities` already uses to layer answers onto a preset and the one
+  `typeAffinityBonus` uses when a place carries several mapped types. Both maps
+  are on the **same scale** (1.0 neutral, read as an offset), so it is a merge
+  and not a conversion. `buildPreferenceProfile`'s 1.35 is +0.35, inside
+  `TYPE_AFFINITY_MAX`.
+
+**Pace and budget are deliberately not taken from preferences.** Their values in
+`SavedTravelPreferences.profile` are derived from the persona by
+`buildPreferenceProfile`, so reading them would be reading the persona through a
+stale copy — the persona itself is right there, and the trip form beats both.
+
+A traveller with preferences and **no** persona still gets them: routing
+everything through `buildProfile` would drop them silently, because that
+function needs a persona to run at all. There is a test for that path.
+
+**One test here was written vacuous and only a mutation caught it.** The
+registry's first `dietary` entry is literally `vegetarian`, which is also what
+`route.test.ts`'s fixture profile sends — so union and replacement produced the
+identical list and the assertion held whatever the rule said. It now picks a
+need that differs from the form's, on purpose. When testing a merge, make the
+two sides *distinguishable* first.
+
+### The persona is read from the server now, and `localStorage` holds only the pointer
+`GET /api/persona` returns `{ id, answers, result }` and **rebuilds the result
+from the answers**, never from the stored `dimensions` / `archetype` columns —
+which is why `travel_personas` keeps the answers at all. Answers this quiz can
+no longer score read as `null`, not a 500: a row written by an older question
+set is a persona we no longer have, not a server fault.
+
+The profile page used to keep a whole `PersonaResult` in `localStorage` beside
+that row, so it could show one archetype while the planner used another. That is
+precisely the cached copy `src/lib/persona/storage.ts` explains the browser
+avoids. Only `argo:profile-banner:` is left in `localStorage`, and it is a
+cosmetic index.
+
+### A `cafe_break` before lunch used to destroy the whole morning
+`assign.ts` tells Pass B, in as many words, that "a role says what a stop is,
+never when it is — a scheduler stamps the times afterwards." So the model tags a
+coffee shop `cafe_break` because it **is** one, and puts it first in the day
+because that is when you drink coffee. `stampDay` then read the same role as a
+*time*: `DAY_SKELETON` gives `cafe_break` a window of 15:30–17:00 and the open
+end was a hard floor (`start = Math.max(arrival, opens)`), so that cafe could
+not be seated before 15:30, so lunch behind it could not start by 13:30, so
+`blockedBefore` fired and `pickVictim` dropped every stop in front of lunch.
+
+Measured on a live Ubud trip: **nine dropped stops across three days, every one
+of them pre-lunch, and not one stop after lunch dropped on any day.** All three
+days opened at 11:30 with lunch; two of them ended at 19:15 against a 21:00
+limit, having shed three stops each. Replayed with the real coordinates,
+durations and persona knobs, day one reproduces to the minute with the two
+morning cafes tagged `cafe_break` — and keeps all six stops, 09:00 to 20:30,
+with them tagged `activity`.
+
+**Only meals wait now.** A `cafe_break` starts when you arrive, exactly like an
+`activity`. The window still governs `fillIdle`, which is what it was written
+for and what its own doc comment describes: labelling an afternoon lull as a
+coffee, not moving a stop the traveller was given in an order somebody chose.
+The comment beside the old code already claimed "the cafe window is a preference
+that yields" — it yielded at the late end (`start = arrival`) and not at the
+early end, and that asymmetry was the bug.
+
+**Neither Gate A snapshot contains a single assigned `cafe_break`** — the
+harness never emits one — so both fixtures passed whatever this rule said, and
+neither moved when it changed. That is why `pack.test.ts` writes the case out by
+hand, the same reason `taxonomy.test.ts` hand-writes the bare `food_court`
+shape. The invariant suite only window-checks meals, and `admits` in
+`validate.ts` already tests a non-meal replacement against the segment's *real*
+times rather than the nominal window, so nothing else in the tree assumed a cafe
+sat between 15:30 and 17:00.
+
+**A drop now says which of the two things went wrong.** `packDay` stamped
+`OVER_BUDGET_REASON` on every removal, and on that Ubud trip the sentence "over
+budget — no room left in the day" was printed under days ending at 19:15 with a
+two-and-a-half-hour hole in the morning. `blockedMealReason` names the meal and
+its latest start instead; `OVER_BUDGET_REASON` is kept for the days that really
+did run past `dayEndMin`, which on that trip was exactly one of the three. Both
+directions have a test.
+
+### `city` is a string, and a string is not a place — `PlanRequest.base` is
+A live Bali trip planned as `city: "Bali"` came back as three days a province
+apart: Bedugul in the north, Ubud in the middle, Uluwatu on the southern cliffs,
+each about two hours' drive from the next. Nothing was broken. `buildSearchPlan`
+interpolated the word into "specialty coffee Bali", Google answered for an
+island 150 km across, and the themes anchored wherever the pool happened to be.
+`themes.unclaimed` was **215 of 388** — more than half the places we paid for
+sat outside every day's reach.
+
+The coordinate was there the whole time. `NewItineraryModal` runs a Google
+`PlaceAutocomplete` and puts `latitude` / `longitude` on its submit payload;
+`createItineraryRouted` passed them to the blank-itinerary path and **dropped
+them on the planning path**. Same shape as the Pass C bug this file already
+records — collected, carried, read by nobody.
+
+`PlanBase` is `{ latitude, longitude, radiusMeters? }`, defaulting to
+`DEFAULT_BASE_RADIUS_METERS` (25 km — Ubud to Denpasar, and Kyoto is 20 km
+across). Deliberately **not** a persona knob: `walkMaxMeters` answers "how far
+will you walk between two stops", which is a different question, and reading one
+as the other bounds a trip by somebody's tolerance for pavement.
+
+**One radius, used twice, clamped once.** `resolveBase` clamps to
+`NEARBY_MAX_RADIUS_METERS` because `textNearRequest` already clamps its own copy
+— without the same clamp a 200 km request would *search* a 50 km circle and then
+*keep* everything within 200 km, a bound looser than the search it enforces.
+
+- **The circle biases retrieval.** `buildSearchPlan` takes an optional `near`
+  and wraps every query in `textNearRequest`. A bias is not a restriction and
+  that is fine; the pool filter enforces.
+- **`withinReach` in `pipeline.ts` is the enforcement**, applied to the whole
+  pool immediately after retrieval — so a themed `anchorPlaceId`, which must
+  already be an id from the pool, is inside the circle **structurally**. Same
+  kind of guarantee as the hallucination defence, not a sentence in a prompt.
+  Nothing was added to the theme prompt for this and nothing should be.
+- **A place with no coordinates is kept.** Silence is not evidence of distance,
+  `runFunnel` already takes the unlocated as their own bucket, and nothing can
+  seat one on a day anyway.
+- **It returns two lists**, not a filtered one. These are places we paid Google
+  for and then refused; `stats.base.dropped` counts them and `runPlan` warns on
+  the terminal. A high number is not waste to optimise away — it is the
+  measurement saying the search string answers for a wider area than the
+  traveller is in.
+
+**Absent must plan exactly as before, byte for byte.** `buildSearchPlan` with no
+`near` produces identical requests *and identical cache keys* — a stray
+`locationBias` on every text search would orphan every pre-warmed city row at
+once, and nothing would report it: the run would just be slower and cost more.
+`stats.base` is **omitted** rather than zeroed when no base was sent, the same
+rule `StageUsage` keeps. Three tests pin all of it.
+
+The route validates the coordinate rather than passing it through, because it
+reaches `metersBetween` — which answers a *number* for a longitude of 3000. Every
+place would read as out of reach and the trip would come back empty with nothing
+to say why.
+
+**What this does not do**, so nobody assumes it: nothing models where you sleep
+in *time*. There are still no hotel legs at the start and end of a day and no
+travel between days, so a day ending at 21:00 an hour from the base costs
+nothing in the packer. That is the change that touches `pack.ts` and both Gate A
+snapshots, and it has not happened.
+
+### Most stops that go missing were dropped by the packer, and nothing said so
+A live Bali day rendered "kept 4 of 7 offered" with one repair line under it.
+Three stops had vanished and the debug page said nothing whatsoever about them —
+not a name, not a reason, no swap-in. The reasons existed the whole time.
+
+`packDay` cuts a stop when the day runs out of minutes and records it in
+`PackedDay.dropped` with a plain sentence ("over budget — no room left in the
+day"). `validateDay`'s `settle()` merges its own rung-2 cuts into that same list
+on purpose, so a reader never has to know which module removed a stop. Then
+`pipeline.ts` built `SchedulingRecord` from `repairs` and `failures` only and
+threw the list away. The single survivor was `stats.scheduling.dropped` — a
+trip-wide total, which is the "how many, never which" shape `SchedulingRecord`
+was written to replace. The fix landed for repairs and failures and stopped one
+field short.
+
+**A packer cut has no replacement and never will.** `validate.ts` swaps for
+three rules (`closed`, `meal_slot`, `lost_meal`); a cut for time is not one of
+them, because putting a different place in the same slot spends the same
+minutes. `pickVictim` removes and moves on. That is the pace knob working, not a
+failure — but it has to be *visible*, which is the whole of this change.
+
+`SchedulingRecord.dropped` is optional, so an older row reads "not recorded"
+rather than "nothing was dropped". Three chips, not two: `N dropped` when the
+list is non-empty, `drops not recorded` when it is absent and `scheduled <
+offered`, and `clean` only when the day really is. The first version of that
+chain called a day that lost three stops clean.
+
+The **view** dedupes and the record does not. A rung-2 cut is on a repair line
+already as "→ dropped" and is also in `PackedDay.dropped`; printing both reads
+as two stops lost. `cutsOf` filters by name — a repair records the removed stop
+by name, not by id. Keep the stored list complete and decide presentation in the
+component.
+
+This is what bumped `PLANNER_DEBUG_VERSION` to **4**. Two tests pin that literal
+(`pipeline.test.ts`, `route.test.ts`), deliberately. All four new guards are
+mutation-checked.
+
+### `signedIn()` scopes its user ids, and the reason is a bug it already caused
+Every call built a fresh `createInMemoryUserStore` whose id sequence restarts at
+1, so **two travellers in one test shared an id**. That silently turns every
+"somebody else cannot see this" assertion into a comparison of a thing with
+itself. A `GET /api/persona` test caught it by failing; the assertions that
+would have passed anyway are the worry, and there were already several.
+
+Ids are `00000000-0000-4000-8000-{call}{n}` now, still deterministic because the
+counter only moves forward and nothing there reads a clock or a random number.

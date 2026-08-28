@@ -13,7 +13,7 @@
  * personalisation on the next plan, not the screen they are looking at.
  */
 
-import type { QuizAnswers } from "./types";
+import type { QuizAnswers, TravelPersona } from "./types";
 
 /** Namespaced so it is obvious in devtools which app wrote it. */
 export const PERSONA_ID_STORAGE_KEY = "argo.persona.id";
@@ -82,5 +82,29 @@ export async function savePersona(answers: QuizAnswers): Promise<string | undefi
   } catch (error) {
     console.error("[persona] the quiz result could not be saved", error);
     return undefined;
+  }
+}
+
+/**
+ * The signed-in traveller's persona, straight from `GET /api/persona`.
+ *
+ * The profile page used to keep its own `PersonaResult` in `localStorage`
+ * beside the server's row, which is the cached copy the note at the top of this
+ * file says not to keep: it could show one archetype while the planner used
+ * another, and nothing would say so. This is the read that replaced it.
+ *
+ * Returns `null` for signed out, for never having taken the quiz, and for a
+ * failed request alike. All three render as "take the quiz", and a page that
+ * distinguished them would need three empty states for one button.
+ */
+export async function fetchPersona(): Promise<TravelPersona | null> {
+  try {
+    const response = await fetch("/api/persona", { credentials: "same-origin" });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { persona?: TravelPersona | null };
+    return body.persona ?? null;
+  } catch (error) {
+    console.error("[persona] the saved persona could not be read", error);
+    return null;
   }
 }

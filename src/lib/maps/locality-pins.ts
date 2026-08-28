@@ -1,5 +1,4 @@
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
-import type { RawMapLocation } from "@/lib/supabase/queries/map-clusters";
 
 /**
  * Groups saved entities into map PINS by their `"{region}, {country}"` label —
@@ -10,6 +9,20 @@ import type { RawMapLocation } from "@/lib/supabase/queries/map-clusters";
  * over raw coordinates (`src/lib/planner/cluster.ts`) to build neighbourhood
  * clusters; the two must not be confused or shared.
  */
+
+/**
+ * One thing with a place on the map. Declared here, with the function that
+ * consumes it, rather than in whatever module happens to produce it — it used
+ * to live in a Supabase query file, which meant deleting that backend would
+ * have taken the input type of this one with it.
+ */
+export interface RawMapLocation {
+  entityId: string;
+  region: string | null;
+  country: string | null;
+  latitude: number;
+  longitude: number;
+}
 
 export interface LocalityPinResult {
   clusters: MapClusterData[];

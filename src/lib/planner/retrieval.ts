@@ -325,10 +325,28 @@ function normalizeKeyPart(value: string): string {
  * The taxonomy bridge, applied: ~2 text queries per interest plus a row per
  * known dietary need. Deduped by cache key, because a query shared by two
  * interests must be billed once.
+ *
+ * `near` is where the traveller is actually staying. Without it every query is
+ * the city's name and nothing else, and Google answers with whatever is most
+ * prominent *anywhere under that name* — which for "Bali" is an island 150 km
+ * across, and for "specialty coffee Bali" is Kuta and Seminyak whether or not
+ * the traveller is going anywhere near them.
+ *
+ * A bias, not a restriction: Google may still answer with something outside the
+ * circle, and that is fine because `withinReach` in `pipeline.ts` drops it
+ * before it can become a day. Same division of labour the anchored dietary
+ * phrases already keep — the circle shapes the answer, a later stage enforces
+ * it.
+ *
+ * **Omitting `near` must produce exactly what this function produced before it
+ * existed**, request for request and cache key for cache key. A pre-warmed
+ * city's rows are worth real money and a stray `locationBias` on every text
+ * search would orphan all of them. `retrieval.test.ts` pins it.
  */
 export function buildSearchPlan(
   profile: Pick<PreferenceProfile, "interests" | "dietary">,
   city: string,
+  near?: { latitude: number; longitude: number; radiusMeters: number },
 ): SearchRequest[] {
   const queries = [
     ...profile.interests.flatMap((interest) => queriesFor(interest, city)),
@@ -337,7 +355,11 @@ export function buildSearchPlan(
         dietaryBridgeFor(need)?.queries.map((q) => q.replaceAll("{city}", city)) ?? [],
     ),
   ];
-  return dedupeRequests(queries.map((query) => ({ city, query })));
+  return dedupeRequests(
+    queries.map((query) =>
+      near ? textNearRequest(city, query, near, near.radiusMeters) : { city, query },
+    ),
+  );
 }
 
 function dedupeRequests(requests: readonly SearchRequest[]): SearchRequest[] {

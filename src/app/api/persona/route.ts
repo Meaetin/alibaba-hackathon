@@ -21,13 +21,15 @@ import { z } from "zod";
 import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
 import type { QuizAnswers } from "@/lib/persona/types";
 
-import { personaRouteDeps } from "../deps";
+import { personaRouteDeps, userFor } from "../deps";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BAD_REQUEST_MESSAGE = "We couldn't read those quiz answers. Please try again.";
 const SAVE_FAILED_MESSAGE = "We couldn't save your travel persona. Please try again.";
+const SIGNED_OUT_MESSAGE = "Please sign in to see your travel persona.";
+const READ_FAILED_MESSAGE = "We couldn't load your travel persona. Please try again.";
 
 /**
  * Shape only. Whether each index names a real option is `isScorableAnswers`'
@@ -38,6 +40,44 @@ const PersonaRequestSchema = z.object({
   answers: z.array(z.union([z.number().int().nonnegative(), z.null()])),
   id: z.string().uuid().optional(),
 });
+
+/**
+ * `GET /api/persona` — the signed-in traveller's persona, or `null`.
+ *
+ * It exists so the profile page can stop keeping its own copy. That copy was a
+ * whole `PersonaResult` in `localStorage`, which meant the page could show one
+ * archetype while the planner used another — exactly what
+ * `src/lib/persona/storage.ts` explains the browser holds only a pointer to
+ * avoid: "a cached copy of the scores would quietly out-live a change to the
+ * scoring tables and there would be no way to tell."
+ *
+ * **The result is rebuilt from the stored answers, never read from the derived
+ * columns.** Same rule `POST /api/plan` follows, and the reason `travel_personas`
+ * keeps the answers at all: a retuned `calculatePersona` has to reach every
+ * traveller without re-asking anyone twelve questions.
+ *
+ * Answers this quiz cannot score read as `null` rather than 500 — that is a row
+ * written by an older question set, which is a persona we no longer have, not a
+ * server fault.
+ */
+export async function GET(request: Request): Promise<Response> {
+  const deps = personaRouteDeps.create();
+  const user = await userFor(request, deps);
+  if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
+
+  try {
+    const row = await deps.personas.getByUser(user.id);
+    if (!row || !isScorableAnswers(row.answers)) {
+      return Response.json({ persona: null });
+    }
+    return Response.json({
+      persona: { id: row.id, answers: row.answers, result: calculatePersona(row.answers) },
+    });
+  } catch (error) {
+    console.error("[GET /api/persona] the persona could not be read", error);
+    return Response.json({ error: READ_FAILED_MESSAGE }, { status: 500 });
+  }
+}
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -62,10 +102,18 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const deps = personaRouteDeps.create();
+
+  // The quiz itself is open to anyone — this is where the answers get a row, and
+  // a row belongs to somebody. A signed-out traveller keeps their result on the
+  // screen they are looking at; they just cannot store it yet.
+  const user = await userFor(request, deps);
+  if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
+
   const result = calculatePersona(answers);
 
   try {
     const row = await deps.personas.upsert({
+      userId: user.id,
       id: parsed.data.id,
       answers,
       dimensions: result.dimensions,

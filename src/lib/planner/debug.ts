@@ -21,7 +21,7 @@
  */
 
 /** Bumped when the shape below changes. Read it before trusting an old row. */
-export const PLANNER_DEBUG_VERSION = 3;
+export const PLANNER_DEBUG_VERSION = 4;
 
 /**
  * One stop, and why Pass B put it there.
@@ -138,6 +138,29 @@ export interface SchedulingRepair {
   reason: string;
 }
 
+/**
+ * One stop that was removed from a day, and why.
+ *
+ * This is the answer to "why isn't teamLab in my trip". Most removals are not
+ * repairs: `packDay` cuts a stop when the day runs out of minutes, and a swap
+ * cannot fix that — putting a different place in the same slot spends the same
+ * minutes — so there is nothing for `SchedulingRepair` to record. A live Bali
+ * day shipped 4 of 7 offered with one swap, and the three stops that actually
+ * went missing left no trace on the debug page at all.
+ *
+ * `validateDay` already merges the packer's cuts and its own into one list on
+ * `PackedDay.dropped`, precisely so a reader does not have to know which module
+ * removed a stop. This field is that list, kept rather than counted:
+ * `stats.scheduling.dropped` is a trip-wide total and can never say which day,
+ * which stop, or why.
+ */
+export interface SchedulingDrop {
+  placeId: string;
+  name: string;
+  /** Plain enough to show a traveller — "over budget", a closure, a rule. */
+  reason: string;
+}
+
 /** One thing still wrong with a day after repair gave up. */
 export interface SchedulingFailure {
   rule: string;
@@ -160,6 +183,14 @@ export interface SchedulingRecord {
   scheduled: number;
   repairs: SchedulingRepair[];
   failures: SchedulingFailure[];
+  /**
+   * Every stop removed from this day, packer cuts included.
+   *
+   * Optional so a plan made before it existed reads as "not recorded" rather
+   * than "nothing was dropped" — the same three-way read `ThemeAttempt` and
+   * `SequencingRecord` keep, and for the same reason.
+   */
+  dropped?: SchedulingDrop[];
 }
 
 /** One id Pass B named that never became a stop, worded for a person. */

@@ -290,6 +290,20 @@ export interface PackedDay {
  */
 export const MEAL_MAX_MINUTES = 75;
 
+/**
+ * Minutes from midnight as a 24-hour clock face.
+ *
+ * Here rather than in `validate.ts` — where it used to live and is still
+ * re-exported from — because this is the only module that stamps a clock, and
+ * it now has to *say* one: a stop dropped for blocking lunch names the meal and
+ * the time it had to start by. Note `toHHMM` in `utils/calendar.ts` takes
+ * fractional **hours**; a different unit, not a duplicate.
+ */
+export function hhmm(minutes: number): string {
+  const clamped = ((minutes % 1440) + 1440) % 1440;
+  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+}
+
 export function travelModeForMeters(meters: number, walkMaxMeters = WALK_MAX_METERS): TravelMode {
   return meters < walkMaxMeters ? "walk" : "transit";
 }
@@ -346,6 +360,22 @@ interface EffectivePlan extends PacePlan {
 const OVER_BUDGET_REASON = "over budget — no room left in the day";
 
 /**
+ * Why a stop was cut to save a meal, in the traveller's own words.
+ *
+ * The packer drops for two unrelated reasons and used to stamp
+ * `OVER_BUDGET_REASON` on both. On a live Ubud trip that sentence was false on
+ * two days out of three: they ended at 19:15 against a 21:00 limit with a
+ * two-and-a-half-hour hole in the morning, and had shed three stops apiece.
+ * They were not out of room. Lunch could not be seated by 13:30 with those
+ * stops in front of it, which is a different problem with a different fix, and
+ * one sentence for both is how it stayed invisible.
+ */
+function blockedMealReason(meal: Stop): string {
+  const [, latestStart] = SLOT_WINDOWS[meal.role as DaySlot["role"]];
+  return `${meal.role} could not start by ${hhmm(latestStart)} with this in front of it`;
+}
+
+/**
  * Stamps one day. The degradation ladder, in order, because the order is the
  * whole point:
  *
@@ -382,7 +412,14 @@ export function packDay(
     if (outcome.segments) return { segments: outcome.segments, dropped };
 
     const victim = pickVictim(stops, outcome.blockedBefore, outcome.overrunFrom);
-    dropped.push(drop(victim, OVER_BUDGET_REASON));
+    dropped.push(
+      drop(
+        victim,
+        outcome.blockedBefore === undefined
+          ? OVER_BUDGET_REASON
+          : blockedMealReason(stops[outcome.blockedBefore]),
+      ),
+    );
     stops = stops.filter((stop) => stop !== victim);
   }
 
@@ -724,17 +761,26 @@ function stampDay(
       arrival = cursor + length;
     }
 
+    // **Only meals wait.** A `cafe_break` used to wait for `SLOT_WINDOWS` too,
+    // and that one `Math.max` destroyed the morning of every day Pass B opened
+    // with a coffee. Pass B is told in `assign.ts` that "a role says what a stop
+    // is, never when it is", so it tags a coffee shop `cafe_break` because it is
+    // one and puts it first because that is when you drink coffee — and the
+    // packer then refused to seat it before 15:30, which made lunch behind it
+    // impossible before 13:30, which set `blockedBefore`, which dropped the
+    // whole morning. Measured on a live Ubud trip: nine dropped stops across
+    // three days, every one of them pre-lunch, and not one stop after lunch
+    // dropped on any day. The cafe window still governs `fillIdle` below, which
+    // is what it was written for — labelling an afternoon lull, not moving a
+    // stop the traveller was given in an order somebody chose.
     let start = arrival;
-    if (stop.role !== "activity") {
+    if (isMealRole(stop.role)) {
       const [opens, latestStart] = SLOT_WINDOWS[stop.role];
       start = Math.max(arrival, opens);
-      // Meal windows are hard; the cafe window is a preference that yields.
       // Report *which* stop could not be seated. A meal is late because of what
       // runs before it, and the caller needs that index to drop something that
       // can actually help — see `pickVictim`.
-      if (isMealRole(stop.role) && start > latestStart)
-        return { segments, feasible: false, blockedBefore: index };
-      if (!isMealRole(stop.role) && start > latestStart) start = arrival;
+      if (start > latestStart) return { segments, feasible: false, blockedBefore: index };
       // Idle time in front of a window is slack this stop swallowed whole:
       // nothing before it can move the rest of the day one minute earlier.
       if (start > arrival) overrunFrom = index;

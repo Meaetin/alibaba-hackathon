@@ -20,7 +20,8 @@ import { useRecentlyViewedQuery } from "@/hooks/queries/useRecentlyViewedQuery";
 import { useSearchQuery } from "@/hooks/queries/useSearchQuery";
 import { useEntityLocationsQuery } from "@/hooks/queries/useEntityLocationsQuery";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { signOut } from "@/lib/api/auth";
+import { queryClient } from "@/lib/query/queryClient";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
 import {
   Menu,
@@ -202,9 +203,11 @@ function Navbar({
   }, []);
 
   const handleSignOut = useCallback(async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/home");
+    await signOut();
+    // Clearing the cache is what makes every component re-read "signed out";
+    // the session query is shared and would otherwise still hold the old user.
+    queryClient.clear();
+    router.push("/login");
   }, [router]);
 
   const handleCloseSearch = useCallback(() => {

@@ -188,7 +188,7 @@ describe("PlannerDebugView — scheduling", () => {
       diagnostics({
         debug: debugRecord({
           scheduling: [
-            { dayIndex: 0, areaName: "Civic Arts", offered: 6, scheduled: 5, repairs: [], failures: [] },
+            { dayIndex: 0, areaName: "Civic Arts", offered: 5, scheduled: 5, repairs: [], failures: [], dropped: [] },
             {
               dayIndex: 2,
               areaName: "Treetops and Reservoir Trails",
@@ -216,6 +216,85 @@ describe("PlannerDebugView — scheduling", () => {
     expect(html).toContain("travel ate the window");
     // A clean day must not borrow the empty day's alarm.
     expect(html).toContain("clean");
+  });
+
+  // The three stops nobody could explain. A day that reads "kept 4 of 7" with
+  // one repair line has lost two more, and until this list was carried the page
+  // said nothing at all about them — `packDay` cuts for time and has no swap-in
+  // to record, so there is no repair line for it to appear on.
+  it("names every stop a day dropped, and why", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          scheduling: [
+            {
+              dayIndex: 1,
+              areaName: "Bedugul Market Highlands",
+              offered: 7,
+              scheduled: 4,
+              repairs: [
+                { rule: "closed", role: "cafe_break", removed: "Hot Sugar Cafe", inserted: "Restaurant Ulun Danu", reason: "closed during its 16:25-17:55 slot" },
+              ],
+              failures: [],
+              dropped: [
+                { placeId: "place-p", name: "Handara Gate", reason: "over budget — no room left in the day" },
+                { placeId: "place-q", name: "Jatiluwih Terraces", reason: "over budget — no room left in the day" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    expect(html).toContain("Handara Gate");
+    expect(html).toContain("Jatiluwih Terraces");
+    expect(html).toContain("no room left in the day");
+    expect(html).toContain("2 dropped");
+  });
+
+  // A rung-2 cut is on the repair line already, as "→ dropped". `validateDay`
+  // merges it into `PackedDay.dropped` alongside the packer's, which is right
+  // for the record and wrong to print twice — two lines read as two lost stops.
+  it("does not list a validator's cut twice", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          scheduling: [
+            {
+              dayIndex: 0,
+              areaName: "Ubud Temple and Table",
+              offered: 6,
+              scheduled: 5,
+              repairs: [
+                { rule: "closed", role: "activity", removed: "Goa Gajah", inserted: null, reason: "closed during its slot" },
+              ],
+              failures: [],
+              dropped: [
+                { placeId: "place-g", name: "Goa Gajah", reason: "closed during its slot" },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+    expect(html.split("Goa Gajah").length - 1).toBe(1);
+    expect(html).toContain("1 repaired");
+    expect(html).not.toContain("1 dropped");
+  });
+
+  // An older row and a genuinely clean day are different answers, and calling
+  // the first one clean is the lie this whole page exists to avoid.
+  it("says drops were not recorded rather than calling the day clean", () => {
+    const html = render(
+      diagnostics({
+        debug: debugRecord({
+          scheduling: [
+            { dayIndex: 0, areaName: "Ubud", offered: 6, scheduled: 4, repairs: [], failures: [] },
+          ],
+        }),
+      }),
+    );
+    expect(html).toContain("drops not recorded");
+    expect(html).not.toContain("clean");
   });
 });
 

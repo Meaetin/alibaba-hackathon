@@ -13,29 +13,34 @@ import { createInMemoryPersonaStore } from "@/lib/db/personas";
 import { calculatePersona, QUESTIONS } from "@/lib/persona/quiz";
 
 import { personaRouteDeps } from "../deps";
-import { POST } from "./route";
+import { signedIn } from "../session-fixture";
+import { GET, POST } from "./route";
 
 const NOW = new Date("2026-08-25T09:00:00.000Z");
 const LATER = new Date("2026-08-26T09:00:00.000Z");
 
 const originalCreate = personaRouteDeps.create;
 
+/** Rebuilt per install, so each test gets a fresh account and session. */
+let session: Awaited<ReturnType<typeof signedIn>>;
+
 /** Every question answered with its first option. */
 const FIRST_OPTIONS = Array(QUESTIONS.length).fill(0);
 /** Every question answered with its last option — a different persona. */
 const LAST_OPTIONS = QUESTIONS.map((question) => question.options.length - 1);
 
-function install(now: Date = NOW) {
+async function install(now: Date = NOW) {
   const personas = createInMemoryPersonaStore();
-  personaRouteDeps.create = () => ({ personas, now: () => now });
+  session = await signedIn({ now });
+  personaRouteDeps.create = () => ({ personas, users: session.users, now: () => now });
   return personas;
 }
 
-function post(body: unknown): Promise<Response> {
+function post(body: unknown, cookie: string = session.cookie): Promise<Response> {
   return POST(
     new Request("http://localhost/api/persona", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(body),
     }),
   );
@@ -48,7 +53,7 @@ afterEach(() => {
 
 describe("POST /api/persona", () => {
   it("stores the answers and the derivation, and returns only the id", async () => {
-    const personas = install();
+    const personas = await install();
 
     const response = await post({ answers: FIRST_OPTIONS });
     expect(response.status).toBe(200);
@@ -66,16 +71,16 @@ describe("POST /api/persona", () => {
   });
 
   it("keeps the reply to the id — the client already has the result", async () => {
-    install();
+    await install();
     const body = (await (await post({ answers: FIRST_OPTIONS })).json()) as Record<string, unknown>;
     expect(Object.keys(body)).toEqual(["id"]);
   });
 
   it("rewrites the same row on a retake, keeping the id and created_at", async () => {
-    const personas = install();
+    const personas = await install();
     const first = (await (await post({ answers: FIRST_OPTIONS })).json()) as { id: string };
 
-    personaRouteDeps.create = () => ({ personas, now: () => LATER });
+    personaRouteDeps.create = () => ({ personas, users: session.users, now: () => LATER });
     const second = (await (await post({ answers: LAST_OPTIONS, id: first.id })).json()) as {
       id: string;
     };
@@ -91,7 +96,7 @@ describe("POST /api/persona", () => {
   });
 
   it("keeps a client pointer valid when its row is gone", async () => {
-    const personas = install();
+    const personas = await install();
     const orphan = "11111111-2222-4333-8444-555555555555";
 
     const body = (await (await post({ answers: FIRST_OPTIONS, id: orphan })).json()) as {
@@ -105,7 +110,7 @@ describe("POST /api/persona", () => {
   });
 
   it("rejects an option index the quiz does not have, without throwing", async () => {
-    install();
+    await install();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
     // One past the end of question one. `scoreAnswers` indexes straight into
@@ -120,13 +125,13 @@ describe("POST /api/persona", () => {
   });
 
   it("rejects an answer array that is not the length of the quiz", async () => {
-    install();
+    await install();
     vi.spyOn(console, "error").mockImplementation(() => {});
     expect((await post({ answers: [0, 1, 2] })).status).toBe(400);
   });
 
   it("accepts a partly answered quiz — an unanswered question just scores nothing", async () => {
-    const personas = install();
+    const personas = await install();
     const partial = [...FIRST_OPTIONS];
     partial[3] = null;
 
@@ -134,13 +139,39 @@ describe("POST /api/persona", () => {
     expect((await personas.get(body.id))?.answers).toEqual(partial);
   });
 
+  it("refuses to store a persona for a signed-out caller", async () => {
+    const personas = await install();
+    const response = await post({ answers: FIRST_OPTIONS }, "");
+
+    expect(response.status).toBe(401);
+    // A row has to belong to somebody. The quiz result still renders on the
+    // screen the traveller is looking at; it just has nowhere to live yet.
+    expect(personas.rows.size).toBe(0);
+  });
+
+  it("keys the row on the traveller, not on the id the browser sent", async () => {
+    const personas = await install();
+    // A stale pointer from another browser must not be able to name the row
+    // this traveller's answers land in.
+    const first = (await (await post({ answers: FIRST_OPTIONS }))).json() as Promise<{ id: string }>;
+    const { id } = await first;
+
+    await post({ answers: LAST_OPTIONS, id: "99999999-8888-4777-8666-555555555555" });
+
+    expect(personas.rows.size).toBe(1);
+    expect((await personas.get(id))?.answers).toEqual(LAST_OPTIONS);
+    expect((await personas.getByUser(session.user.id))?.id).toBe(id);
+  });
+
   it("turns a store failure into a sentence, not a stack trace", async () => {
     const personas = createInMemoryPersonaStore();
+    session = await signedIn();
     personaRouteDeps.create = () => ({
       personas: {
         ...personas,
         upsert: () => Promise.reject(new Error('relation "travel_personas" does not exist')),
       },
+      users: session.users,
       now: () => NOW,
     });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -150,6 +181,109 @@ describe("POST /api/persona", () => {
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/travel persona/);
     expect(body.error).not.toMatch(/relation/);
+    expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/persona", () => {
+  function get(cookie: string | null = session.cookie): Promise<Response> {
+    return GET(
+      new Request("http://localhost/api/persona", {
+        headers: cookie ? { cookie } : {},
+      }),
+    );
+  }
+
+  it("answers null when the traveller has never taken the quiz", async () => {
+    await install();
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persona: null });
+  });
+
+  it("returns the answers and the result built from them", async () => {
+    await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    const body = (await (await get()).json()) as {
+      persona: { answers: unknown; result: { archetype: { id: string } } };
+    };
+    expect(body.persona.answers).toEqual(FIRST_OPTIONS);
+    expect(body.persona.result.archetype.id).toBe(
+      calculatePersona(FIRST_OPTIONS).archetype.id,
+    );
+  });
+
+  it("rebuilds the result from the answers, not from the stored columns", async () => {
+    // The reason `travel_personas` keeps the answers at all: a retuned
+    // `calculatePersona` has to reach every traveller without re-asking anyone
+    // twelve questions. Storing deliberately wrong scores proves the read
+    // ignores them.
+    const personas = await install();
+    await personas.upsert({
+      userId: session.user.id,
+      answers: FIRST_OPTIONS,
+      dimensions: { structure: 0, comfort: 0, focus: 0, social: 0 },
+      // A lie, and it has to be a lie that differs from the truth:
+      // FIRST_OPTIONS really does score `weekend_warrior`, so using that as the
+      // fake proved nothing. The guard below is what caught it.
+      archetype: "soulful_soloist",
+      now: NOW,
+    });
+
+    const body = (await (await get()).json()) as {
+      persona: { result: { dimensions: unknown; archetype: { id: string } } };
+    };
+    const expected = calculatePersona(FIRST_OPTIONS);
+    expect(expected.archetype.id).not.toBe("soulful_soloist");
+    expect(body.persona.result.dimensions).toEqual(expected.dimensions);
+    expect(body.persona.result.archetype.id).toBe(expected.archetype.id);
+  });
+
+  it("reads null for answers this quiz can no longer score", async () => {
+    // A row written by an older question set is a persona we no longer have,
+    // not a server fault.
+    const personas = await install();
+    await personas.upsert({
+      userId: session.user.id,
+      answers: [0, 0],
+      dimensions: { structure: 50, comfort: 50, focus: 50, social: 50 },
+      archetype: "weekend_warrior",
+      now: NOW,
+    });
+
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persona: null });
+  });
+
+  it("answers 401 when signed out", async () => {
+    await install();
+    expect((await get(null)).status).toBe(401);
+  });
+
+  it("never returns another traveller's persona", async () => {
+    const personas = await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    const other = await signedIn({ email: "other@example.com", token: "other-token" });
+    personaRouteDeps.create = () => ({ personas, users: other.users, now: () => NOW });
+
+    expect(await (await get(other.cookie)).json()).toEqual({ persona: null });
+  });
+
+  it("turns a store failure into a sentence, not a stack trace", async () => {
+    const personas = await install();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    personaRouteDeps.create = () => ({
+      personas: { ...personas, getByUser: () => Promise.reject(new Error('relation "x" gone')) },
+      users: session.users,
+      now: () => NOW,
+    });
+
+    const response = await get();
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toMatch(/relation/);
     expect(errors).toHaveBeenCalled();
   });
 });

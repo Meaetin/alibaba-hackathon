@@ -1,5 +1,3 @@
-import { createClient } from '@/lib/supabase/client'
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
 
 export type ApiError = Error & { status: number }
@@ -45,41 +43,30 @@ export class LinkQuotaError extends Error {
   }
 }
 
-async function getAuthToken(): Promise<string | null> {
-  const supabase = createClient()
-  const { data, error } = await supabase.auth.getSession()
-
-  if (error || !data.session) {
-    return null
-  }
-
-  return data.session.access_token
-}
-
+/**
+ * A request to the old REST backend on `NEXT_PUBLIC_API_URL`.
+ *
+ * **That backend is gone, so every call through here fails.** It is kept, and
+ * kept honest, because roughly forty call sites across the ported UI still
+ * point at it and deleting them is a separate job from adding auth. See
+ * `AGENTS.md`: `src/lib/api/**` is the named seam for a new backend.
+ *
+ * It used to attach a Supabase JWT as a bearer token. Supabase is gone from
+ * this project; the session is now an httpOnly cookie, which the browser
+ * attaches on its own for a same-origin request. When `NEXT_PUBLIC_API_URL`
+ * points somewhere else — which is its whole purpose — the cookie is not sent
+ * and the request is anonymous. That is a real limitation of this seam and the
+ * reason a new backend belongs behind `src/app/api/`, not behind this.
+ */
 export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = await getAuthToken()
-  if (!token) {
-    const err = new Error('Not authenticated') as ApiError
-    err.status = 401
-    throw err
+  const headers = new Headers(options.headers)
+  if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
   }
 
-  try {
-    const headers = new Headers(options.headers)
-    if (!(options.body instanceof FormData) && !headers.has('Content-Type')) {
-      headers.set('Content-Type', 'application/json')
-    }
-    headers.set('Authorization', `Bearer ${token}`)
-
-    return await fetch(`${API_URL}${path}`, {
-      ...options,
-      headers,
-    })
-  } catch (err) {
-    // The API being unreachable never produces a Response, so `ensureOk` would
-    // never see it. Status 0 marks a transport failure rather than an HTTP one.
-    throw err
-  }
+  // The API being unreachable never produces a Response, so `ensureOk` would
+  // never see it — the rejection propagates to the caller instead.
+  return fetch(`${API_URL}${path}`, { ...options, headers, credentials: 'same-origin' })
 }
 
 /**

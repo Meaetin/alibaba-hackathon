@@ -6,7 +6,7 @@ import { trackPlacePhoto } from "@/lib/api/maps";
 import { humanizePlaceType } from "@/lib/utils/formatters";
 import { formatDisplayUrl, weekdayDescriptionsFrom } from "@/lib/utils/location-detail";
 import type { PlaceSearchResult } from "@/lib/maps/place-search";
-import type { ActivityLocation } from "@/lib/supabase/queries/home";
+import type { ActivityLocationDetail as ActivityLocation } from "@/lib/db/itinerary-detail";
 
 /** Normalized place "view" rendered by PlaceDetailsBlock. The two adapters
  *  (`placeSearchResultToPlaceView`, `activityLocationToPlaceView`) produce this

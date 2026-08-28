@@ -57,6 +57,20 @@
       "when": 1787723856617,
       "tag": "0007_robust_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787898113761,
+      "tag": "0008_strong_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787900315583,
+      "tag": "0009_faithful_doctor_strange",
+      "breakpoints": true
     }
   ]
 }
