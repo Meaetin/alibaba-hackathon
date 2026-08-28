@@ -275,9 +275,9 @@ const MIN_INTERESTS = 3;
  */
 const MAX_INTERESTS = 5;
 
-/** `{question label} {option title}` → signal. Built once. */
+/** `{question label}\u0000{option title}` → signal. Built once. */
 const SIGNALS_BY_ANSWER = new Map<string, AnswerSignal>(
-  ANSWER_SIGNALS.map((signal) => [`${signal.question} ${signal.option}`, signal]),
+  ANSWER_SIGNALS.map((signal) => [`${signal.question}\u0000${signal.option}`, signal]),
 );
 
 /** The signals for the options this traveller actually chose. */
@@ -287,7 +287,7 @@ export function signalsFor(answers: QuizAnswers | undefined): AnswerSignal[] {
     const chosen = answers[index];
     if (chosen == null || chosen < 0 || chosen >= question.options.length) return [];
     const signal = SIGNALS_BY_ANSWER.get(
-      `${question.label} ${question.options[chosen].title}`,
+      `${question.label}\u0000${question.options[chosen].title}`,
     );
     return signal ? [signal] : [];
   });
