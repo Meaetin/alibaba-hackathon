@@ -16,8 +16,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createInMemoryPlanStore, type JobRow, type PlanStore } from '@/lib/db/itineraries'
+import {
+  createInMemoryPlanStore,
+  type JobRow,
+  type PlanStore,
+  type SavedItinerary,
+} from '@/lib/db/itineraries'
 import { createInMemoryPersonaStore } from '@/lib/db/personas'
+import { createSavedPreferences, PREFERENCE_REGISTRY } from '@/lib/preferences/registry'
 import { QUESTIONS, calculatePersona } from '@/lib/persona/quiz'
 import type { QuizAnswers } from '@/lib/persona/types'
 import type { JobProgress } from '@/lib/db/schema'
@@ -433,6 +439,104 @@ describe('POST /api/plan', () => {
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
     expect(harness.store.saved[0].itinerary.persona).toBeNull()
+  })
+
+  describe('saved travel preferences reach the trip', () => {
+    /** Saves preferences the way `PUT /api/preferences` does, then plans. */
+    async function planWithPreferences(
+      harness: Harness,
+      selectedIds: readonly string[],
+    ): Promise<SavedItinerary> {
+      await harness.session.users.writePreferences({
+        userId: harness.session.user.id,
+        preferences: createSavedPreferences(selectedIds, [], undefined, null, NOW),
+        now: NOW,
+      })
+      const job = (await (await post()).json()) as JobRow
+      await settled(harness.store, job.id)
+      return harness.store.saved[0]
+    }
+
+    it('replaces the demo placeholder interests with the picked ones', async () => {
+      // The whole point. Without the wiring the trip plans from
+      // LOCAL_DEMO_PROFILE and every traveller gets the same interests.
+      const harness = await install()
+      const saved = await planWithPreferences(harness, ['museums'])
+
+      expect(saved.itinerary.profile.interests).toEqual(['museums'])
+      expect(saved.itinerary.profile.interests).not.toEqual(PROFILE.interests)
+    })
+
+    it('carries the picked type affinities onto the trip', async () => {
+      const harness = await install()
+      const saved = await planWithPreferences(harness, ['museums'])
+      // 1.0 is neutral on this scale, so a stored 1.35 is a real opinion.
+      expect(saved.itinerary.profile.typeAffinities?.museum).toBeGreaterThan(1)
+    })
+
+    it('unions dietary with the form rather than replacing it', async () => {
+      // Dietary is the one hard filter in the funnel. Dropping half of one is
+      // how somebody vegetarian is seated at a steakhouse.
+      //
+      // The picked need must **differ** from the form's, or union and
+      // replacement produce the same list and the assertion proves nothing.
+      // The registry's first dietary entry is literally `vegetarian`, which is
+      // also what PROFILE sends — a mutation caught this test passing with the
+      // union deleted.
+      const harness = await install()
+      const dietaryId = PREFERENCE_REGISTRY.find(
+        (p) => p.category === 'dietary' && !PROFILE.dietary.includes(p.id),
+      )?.id
+      expect(dietaryId).toBeDefined()
+
+      const saved = await planWithPreferences(harness, [dietaryId!])
+      expect(saved.itinerary.profile.dietary).toContain(dietaryId)
+      for (const need of PROFILE.dietary) {
+        expect(saved.itinerary.profile.dietary).toContain(need)
+      }
+    })
+
+    it('lets the persona and the picks both reach one trip', async () => {
+      // Two sources, one profile: the persona still supplies pace and budget
+      // while the picks supply the interests. If either half stops arriving
+      // this is the assertion that notices.
+      const harness = await install()
+      await harness.personas.upsert({
+        userId: harness.session.user.id,
+        answers: QUIZ_ANSWERS_LAST,
+        dimensions: calculatePersona(QUIZ_ANSWERS_LAST).dimensions,
+        archetype: calculatePersona(QUIZ_ANSWERS_LAST).archetype.id,
+        now: NOW,
+      })
+      const saved = await planWithPreferences(harness, ['museums'])
+
+      expect(saved.itinerary.profile.interests).toEqual(['museums'])
+      expect(saved.itinerary.persona?.answers).toEqual(QUIZ_ANSWERS_LAST)
+      expect(saved.itinerary.profile.typeAffinities?.museum).toBeGreaterThan(1)
+    })
+
+    it('plans exactly as before for a traveller who has set none', async () => {
+      // The no-preferences path must not move, or every existing trip changes.
+      const harness = await install()
+      const job = (await (await post()).json()) as JobRow
+      await settled(harness.store, job.id)
+      expect(harness.store.saved[0].itinerary.profile.interests).toEqual(PROFILE.interests)
+    })
+
+    it('plans without them when they cannot be read', async () => {
+      const harness = await install()
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const original = harness.session.users.readPreferences
+      harness.session.users.readPreferences = () => Promise.reject(new Error('column gone'))
+
+      const job = (await (await post()).json()) as JobRow
+      const finished = await settled(harness.store, job.id)
+
+      // Losing personalisation must never cost the trip.
+      expect(finished.status).toBe('completed')
+      expect(errors).toHaveBeenCalled()
+      harness.session.users.readPreferences = original
+    })
   })
 
   it('builds the profile from the persona, and two travellers differ', async () => {

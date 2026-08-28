@@ -32,6 +32,7 @@ import { buildProfile } from "@/lib/persona/profile";
 import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
 import type { TravelPersona } from "@/lib/persona/types";
 import type { Interest, PreferenceProfile } from "@/lib/planner/types";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
 import {
   completedProgress,
   stageOutlook,
@@ -147,10 +148,13 @@ export async function POST(request: Request): Promise<Response> {
   if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
 
   const { interestOverrides, ...trip } = parsed.data;
-  const persona = await resolvePersona(user.id, deps);
+  const [persona, preferences] = await Promise.all([
+    resolvePersona(user.id, deps),
+    resolvePreferences(user.id, deps),
+  ]);
   const planRequest: PlanRequest = {
     ...trip,
-    profile: composeProfile(trip.profile, persona, interestOverrides),
+    profile: composeProfile(trip.profile, persona, interestOverrides, preferences),
     ...(persona ? { persona } : {}),
   };
 
@@ -200,6 +204,26 @@ async function resolvePersona(
 }
 
 /**
+ * The traveller's saved travel preferences, or `undefined`.
+ *
+ * **Preferences that cannot be read plan without them**, the same supported
+ * path as an absent persona: losing personalisation is not worth losing the
+ * trip, and a traveller who has set none is the ordinary case, not a degraded
+ * one. Logged, never surfaced.
+ */
+async function resolvePreferences(
+  userId: string,
+  deps: PlanRouteDeps,
+): Promise<SavedTravelPreferences | undefined> {
+  try {
+    return (await deps.users.readPreferences(userId)) ?? undefined;
+  } catch (error) {
+    console.error(`[POST /api/plan] the preferences for ${userId} could not be read`, error);
+    return undefined;
+  }
+}
+
+/**
  * The submitted form and the resolved persona, combined into the profile the
  * pipeline plans from.
  *
@@ -221,27 +245,102 @@ async function resolvePersona(
  * archetype only topping up what they left unsaid — passing `persona.result`
  * alone silently falls back to archetype-only tastes, which is the failure
  * documented at the top of `profile.ts`.
+ *
+ * ## Saved preferences are the interest-picking UI this always expected
+ *
+ * `interestOverrides` has carried a comment since it was added saying it is
+ * "the named seam for when there is" an interest-picking UI. The preferences
+ * dialog is that UI, so a traveller's saved picks fill the seam rather than a
+ * second mechanism being invented beside it. A caller that names overrides
+ * explicitly still wins — nothing does today, but the parameter is public.
+ *
+ * The three things preferences contribute, and why each lands where it does:
+ *
+ * - **Interests** become overrides, because a picked tag is a stated choice
+ *   and the archetype's list is an inference. Same rule as everywhere here.
+ * - **Dietary is a union, never a replacement.** It is the one hard filter in
+ *   the funnel, and dropping half of one is how somebody is seated at a
+ *   steakhouse. The trip form and the saved set are both statements of need.
+ * - **Type affinities merge, strongest opinion per type winning**, which is
+ *   `deriveTypeAffinities`' rule and `typeAffinityBonus`' rule already. Both
+ *   maps are on the same scale — 1.0 neutral, read as an offset — so this is a
+ *   merge and not a conversion.
+ *
+ * Pace and budget are deliberately **not** taken from preferences. Their values
+ * there are derived from the persona by `buildPreferenceProfile`, so taking
+ * them would be reading the persona through a stale copy; the persona itself is
+ * right here, and the trip form beats both anyway.
  */
 function composeProfile(
   submitted: PreferenceProfile,
   persona: TravelPersona | undefined,
   interestOverrides: Interest[] | undefined,
+  preferences: SavedTravelPreferences | undefined,
 ): PreferenceProfile {
-  if (!persona) return submitted;
-  return buildProfile(
+  const picked = preferences?.profile;
+  const dietary = [...new Set([...submitted.dietary, ...(picked?.dietary ?? [])])];
+  const overrides =
+    interestOverrides ?? (picked?.interests.length ? picked.interests : undefined);
+
+  // No persona: the submitted profile passes through as it always did, with the
+  // saved picks layered on. A traveller who set preferences but skipped the
+  // quiz must still get them — routing everything through `buildProfile` would
+  // silently drop them, because that function needs a persona to run at all.
+  if (!persona) {
+    return {
+      ...submitted,
+      dietary,
+      ...(overrides ? { interests: overrides } : {}),
+      ...(picked?.typeAffinities
+        ? { typeAffinities: mergeAffinities(submitted.typeAffinities, picked.typeAffinities) }
+        : {}),
+    };
+  }
+
+  const composed = buildProfile(
     persona.result,
     {
       // `buildProfile` takes these for symmetry with the bridge doc; nothing in
       // the profile it returns reads either.
       city: "",
       totalDays: 0,
-      dietary: submitted.dietary,
+      dietary,
       pace: submitted.pace,
       budget: submitted.budget,
-      ...(interestOverrides ? { interestOverrides } : {}),
+      ...(overrides ? { interestOverrides: overrides } : {}),
     },
     persona.answers,
   );
+
+  if (!picked?.typeAffinities) return composed;
+  return {
+    ...composed,
+    typeAffinities: mergeAffinities(composed.typeAffinities, picked.typeAffinities),
+  };
+}
+
+/**
+ * Two affinity maps into one, **strongest opinion per type winning**.
+ *
+ * The same rule `deriveTypeAffinities` uses to layer answers onto an archetype
+ * preset, and the same one `typeAffinityBonus` uses when a place carries
+ * several mapped types. Resolving it three ways would mean three answers to
+ * "this traveller's strongest feeling about a museum".
+ *
+ * 1.0 is neutral on both sides, so distance from 1 is the strength.
+ */
+function mergeAffinities(
+  base: Record<string, number> | undefined,
+  extra: Record<string, number>,
+): Record<string, number> {
+  const merged: Record<string, number> = { ...base };
+  for (const [type, weight] of Object.entries(extra)) {
+    const current = merged[type];
+    if (current === undefined || Math.abs(weight - 1) > Math.abs(current - 1)) {
+      merged[type] = weight;
+    }
+  }
+  return merged;
 }
 
 /**
