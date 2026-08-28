@@ -1378,3 +1378,110 @@ sixty concurrent calls that all 429 will all retry in the same millisecond.
 5xx, plus anything with no status at all (transport). A 400 is our request being
 wrong, and asking again buys the same answer at twice the price. `sleep` is
 injected for the same reason `now` and `rng` are.
+
+### Auth is ours, it lives in Neon, and Supabase is gone
+Accounts are `users` + `sessions` beside the trips they own. Email and password,
+`scrypt` from `node:crypto` (no dependency), and an **opaque** session token in
+an httpOnly cookie whose **sha256 is what the row stores** — a `sessions` row
+cannot be replayed as a login, so a database dump is not a set of live sessions.
+Signing out is a delete, which is the thing a stateless JWT cannot offer.
+
+**Every handler reads the cookie off `request.headers`, never through
+`next/headers`.** That is the same rule that put `personaId` in the plan route's
+body: a handler stays a pure `Request → Response` and `route.test.ts` drives it
+with no request scope. `userFor(request, deps)` in `app/api/deps.ts` is the one
+place a request becomes a person, and it takes the store so the seam holds. The
+single exception is `/itineraries/[id]/debug`, a server component with no
+`Request` to read — and no handler test either.
+
+`middleware.ts` checks that a cookie **exists** and nothing more. It runs on the
+Edge runtime, which cannot reach Neon, so it is a redirect for looks and every
+route that guards something checks for real. This is also why
+`SESSION_COOKIE_NAME` lives alone in `src/lib/auth/cookie.ts`: importing it from
+`session.ts` drags in `node:crypto` and the middleware fails to build — a
+failure `tsc` cannot see, because it is a runtime constraint.
+
+**The persona is no longer named on the wire.** `POST /api/plan` reads it from
+the session via `personas.getByUser`, and `travel_personas.user_id` is unique,
+which is what the table's own prose has always promised. A client-supplied
+`personaId` survives in exactly one place — sign-up and sign-in — where it
+claims a persona taken *before* this app had accounts. That is a migration path,
+not a general seam.
+
+**`saveItinerary(result, ownerId)` takes the owner as a second argument.** The
+planner never learns that users exist: `runPlan` builds the result, and the
+route handler — the only thing holding a session — says whose it is.
+
+**Somebody else's trip is a 404, never a 403.** A 403 confirms the id names a
+real itinerary, which is the one fact an outsider wants. An itinerary with a
+**null** owner is nobody's and is also a 404.
+
+The Supabase strip removed `src/lib/supabase/**` and both `@supabase/*`
+packages. Two things to know about what is left:
+
+- **The types outlived the queries.** `FilterType`, `RecentContentItem`,
+  `SearchResponse`, `LocationReference`, `ProfileRow` and friends moved to
+  `src/lib/domain-types.ts`, which is where `Surface` and `QuotaType` already
+  sat after the PostHog strip. `ItineraryDetail` and friends now come straight
+  from `src/lib/db/itinerary-detail.ts` — the re-export through
+  `supabase/queries/home.ts` is gone and twenty imports moved.
+- **A hook with no backend returns empty and says so in its doc comment.**
+  `useSearchQuery`, `useRecentlyViewedQuery`, `useLocationReferencesQuery`,
+  `useEntityLocationsQuery`, `useCollaboratorProfilesQuery`, `useRecordView` and
+  `usePaginatedContent` are all in that state. That is not the same as the old
+  behaviour, which was a *failing request* that looked identical from the
+  outside — the difference is that the emptiness is now written down.
+
+  **A write does the opposite: it throws.** `src/lib/api/attachments.ts` and the
+  add-to-collection paths raise a plain sentence rather than resolving. An empty
+  list is a true statement; an upload that silently stores nothing is a lie the
+  traveller finds out about later.
+
+`useMapClusters` and `useDashboardRecent` were genuinely rewired rather than
+emptied — both read `GET /api/itineraries`, which is the one list that exists.
+`RawMapLocation` moved into `locality-pins.ts`, with the function that consumes
+it, so deleting a backend can never again take an input type with it.
+
+### `GET /api/itineraries` is new, and its absence is why the grid looked empty
+`getItineraries()` called the dead REST backend on `:8080`, the query failed, and
+`data = []` renders exactly like "no itineraries yet". Auth without this endpoint
+scopes nothing anybody can see.
+
+`readItineraryList` (`src/lib/db/itinerary-list.ts`) is three aggregate queries,
+not `readItineraryDetail` in a loop — a grid of twenty cards needs a name, a
+date, a photo and a count, not every opening period in the trip. Three fields
+are decisions and all three **call into `itinerary-detail.ts`** rather than
+restating it: `end_date` via `endDateFor`, `overview` via `overviewFrom`, and
+`thumbnail_url` as the first stop with a resolved photo. A card and the page it
+opens disagreeing about a trip's end date is the bug nobody reports and
+everybody notices.
+
+`updated_at` reports the creation time, because `itineraries` has no
+`updated_at` and the page is read-only. `is_public`, `is_bookmarked`,
+`is_archived` and `collection_id` are pinned to their off value: they belong to
+features that left with the old backend, and the card components still take them.
+
+### The first account claims the trips that have no owner, once
+Thirty-seven itineraries were planned before this app had accounts. The first
+sign-up takes them, and **the guard is inside the SQL** —
+`(select count(*) from users) = 1` in the same `update` — because the Neon HTTP
+driver has no read-then-write transaction, the same constraint `saveItinerary`
+documents about itself. Two simultaneous sign-ups: at most one claims.
+
+It is one-shot and spent on first use. **If you create a throwaway account to
+test something, delete it before handing the app over**, or the real first
+sign-up inherits nothing. `itineraries.user_id` is `on delete set null`
+precisely so that undoing this is possible; `travel_personas.user_id` is
+`cascade`, so a deleted account takes its persona with it.
+
+### Mutation-checking with `git checkout --` will eat your work
+The rule in this file says to break a rule and confirm a test goes red. Doing
+that with `git checkout -- <file>` to revert reverts the file to **HEAD**, which
+throws away every real change in it, not just the mutation — and on an untracked
+file it fails outright and leaves the mutation in place. Both happened here.
+Revert with the exact inverse edit instead.
+
+All eight guards in this change are mutation-checked: the two 401 gates, the
+owner check, the one-shot claim, the password length guard, session expiry, the
+logout delete, and the persona being keyed on the user rather than on the id the
+browser sent.
