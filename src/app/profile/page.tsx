@@ -24,8 +24,9 @@ import {
   ARCHETYPE_ILLUSTRATIONS,
   INTRO_ILLUSTRATION,
 } from "@/lib/persona/illustrations";
-import type { PersonaResult, TravelArchetypeId } from "@/lib/persona/types";
+import type { PersonaResult } from "@/lib/persona/types";
 import { PREFERENCE_BY_ID } from "@/lib/preferences/registry";
+import { fetchPersona } from "@/lib/persona/storage";
 import { fetchTravelPreferences, saveTravelPreferences } from "@/lib/api/preferences";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
@@ -45,16 +46,7 @@ const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
   location: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
 };
 
-const PERSONA_STORAGE_PREFIX = "argo:persona:";
 const BANNER_STORAGE_PREFIX = "argo:profile-banner:";
-
-function isStoredPersona(value: unknown): value is PersonaResult {
-  if (!value || typeof value !== "object") return false;
-  const archetypeId = (value as PersonaResult).archetype?.id as
-    | TravelArchetypeId
-    | undefined;
-  return Boolean(archetypeId && ARCHETYPE_ILLUSTRATIONS[archetypeId]);
-}
 
 function getItemHref(item: RecentContentItem): string {
   switch (item.type) {
@@ -77,7 +69,16 @@ export default function ProfilePage() {
 
   const [quizOpen, setQuizOpen] = useState(false);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const [persona, setPersona] = useState<PersonaResult | null>(null);
+  // Server-held. This page used to keep its own `PersonaResult` in
+  // `localStorage`, which could show one archetype while the planner used
+  // another — the cached copy `persona/storage.ts` explains it avoids.
+  const { data: personaRecord = null } = useQuery({
+    queryKey: queryKeys.persona(),
+    queryFn: fetchPersona,
+    enabled: Boolean(userId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const persona: PersonaResult | null = personaRecord?.result ?? null;
   // Server-held, not `localStorage`: preferences follow the person, so the same
   // account sees the same set on a laptop and a phone.
   const { data: travelPreferences = null } = useQuery<SavedTravelPreferences | null>({
@@ -105,23 +106,6 @@ export default function ProfilePage() {
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(
-        `${PERSONA_STORAGE_PREFIX}${avatarHash}`,
-      );
-      if (!stored) {
-        setPersona(null);
-        return;
-      }
-      const parsed: unknown = JSON.parse(stored);
-      setPersona(isStoredPersona(parsed) ? parsed : null);
-    } catch (error) {
-      console.error("Failed to load the saved travel persona:", error);
-      setPersona(null);
-    }
-  }, [avatarHash]);
-
-  useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(
         `${BANNER_STORAGE_PREFIX}${avatarHash}`,
       );
       const storedIndex = stored === null ? 0 : Number.parseInt(stored, 10);
@@ -138,16 +122,14 @@ export default function ProfilePage() {
     }
   }, [avatarHash]);
 
-  const handlePersonaComplete = (result: PersonaResult) => {
-    setPersona(result);
-    try {
-      window.localStorage.setItem(
-        `${PERSONA_STORAGE_PREFIX}${avatarHash}`,
-        JSON.stringify(result),
-      );
-    } catch (error) {
-      console.error("Failed to save the travel persona:", error);
-    }
+  // Takes no argument on purpose: the dialog hands back the result it just
+  // computed, and using it would be caching the scores again.
+  const handlePersonaComplete = () => {
+    // `PersonaQuizDialog` has already POSTed the answers. Re-reading rather
+    // than caching `result` here is the whole point: the server rebuilds the
+    // scores from the answers, so what this page shows is what the planner
+    // will use, not a copy that can drift from it.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.persona() });
 
     // A retake changes the pace and budget the preference profile derives, so
     // the same ids have to be re-saved. The server rebuilds the profile from

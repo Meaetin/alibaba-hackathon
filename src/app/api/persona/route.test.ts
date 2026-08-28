@@ -14,7 +14,7 @@ import { calculatePersona, QUESTIONS } from "@/lib/persona/quiz";
 
 import { personaRouteDeps } from "../deps";
 import { signedIn } from "../session-fixture";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const NOW = new Date("2026-08-25T09:00:00.000Z");
 const LATER = new Date("2026-08-26T09:00:00.000Z");
@@ -181,6 +181,109 @@ describe("POST /api/persona", () => {
     const body = (await response.json()) as { error: string };
     expect(body.error).toMatch(/travel persona/);
     expect(body.error).not.toMatch(/relation/);
+    expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/persona", () => {
+  function get(cookie: string | null = session.cookie): Promise<Response> {
+    return GET(
+      new Request("http://localhost/api/persona", {
+        headers: cookie ? { cookie } : {},
+      }),
+    );
+  }
+
+  it("answers null when the traveller has never taken the quiz", async () => {
+    await install();
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persona: null });
+  });
+
+  it("returns the answers and the result built from them", async () => {
+    await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    const body = (await (await get()).json()) as {
+      persona: { answers: unknown; result: { archetype: { id: string } } };
+    };
+    expect(body.persona.answers).toEqual(FIRST_OPTIONS);
+    expect(body.persona.result.archetype.id).toBe(
+      calculatePersona(FIRST_OPTIONS).archetype.id,
+    );
+  });
+
+  it("rebuilds the result from the answers, not from the stored columns", async () => {
+    // The reason `travel_personas` keeps the answers at all: a retuned
+    // `calculatePersona` has to reach every traveller without re-asking anyone
+    // twelve questions. Storing deliberately wrong scores proves the read
+    // ignores them.
+    const personas = await install();
+    await personas.upsert({
+      userId: session.user.id,
+      answers: FIRST_OPTIONS,
+      dimensions: { structure: 0, comfort: 0, focus: 0, social: 0 },
+      // A lie, and it has to be a lie that differs from the truth:
+      // FIRST_OPTIONS really does score `weekend_warrior`, so using that as the
+      // fake proved nothing. The guard below is what caught it.
+      archetype: "soulful_soloist",
+      now: NOW,
+    });
+
+    const body = (await (await get()).json()) as {
+      persona: { result: { dimensions: unknown; archetype: { id: string } } };
+    };
+    const expected = calculatePersona(FIRST_OPTIONS);
+    expect(expected.archetype.id).not.toBe("soulful_soloist");
+    expect(body.persona.result.dimensions).toEqual(expected.dimensions);
+    expect(body.persona.result.archetype.id).toBe(expected.archetype.id);
+  });
+
+  it("reads null for answers this quiz can no longer score", async () => {
+    // A row written by an older question set is a persona we no longer have,
+    // not a server fault.
+    const personas = await install();
+    await personas.upsert({
+      userId: session.user.id,
+      answers: [0, 0],
+      dimensions: { structure: 50, comfort: 50, focus: 50, social: 50 },
+      archetype: "weekend_warrior",
+      now: NOW,
+    });
+
+    const response = await get();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ persona: null });
+  });
+
+  it("answers 401 when signed out", async () => {
+    await install();
+    expect((await get(null)).status).toBe(401);
+  });
+
+  it("never returns another traveller's persona", async () => {
+    const personas = await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    const other = await signedIn({ email: "other@example.com", token: "other-token" });
+    personaRouteDeps.create = () => ({ personas, users: other.users, now: () => NOW });
+
+    expect(await (await get(other.cookie)).json()).toEqual({ persona: null });
+  });
+
+  it("turns a store failure into a sentence, not a stack trace", async () => {
+    const personas = await install();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    personaRouteDeps.create = () => ({
+      personas: { ...personas, getByUser: () => Promise.reject(new Error('relation "x" gone')) },
+      users: session.users,
+      now: () => NOW,
+    });
+
+    const response = await get();
+    expect(response.status).toBe(500);
+    expect(JSON.stringify(await response.json())).not.toMatch(/relation/);
     expect(errors).toHaveBeenCalled();
   });
 });

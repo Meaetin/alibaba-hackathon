@@ -25,6 +25,20 @@ export interface SignedIn {
 
 const TOKEN = "test-session-token";
 
+/**
+ * Bumped per call, and folded into the user id.
+ *
+ * Without it every `signedIn()` builds a fresh `createInMemoryUserStore` whose
+ * id sequence restarts at 1, so **two travellers in one test share an id** —
+ * which silently turns every "somebody else cannot see this" assertion into a
+ * comparison of a thing with itself. A `GET /api/persona` test caught it by
+ * failing; the ones that would have passed anyway are the worry.
+ *
+ * Deterministic within a run, because the counter only ever moves forward and
+ * nothing here reads a clock or a random number.
+ */
+let fixtureSequence = 0;
+
 export async function signedIn(options?: {
   now?: Date;
   email?: string;
@@ -32,7 +46,15 @@ export async function signedIn(options?: {
 }): Promise<SignedIn> {
   const now = options?.now ?? new Date("2026-08-28T00:00:00.000Z");
   const token = options?.token ?? TOKEN;
-  const users = createInMemoryUserStore();
+  fixtureSequence += 1;
+  const scope = fixtureSequence;
+  let withinScope = 0;
+  const users = createInMemoryUserStore({
+    idFactory: () => {
+      withinScope += 1;
+      return `00000000-0000-4000-8000-${String(scope).padStart(6, "0")}${String(withinScope).padStart(6, "0")}`;
+    },
+  });
 
   const user = await users.create({
     email: options?.email ?? "traveller@example.com",
