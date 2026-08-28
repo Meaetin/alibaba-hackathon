@@ -20,8 +20,8 @@ import {
   useNavigationLoading,
 } from "@/contexts/NavigationLoadingContext";
 import { ItineraryLoadingScreen } from "@/components/ui/itinerary/ItineraryLoadingScreen";
-import { createClient } from "@/lib/supabase/client";
-import { getProfile, type ProfileRow } from "@/lib/supabase/queries";
+import type { ProfileRow } from "@/lib/domain-types";
+import { useCurrentUserQuery } from "@/hooks/queries/useCurrentUserQuery";
 import { AlreadyAnalyzedError, createJob } from "@/lib/api/client";
 import { createCollection } from "@/lib/api/collections";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
@@ -130,15 +130,13 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(PLANNING_JOB_CREATED_EVENT, track);
   }, [upsertPlanningJob]);
 
+  // The signed-in user, for the navbar avatar and the queue's user-scoped
+  // invalidations. One shared query, so this costs no extra request.
+  const { data: currentUser } = useCurrentUserQuery();
   useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUserId(data.user.id);
-        getProfile(supabase, data.user.id).then(setProfile);
-      }
-    });
-  }, []);
+    setUserId(currentUser?.id ?? null);
+    setProfile(currentUser ? { ...currentUser, avatar_url: null } : null);
+  }, [currentUser]);
 
   const handleLinkSubmit = async (linkUrl: string) => {
     try {

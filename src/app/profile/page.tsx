@@ -18,7 +18,7 @@ import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useProfileQuery } from "@/hooks/queries/useProfileQuery";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { motionTransitions } from "@/lib/motion/presets";
-import type { RecentContentItem } from "@/lib/supabase/queries/home";
+import type { RecentContentItem } from "@/lib/domain-types";
 
 const TYPE_GRADIENTS: Record<RecentContentItem["type"], string> = {
   link: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",

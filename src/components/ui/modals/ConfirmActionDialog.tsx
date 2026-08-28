@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/primitives/Button";
 import { Separator } from "@/components/ui/primitives/Separator";
 import { formatTimeRange } from "@/components/ui/itinerary/activity-utils";
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 interface ConfirmActionDialogProps {
   open: boolean;

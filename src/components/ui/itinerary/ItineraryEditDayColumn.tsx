@@ -17,7 +17,7 @@ import type { DayTimeMarker } from "./DayTimePicker";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import { TransportDetailRow } from "./TransportDetailRow";
 import { INSET_PX } from "./ItineraryDayColumn/constants";
-import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import { motionTransitions } from "@/lib/motion/presets";
 
 interface ItineraryEditDayColumnProps {

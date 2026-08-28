@@ -10,7 +10,7 @@ import { ItineraryEditDayColumn } from "./ItineraryEditDayColumn";
 import { EditDaySelector } from "./EditDaySelector";
 import { CompactActivityCard } from "./CompactActivityCard";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
-import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import type { ItineraryPanelVariant } from "./ItinerarySidePanel";
 import { motionPresets, motionTransitions } from "@/lib/motion/presets";
 

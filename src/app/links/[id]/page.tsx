@@ -13,10 +13,8 @@ import { LocationDetailView } from "@/components/ui/detail-views/LocationDetailV
 import { useNavbarFilter } from "@/contexts/NavbarFilterContext";
 import { cn } from "@/lib/utils";
 import { scrollScrollableAncestorToTop } from "@/lib/utils/scroll";
-import { formatDisplayUrl, weekdayDescriptionsFrom } from "@/lib/utils/location-detail";
+import { formatDisplayUrl } from "@/lib/utils/location-detail";
 import { useToast } from "@/contexts/ToastContext";
-import { createClient } from "@/lib/supabase/client";
-import { getContentDetail } from "@/lib/supabase/queries";
 import { useRubberBandSelection } from "@/hooks/useRubberBandSelection";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
 import { useLinkDetailsDial } from "@/hooks/useLinkDetailsDial";
@@ -80,50 +78,7 @@ interface LocationItem {
   googleMapsUri: string | null;
 }
 
-interface LocationRow {
-  id: string;
-  name: string;
-  formatted_address: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  primary_type: string | null;
-  photo_urls: string[] | null;
-  regular_opening_hours: unknown;
-  international_phone_number: string | null;
-  website_uri: string | null;
-  stay_duration: number | null;
-  price_range: PriceRange | null;
-  location_context: string | null;
-  google_maps_uri: string | null;
-}
 
-function mapLocationRow(row: LocationRow, sourceUrl: string): LocationItem {
-  const photos = row.photo_urls ?? [];
-  return {
-    id: row.id,
-    name: row.name,
-    address: row.formatted_address ?? "",
-    type: "location",
-    latitude: row.latitude ?? 0,
-    longitude: row.longitude ?? 0,
-    thumbnailUrl: photos[0] ?? "",
-    primaryType: row.primary_type ?? "",
-    sourceUrl,
-    description: row.location_context ?? "",
-    details: {
-      address: row.formatted_address ?? "",
-      openingHoursLines: weekdayDescriptionsFrom(row.regular_opening_hours),
-      phone: row.international_phone_number ?? "",
-      website: row.website_uri ?? "",
-      stayDurationMinutes: row.stay_duration ?? null,
-      priceRange: row.price_range ?? null,
-    },
-    images: photos,
-    isFavorite: false,
-    isArchived: false,
-    googleMapsUri: row.google_maps_uri ?? null,
-  };
-}
 
 type SelectedLocation = LocationItem;
 
@@ -135,8 +90,10 @@ export default function LinkDetailPage() {
   const contentId = params?.id;
   const { setFilter } = useNavbarFilter();
 
-  const [linkDetail, setLinkDetail] = useState<LinkDetail | null>(null);
-  const [locations, setLocations] = useState<LocationItem[]>([]);
+  // Both stay empty: there is no backend for a link, so the page always takes
+  // its "not found" branch. The setters went with the read.
+  const [linkDetail] = useState<LinkDetail | null>(null);
+  const [locations] = useState<LocationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -151,7 +108,7 @@ export default function LinkDetailPage() {
       const itineraryId = (job.result as Record<string, unknown> | undefined)
         ?.itinerary_id as string | undefined;
       // Only redirect if the user is actively waiting on the loading screen.
-      // If they chose "Continue Browsing", the global ItineraryJobNotifier
+      // If they chose "Continue Browsing", MainLayout's job queue
       // surfaces a "View" toast instead.
       if (isGenerating && itineraryId) {
         router.push(`/itineraries/${itineraryId}`);
@@ -265,61 +222,19 @@ export default function LinkDetailPage() {
     setGenerateModalOpen(true);
   }, [selection.selectedIds, linkDetail?.title]);
 
-  // Fetch content + locations
+  // Fetch content + locations.
+  //
+  // **There is no backend for a link.** This read a Supabase `content` table
+  // joined to `content_locations`, which belonged to the link-analysis service
+  // this repo does not contain. Every link therefore resolves to "not found",
+  // which is what it already did — the query failed and took the same branch.
+  // The page and its cards are left intact so that wiring a real read means
+  // replacing this effect, not rebuilding the screen.
   useEffect(() => {
-    if (!contentId) {
-      setIsLoading(false);
-      setNotFound(true);
-      return;
-    }
-
-    let cancelled = false;
-    const supabase = createClient();
-
-    (async () => {
-      const { data, error } = await getContentDetail(supabase, contentId);
-
-      if (cancelled) return;
-
-      if (error || !data) {
-        setIsLoading(false);
-        setNotFound(true);
-        return;
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const content = data as any;
-
-      const detail: LinkDetail = {
-        id: content.id,
-        url: content.content_url,
-        normalizedUrl: content.content_url_normalized ?? content.content_url,
-        title: content.content_title ?? content.content_url,
-        thumbnailUrl: content.content_thumbnail ?? "",
-        country: content.country ?? "",
-      };
-
-      const rawLocations = (content.content_locations ?? [])
-        .map((cl: { locations: LocationRow | null }) => cl.locations)
-        .filter((l: LocationRow | null): l is LocationRow => !!l);
-
-      const mappedLocations = rawLocations.map((row: LocationRow) =>
-        mapLocationRow(row, detail.url),
-      );
-
-      setLinkDetail(detail);
-      setFilter({
-        type: "link",
-        label: detail.title,
-        thumbnailUrl: detail.thumbnailUrl || undefined,
-        entityId: contentId,
-      });
-      setLocations(mappedLocations);
-      setIsLoading(false);
-    })();
-
+    setIsLoading(false);
+    setNotFound(true);
+    setFilter(null);
     return () => {
-      cancelled = true;
       setFilter(null);
     };
   }, [contentId, setFilter]);

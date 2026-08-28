@@ -45,7 +45,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/queryKeys";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
 import type { StopContent } from "@/lib/planner/narrate";
-import type { LocationReference } from "@/lib/supabase/queries/location-references";
+import type { LocationReference } from "@/lib/domain-types";
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 
 const StaticMap = dynamic(

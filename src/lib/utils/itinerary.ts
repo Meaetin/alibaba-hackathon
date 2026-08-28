@@ -1,4 +1,4 @@
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import type { CalendarActivity } from "@/components/ui/calendar/ActivityTimeslot";
 import { weekdayDescriptionsFrom } from "@/lib/utils/location-detail";
 

@@ -1,4 +1,4 @@
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import { timeToHour } from "@/lib/utils/itinerary";
 
 /** Activity and transport times are aligned to this many minutes. */

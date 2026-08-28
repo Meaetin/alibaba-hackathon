@@ -1,30 +1,18 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
-import { recordView } from "@/lib/supabase/mutations/recordView";
-import { queryClient } from "@/lib/query/queryClient";
-import { queryKeys } from "@/lib/query/queryKeys";
-
+/**
+ * Records that the traveller opened something, for the recently-viewed list.
+ *
+ * **There is no backend for this.** It wrote a Supabase `recently_viewed` table
+ * that this database does not have, so nothing was ever recorded. It is the
+ * write half of `useRecentlyViewedQuery`, and wiring either without the other
+ * buys nothing.
+ *
+ * Kept rather than deleted because three pages call it on mount, and a no-op
+ * hook is a smaller change than removing three call sites for a feature that
+ * may come back.
+ */
 export function useRecordView(
-  entityType: "link" | "collection" | "itinerary",
-  entityId: string | undefined,
-) {
-  const recorded = useRef(false);
-
-  useEffect(() => {
-    if (!entityId || recorded.current) return;
-    recorded.current = true;
-
-    const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      const userId = data.session?.user.id;
-      if (!userId) return;
-      recordView(supabase, entityType, entityId).then(() => {
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.recentlyViewed(userId),
-        });
-      });
-    });
-  }, [entityType, entityId]);
-}
+  _entityType: "link" | "collection" | "itinerary",
+  _entityId: string | undefined,
+): void {}

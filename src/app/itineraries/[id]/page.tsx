@@ -34,7 +34,6 @@ import { queryKeys } from "@/lib/query/queryKeys";
 
 import { useNavbarVisibility } from "@/contexts/NavbarVisibilityContext";
 import { useNavbarFilter } from "@/contexts/NavbarFilterContext";
-import { createClient } from "@/lib/supabase/client";
 import { useRecordView } from "@/hooks/useRecordView";
 import { useItineraryDetailQuery } from "@/hooks/queries/useItineraryDetailQuery";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
@@ -53,7 +52,6 @@ import { resolveGoogleMapsUrl } from "@/lib/api/locations";
 import { locationRowToPlaceSearchResult } from "@/lib/maps/location-row";
 import type { PlaceDetailsFetcher, PlaceSearchRunner } from "@/components/ui/map/GoogleMapDetail";
 import { createCollection, getCollections, getCollection, type CollectionWithRole, type CollectionWithLocations, type Location } from "@/lib/api/collections";
-import { addLocationsToCollection } from "@/lib/supabase/queries";
 import { updateItinerary, moveActivity, createActivity, deleteActivity, deleteItinerary, optimizeDayRoute, previewDayLegs, setActivityTravelMode, type CascadedActivity } from "@/lib/api/itineraries";
 import {
   DragOverlay,
@@ -388,8 +386,9 @@ export default function ItineraryDetailPage() {
       const locId = detailActivity?.location?.id;
       if (!locId) return;
       try {
-        const supabase = createClient();
-        const { error } = await addLocationsToCollection(supabase, targetCollectionId, [locId]);
+        // Collections have no store in this build; the table this wrote to left
+        // with Supabase. Failing loudly beats a success toast over no write.
+        const error = new Error("Collections are not available in this build.");
         if (error) throw error;
         const target = collections.find((c) => c.id === targetCollectionId);
         showToast({ title: `Added to ${target?.name ?? "collection"}` });
@@ -445,7 +444,10 @@ export default function ItineraryDetailPage() {
   // Keyed by IATA code. Populated from the `locations` table (which the backend
   // upserts during flight processing) and used to render airport markers + route
   // polylines on the edit-mode map.
-  const [airportLocations, setAirportLocations] = useState<Map<string, { name: string; latitude: number; longitude: number; address?: string }>>(new Map());
+  // Read-only, and permanently empty: the lookup that filled it is gone (see
+  // the note in the flights effect below). Kept as state rather than a bare
+  // constant so restoring the fetch is one line, not a re-plumbing.
+  const [airportLocations] = useState<Map<string, { name: string; latitude: number; longitude: number; address?: string }>>(new Map());
   const [showLodgingSidebar] = useState(false);
   const [lodgings, setLodgings] = useState<LodgingCardProps[]>([]);
   const [lodgingUploading] = useState(false);
@@ -2367,32 +2369,11 @@ export default function ItineraryDetailPage() {
     }
     const missing = [...codes].filter(c => !airportLocations.has(c));
     if (missing.length === 0) return;
-    const supabase = createClient();
-    supabase
-      .from("locations")
-      .select("iata_code, name, latitude, longitude, formatted_address, terminal")
-      .in("iata_code", missing)
-      .is("terminal", null)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Failed to load airport locations:", error);
-          return;
-        }
-        if (!data || data.length === 0) return;
-        setAirportLocations((prev) => {
-          const next = new Map(prev);
-          for (const row of data) {
-            if (!row.iata_code || row.latitude == null || row.longitude == null) continue;
-            next.set(row.iata_code, {
-              name: row.name,
-              latitude: Number(row.latitude),
-              longitude: Number(row.longitude),
-              address: row.formatted_address ?? undefined,
-            });
-          }
-          return next;
-        });
-      });
+    // Airports were looked up by IATA code in a Supabase `locations` table with
+    // `iata_code` and `terminal` columns. The Neon table of the same name has
+    // neither — it holds Google Places rows — so there is nothing to query and
+    // no way to fake one. Flights are unbacked here anyway (see
+    // `src/lib/api/flights.ts`), so no airport is ever asked for.
   }, [flights, itineraryId, airportLocations]);
 
   // Fetch existing lodgings when the accommodation sidebar opens
@@ -3823,11 +3804,9 @@ export default function ItineraryDetailPage() {
                   onFlightDelete={async (flightId) => {
                     if (!itineraryId) return;
                     try {
-                      const token = await (await import("@/lib/supabase/client")).createClient().auth.getSession().then(s => s.data.session?.access_token);
-                      if (!token) return;
                       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
                         method: "DELETE",
-                        headers: { Authorization: `Bearer ${token}` },
+                        credentials: 'same-origin',
                       });
                       setFlights(prev => prev.filter(f => f.id !== flightId));
                       const isFlightActivity = (a: { id: string; source_flight_id?: string | null }) =>
@@ -3841,11 +3820,10 @@ export default function ItineraryDetailPage() {
                   onFlightEditSubmit={async (flightId, data, expandDates) => {
                     if (!itineraryId) return;
                     try {
-                      const token = await (await import("@/lib/supabase/client")).createClient().auth.getSession().then(s => s.data.session?.access_token);
-                      if (!token) return;
                       await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
                         method: "PATCH",
-                        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "same-origin",
                         body: JSON.stringify({
                           flight_number: data.flightNumber,
                           airline: data.airline,

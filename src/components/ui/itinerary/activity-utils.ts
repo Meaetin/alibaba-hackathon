@@ -1,4 +1,4 @@
-import type { ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 import { parseLocalDate } from "@/lib/utils/itinerary";
 import type { LodgingInfo } from "./ItineraryDayColumn/sequence";
 

@@ -7,7 +7,6 @@ import { TooltipProvider } from '@/components/ui/primitives/Tooltip'
 import { Lora } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { QueryProvider } from '@/components/QueryProvider';
-import { ItineraryJobNotifier } from '@/components/notifications/ItineraryJobNotifier';
 import { SITE_URL } from '@/lib/site';
 
 const lora = Lora({ subsets: ['latin'], weight: ['400', '600'], style: ['normal', 'italic'], variable: '--font-lora' });
@@ -68,7 +67,6 @@ export default function RootLayout({
       <body className="root-body font-primary antialiased bg-surface text-content">
         <QueryProvider>
           <ToastProvider>
-            <ItineraryJobNotifier />
             <ThemeProvider>
               <TooltipProvider>
                 {children}

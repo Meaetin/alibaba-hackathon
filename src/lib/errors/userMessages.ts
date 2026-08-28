@@ -1,47 +1,33 @@
-import type { AuthError } from '@supabase/supabase-js'
-
 /**
- * Maps Supabase auth errors to plain-language messages.
- * Keep technical detail in `console.error` / network panel; surface only friendly text.
+ * Maps an authentication failure to a plain-language sentence.
+ *
+ * It used to translate Supabase's `AuthError` codes — `invalid_credentials`,
+ * `email_not_confirmed`, `over_email_send_rate_limit` and a dozen more. Auth is
+ * ours now and lives in `src/app/api/auth/**`, which already answers with a
+ * sentence written for the person reading it, so there is far less to map: the
+ * cases below are the ones a *transport* failure produces, where there is no
+ * server message to pass on.
+ *
+ * Anything with a message from our own API is returned as-is, because that
+ * message was written to be read. Everything else falls through to the generic
+ * line rather than surfacing a stack or a status code.
  */
-export function getFriendlyAuthError(error: AuthError | { message?: string; code?: string | null } | null | undefined): string {
+export function getFriendlyAuthError(
+  error: { message?: string; status?: number } | null | undefined,
+): string {
   if (!error) return 'Something went wrong. Please try again.'
 
-  const code = (error as { code?: string | null }).code ?? null
   const raw = (error.message ?? '').toLowerCase()
 
-  if (code === 'invalid_credentials' || raw.includes('invalid login credentials')) {
-    return 'The email or password you entered is incorrect.'
-  }
-  if (code === 'email_not_confirmed' || raw.includes('email not confirmed')) {
-    return 'Please confirm your email address before signing in.'
-  }
-  if (code === 'user_already_exists' || raw.includes('user already registered') || raw.includes('already been registered')) {
-    return 'An account with this email already exists. Try signing in instead.'
-  }
-  if (code === 'weak_password' || raw.includes('password should be at least') || raw.includes('weak password')) {
-    return 'That password doesn’t meet the requirements. Please check the list below.'
-  }
-  if (code === 'email_address_invalid' || raw.includes('invalid email') || raw.includes('valid email')) {
-    return 'Please enter a valid email address.'
-  }
-  if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit' || raw.includes('rate limit')) {
-    return 'Too many attempts. Please wait a moment and try again.'
-  }
-  // The project's SMTP provider rejected the send. Distinct from a bad address:
-  // nothing the person types will fix it, so don't imply otherwise.
-  if (raw.includes('error sending') || raw.includes('smtp')) {
-    return 'We couldn’t send that email just now. This is on our end — please try again shortly.'
-  }
-  if (code === 'signups_not_allowed' || raw.includes('signups not allowed')) {
-    return 'Sign-ups are temporarily disabled. Please check back later.'
-  }
-  if (code === 'email_provider_disabled' || raw.includes('email logins are disabled')) {
-    return 'Email sign-in is temporarily disabled. Try another sign-in method.'
-  }
-  if (raw.includes('network') || raw.includes('failed to fetch')) {
+  // Status 0 is this codebase's marker for "never reached the server" — see
+  // `AuthError` in `src/lib/api/auth.ts`.
+  if (error.status === 0 || raw.includes('network') || raw.includes('failed to fetch')) {
     return 'We couldn’t reach the server. Check your connection and try again.'
   }
+  if (raw.includes('rate limit') || error.status === 429) {
+    return 'Too many attempts. Please wait a moment and try again.'
+  }
+  if (error.message) return error.message
 
   return 'We couldn’t sign you in. Please try again.'
 }

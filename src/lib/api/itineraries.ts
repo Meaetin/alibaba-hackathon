@@ -3,10 +3,9 @@ import { getFriendlyApiError } from '@/lib/errors/userMessages'
 import { type Surface } from '@/lib/domain-types'
 import type { QueueJob } from '@/lib/jobs/types'
 import type { PlaceDetailsPayload } from '@/lib/maps/place-search'
-import type { ActivityLocation } from '@/lib/supabase/queries/home'
+import type { ActivityLocationDetail as ActivityLocation } from "@/lib/db/itinerary-detail";
 import type { ItineraryDetail } from '@/lib/db/itinerary-detail'
 import type { Pace, PreferenceProfile, SchedulerOptions } from '@/lib/planner/types'
-import { readPersonaId } from '@/lib/persona/storage'
 import { LOCAL_DEMO_PROFILE } from '@/lib/planner/demo-profile'
 
 export interface ItineraryWithRole {
@@ -56,8 +55,23 @@ export interface Itinerary {
   updated_at: string
 }
 
+/**
+ * Every trip the signed-in traveller owns.
+ *
+ * Same-origin now, reading Neon through `GET /api/itineraries`. It used to call
+ * the REST backend on `:8080` through `authFetch`, which is why the grid on
+ * `/itineraries` and `/home` has been rendering its empty state on a database
+ * full of trips: the request failed, the query errored, and `data = []` looks
+ * exactly like "no itineraries yet".
+ *
+ * A 401 comes back as an empty list rather than an error. The middleware sends
+ * a signed-out visitor to `/login` before a page renders, so a 401 here means
+ * the session expired mid-session, and one empty grid is a better answer than a
+ * red error card in the second before the next navigation redirects.
+ */
 export async function getItineraries(): Promise<ItineraryWithRole[]> {
-  const res = await authFetch('/api/itineraries')
+  const res = await fetch('/api/itineraries', { credentials: 'same-origin' })
+  if (res.status === 401) return []
   return unwrap<ItineraryWithRole[]>(res, 'Failed to fetch itineraries')
 }
 
@@ -137,13 +151,6 @@ export interface PlanItineraryParams {
   profile: PreferenceProfile
   /** Scheduler/clustering knobs. Never the traveller — see `profile`. */
   options?: SchedulerOptions
-  /**
-   * The `travel_personas` row id, if this browser has taken the quiz. The
-   * persona itself stays on the server; the client only ever holds the pointer.
-   * Absent — or stale — plans exactly as this pipeline planned before personas
-   * existed.
-   */
-  personaId?: string
   /**
    * How a day is decided. `themed` names each day and searches around a real
    * anchor; `geographic` is k-means over coordinates. Omitted means the
@@ -528,10 +535,12 @@ export async function createItineraryRouted(
   }
 
   // Case 2a: AI-only planning goes through this app's local pipeline.
-  // The persona is read here rather than passed in by every caller: four call
-  // sites reach this function, and a traveller's persona is a property of the
-  // browser, not of the button they pressed.
-  const personaId = readPersonaId()
+  //
+  // The persona is no longer sent. It used to travel as an id read from
+  // `localStorage`, because that pointer was the only thing that knew which
+  // persona was whose. `POST /api/plan` reads it from the session now — the
+  // persona belongs to the traveller, not to the browser — and a client-named
+  // id would have been a way to plan a trip with somebody else's personality.
   const job = await planItinerary({
     city: input.region?.trim() || input.country,
     country: input.country,
@@ -545,7 +554,6 @@ export async function createItineraryRouted(
     // default that changes behaviour silently is a trap — so the choice is
     // made here, once, where somebody can see it.
     mode: 'themed',
-    ...(personaId ? { personaId } : {}),
   })
   return { kind: 'planning', job }
 }

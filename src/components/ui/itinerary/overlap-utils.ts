@@ -1,5 +1,5 @@
 import { parseTimeMins, minsToHHMM } from "./activity-utils";
-import type { ItineraryActivityDetail, ItineraryDayDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryActivityDetail, ItineraryDayDetail } from "@/lib/db/itinerary-detail";
 
 export interface ResolveOverlapsInput {
   day: ItineraryDayDetail;

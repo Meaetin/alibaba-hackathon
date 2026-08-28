@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { parseLocalDate } from "@/lib/utils/itinerary";
 import { getDayColor } from "@/components/ui/calendar/ActivityTimeslot";
 import { CompactDayColumn } from "./CompactDayColumn";
-import type { ItineraryDetail, ItineraryActivityDetail } from "@/lib/supabase/queries/home";
+import type { ItineraryDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
 
 interface ItineraryQuickViewProps {
   itinerary: ItineraryDetail;
