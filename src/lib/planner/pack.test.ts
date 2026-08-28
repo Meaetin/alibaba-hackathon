@@ -360,24 +360,73 @@ describe('a meal that missed its window', () => {
     expectContiguous(day)
   })
 
-  it('still drops by score when the day merely runs long', () => {
-    // No meal misses its window here — the day just overruns — so there is no
-    // stop to blame and the ordinary worst-first rule stands.
+  it('still drops by score when the day runs long and nothing waited', () => {
+    // Every stop is reached after its window has already opened, so no stop
+    // absorbed any slack and there is nothing to narrow blame to. The ordinary
+    // worst-first rule stands, and one cut is enough.
+    //
+    // This test was written asserting the same thing about a day whose dinner
+    // *did* miss its window — so it exercised the `blockedBefore` path while
+    // its comment claimed the opposite, and would have passed whatever the
+    // overrun rule said. The fifteen-minute pace buffer on each leg is what
+    // made the difference invisible.
     const day = packDay(
       {
         assignments: [
           assign('temple', 'activity', 0.9, dur(200, 200, 200)),
           assign('tofu_lunch', 'lunch', 0.8, dur(45, 45, 45)),
-          assign('cheap_gallery', 'activity', 0.1, dur(200, 200, 200)),
-          assign('museum', 'activity', 0.95, dur(200, 200, 200)),
+          assign('cheap_gallery', 'activity', 0.1, dur(150, 150, 150)),
+          assign('museum', 'activity', 0.95, dur(150, 150, 150)),
           assign('izakaya', 'dinner', 0.75, dur(60, 60, 60)),
+          assign('night_walk', 'activity', 0.5, dur(60, 60, 60)),
         ],
       },
       'balanced',
       NO_TRAVEL,
     )
-    expect(droppedIds(day)).toContain('ChIJ_cheap_gallery')
+    expect(droppedIds(day)).toEqual(['ChIJ_cheap_gallery'])
     expect(segmentFor(day, 'museum')).toBeDefined()
+    expect(segmentFor(day, 'night_walk')).toBeDefined()
+    expectContiguous(day)
+  })
+
+  /**
+   * The mirror of a late lunch, and the reason `overrunFrom` exists.
+   *
+   * Lunch and dinner both wait for their windows here, so every minute the
+   * morning gives up is a minute the day idles away instead. Only the two bars
+   * behind dinner can move the end of the day — and they are the two
+   * best-scored activities, so a worst-first cut over the whole day reaches
+   * them last, after it has shed the entire morning for nothing.
+   *
+   * Measured on a live Singapore trip for a cafés-and-nightlife persona: nine
+   * offered, two shipped, and the only stop whose removal helped was the last
+   * one dropped. Every duration is fixed so the shrink ladder cannot dilute it.
+   */
+  it('drops from behind the anchor that waited, not the morning in front of it', () => {
+    const day = packDay(
+      {
+        assignments: [
+          assign('coffee_1', 'activity', 0.62, dur(45, 45, 45)),
+          assign('coffee_2', 'activity', 0.64, dur(45, 45, 45)),
+          assign('hawker_lunch', 'lunch', 0.68, dur(75, 75, 75)),
+          assign('bakery_bun', 'activity', 0.6, dur(30, 30, 30)),
+          assign('cocktail_dinner', 'dinner', 0.79, dur(75, 75, 75)),
+          assign('rooftop_bar', 'activity', 0.76, dur(60, 60, 60)),
+          assign('nightcap_bar', 'activity', 0.74, dur(60, 60, 60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+
+    // One cut, and it is the stop that was actually keeping the day open.
+    expect(droppedIds(day)).toEqual(['ChIJ_nightcap_bar'])
+    for (const name of ['coffee_1', 'coffee_2', 'bakery_bun', 'rooftop_bar']) {
+      expect(segmentFor(day, name), `${name} cannot move the end of the day`).toBeDefined()
+    }
+    expect(segmentFor(day, 'hawker_lunch')!.startMin).toBe(DAY_SKELETON[0].window[0])
+    expectContiguous(day)
   })
 })
 
