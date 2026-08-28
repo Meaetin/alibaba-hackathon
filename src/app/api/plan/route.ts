@@ -40,7 +40,7 @@ import {
   type PlanResult,
 } from "@/lib/planner/pipeline";
 
-import { planRouteDeps, type PlanRouteDeps } from "../deps";
+import { planRouteDeps, userFor, type PlanRouteDeps } from "../deps";
 
 /** A long-running Node process. The background work below depends on it. */
 export const runtime = "nodejs";
@@ -86,13 +86,15 @@ const PlanRequestSchema = z.object({
    * for when there is.
    */
   interestOverrides: z.array(InterestSchema).optional(),
-  /**
-   * The row in `travel_personas`, not the persona itself. In the body rather
-   * than a cookie on purpose: `route.test.ts` drives this handler through the
-   * `planRouteDeps` seam with no database and no network, and a cookie would
-   * need a second seam for request headers.
+  /*
+   * There is no `personaId` here any more, and its absence is the point.
+   *
+   * It used to be on the wire because the browser's `localStorage` pointer was
+   * the only thing that knew which persona was whose. With a session there is a
+   * better answer: the persona belongs to the traveller, `travel_personas.user_id`
+   * is unique, and the handler reads it from the cookie. A client-named id would
+   * now be a way to plan a trip with somebody else's personality.
    */
-  personaId: z.string().uuid().optional(),
   /**
    * How a day is decided. The **client** chooses, not the library: `runPlan`
    * defaults to `"geographic"` so that "no mode means today, exactly" stays
@@ -115,6 +117,7 @@ const PlanRequestSchema = z.object({
 
 const PLAN_FAILED_MESSAGE = "We couldn't build that itinerary. Please try again.";
 const BAD_REQUEST_MESSAGE = "That trip request is missing something. Please check and try again.";
+const SIGNED_OUT_MESSAGE = "Please sign in to plan a trip.";
 
 export async function POST(request: Request): Promise<Response> {
   let body: unknown;
@@ -138,8 +141,13 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: PLAN_FAILED_MESSAGE }, { status: 503 });
   }
 
-  const { personaId, interestOverrides, ...trip } = parsed.data;
-  const persona = await resolvePersona(personaId, deps);
+  // The gate sits after `create` because it needs the store, and before the job
+  // row because an anonymous request must not leave one behind.
+  const user = await userFor(request, deps);
+  if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
+
+  const { interestOverrides, ...trip } = parsed.data;
+  const persona = await resolvePersona(user.id, deps);
   const planRequest: PlanRequest = {
     ...trip,
     profile: composeProfile(trip.profile, persona, interestOverrides),
@@ -152,42 +160,41 @@ export async function POST(request: Request): Promise<Response> {
 
   // Deliberately not awaited: the response goes out now and the local Node
   // process continues the plan behind it.
-  void runPlanJob(job.id, planRequest, deps);
+  void runPlanJob(job.id, planRequest, deps, user.id);
 
   return Response.json(job, { status: 202 });
 }
 
 /**
- * Turns the id on the wire into the thing the pipeline reads.
+ * Turns the signed-in traveller into the thing the pipeline reads.
  *
  * The result is rebuilt with `calculatePersona` from the stored answers rather
  * than assembled from the stored `dimensions` and `archetype` columns: the
  * answers are the source of truth, and rebuilding is what makes a scoring
  * change reach every traveller without re-asking anyone twelve questions.
  *
- * **An unresolvable persona plans without one.** A stale `localStorage` id, or
- * a database that has been wiped, must not cost the traveller their trip —
- * absent persona is a supported path with a test on it, so the fallback is the
- * ordinary behaviour rather than a degraded one. It is logged, not surfaced.
+ * **No persona plans without one.** Somebody who has never taken the quiz, or
+ * whose row cannot be scored, must not lose their trip over it — absent persona
+ * is a supported path with a test on it, so the fallback is the ordinary
+ * behaviour rather than a degraded one. It is logged, not surfaced.
  */
 async function resolvePersona(
-  personaId: string | undefined,
+  userId: string,
   deps: PlanRouteDeps,
 ): Promise<TravelPersona | undefined> {
-  if (!personaId) return undefined;
   try {
-    const row = await deps.personas.get(personaId);
+    const row = await deps.personas.getByUser(userId);
     if (!row) {
-      console.warn(`[POST /api/plan] persona ${personaId} was not found — planning without it`);
+      console.warn(`[POST /api/plan] ${userId} has no persona — planning without one`);
       return undefined;
     }
     if (!isScorableAnswers(row.answers)) {
-      console.error(`[POST /api/plan] persona ${personaId} has answers this quiz cannot score`);
+      console.error(`[POST /api/plan] persona ${row.id} has answers this quiz cannot score`);
       return undefined;
     }
     return { answers: row.answers, result: calculatePersona(row.answers) };
   } catch (error) {
-    console.error(`[POST /api/plan] persona ${personaId} could not be read`, error);
+    console.error(`[POST /api/plan] the persona for ${userId} could not be read`, error);
     return undefined;
   }
 }
@@ -249,6 +256,7 @@ async function runPlanJob(
   jobId: string,
   planRequest: PlanRequest,
   deps: PlanRouteDeps,
+  ownerId: string,
 ): Promise<JobRow | undefined> {
   const write = async (progress: PlanProgress) => {
     const now = deps.now();
@@ -287,7 +295,7 @@ async function runPlanJob(
 
   try {
     await write(saveProgress());
-    const { itineraryId } = await deps.store.saveItinerary(result);
+    const { itineraryId } = await deps.store.saveItinerary(result, ownerId);
     const now = deps.now();
     return await deps.store.updateJob(
       jobId,

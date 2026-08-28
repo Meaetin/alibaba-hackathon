@@ -70,10 +70,11 @@ type ActivityInsert = typeof itinerary_activities.$inferInsert;
  * answer to "why isn't teamLab in my trip" that survives the request — every
  * cut the funnel made, replayable, in four numbers.
  */
-export function itineraryRow(result: PlanResult): ItineraryInsert {
+export function itineraryRow(result: PlanResult, ownerId: string | null = null): ItineraryInsert {
   const { request } = result;
   const centre = centreOf(result);
   return {
+    user_id: ownerId,
     name: request.name?.trim() || `${request.city} trip`,
     city: request.city,
     country: request.country ?? null,
@@ -235,7 +236,12 @@ export interface PlanStore {
   }): Promise<JobRow>;
   getJob(id: string): Promise<JobRow | undefined>;
   updateJob(id: string, patch: JobPatch, now: Date): Promise<JobRow | undefined>;
-  saveItinerary(result: PlanResult): Promise<{ itineraryId: string }>;
+  /**
+   * The owner is a second argument rather than a field on `PlanResult`, so the
+   * planner never learns that users exist — `runPlan` builds the result and the
+   * route handler, which is the only thing holding a session, says whose it is.
+   */
+  saveItinerary(result: PlanResult, ownerId: string | null): Promise<{ itineraryId: string }>;
 }
 
 export const ITINERARY_JOB_TYPE = "itinerary-planning";
@@ -274,8 +280,8 @@ export function createPlanStore(db: Database): PlanStore {
       return row;
     },
 
-    async saveItinerary(result) {
-      return saveItinerary(db, result);
+    async saveItinerary(result, ownerId) {
+      return saveItinerary(db, result, ownerId);
     },
   };
 }
@@ -355,7 +361,7 @@ export function createInMemoryPlanStore(seed?: {
       return next;
     },
 
-    async saveItinerary(result) {
+    async saveItinerary(result, ownerId) {
       const id = seed?.itineraryId ?? nextId();
       const days = result.days.map((planned) => dayRow(id, planned));
       const activities = result.days.flatMap((planned) =>
@@ -365,7 +371,7 @@ export function createInMemoryPlanStore(seed?: {
           scored: result.scored,
         }),
       );
-      saved.push({ id, itinerary: itineraryRow(result), days, activities, result });
+      saved.push({ id, itinerary: itineraryRow(result, ownerId), days, activities, result });
       return { itineraryId: id };
     },
   };
@@ -385,12 +391,13 @@ export function createInMemoryPlanStore(seed?: {
 export async function saveItinerary(
   db: Database,
   result: PlanResult,
+  ownerId: string | null = null,
 ): Promise<{ itineraryId: string }> {
   const locationIds = await locationIdsFor(db, [...result.places.keys()]);
 
   const [itinerary] = await db
     .insert(itineraries)
-    .values(itineraryRow(result))
+    .values(itineraryRow(result, ownerId))
     .returning({ id: itineraries.id });
 
   if (result.days.length > 0) {
@@ -413,6 +420,28 @@ export async function saveItinerary(
   }
 
   return { itineraryId: itinerary.id };
+}
+
+/**
+ * Who owns an itinerary, or `undefined` if there is no such row.
+ *
+ * Two different "no": `undefined` means the itinerary does not exist, and
+ * `{ userId: null }` means it exists and belongs to nobody — a row planned
+ * before this app had accounts and not swept up by the first sign-up. Callers
+ * need to tell those apart, so this returns the distinction rather than a
+ * boolean that would flatten it.
+ */
+export async function readItineraryOwner(
+  db: Database,
+  id: string,
+): Promise<{ userId: string | null } | undefined> {
+  if (!isUuid(id)) return undefined;
+  const [row] = await db
+    .select({ user_id: itineraries.user_id })
+    .from(itineraries)
+    .where(eq(itineraries.id, id))
+    .limit(1);
+  return row ? { userId: row.user_id } : undefined;
 }
 
 async function locationIdsFor(

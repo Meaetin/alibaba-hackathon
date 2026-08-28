@@ -21,13 +21,14 @@ import { z } from "zod";
 import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
 import type { QuizAnswers } from "@/lib/persona/types";
 
-import { personaRouteDeps } from "../deps";
+import { personaRouteDeps, userFor } from "../deps";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const BAD_REQUEST_MESSAGE = "We couldn't read those quiz answers. Please try again.";
 const SAVE_FAILED_MESSAGE = "We couldn't save your travel persona. Please try again.";
+const SIGNED_OUT_MESSAGE = "Please sign in to save your travel persona.";
 
 /**
  * Shape only. Whether each index names a real option is `isScorableAnswers`'
@@ -62,10 +63,18 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const deps = personaRouteDeps.create();
+
+  // The quiz itself is open to anyone — this is where the answers get a row, and
+  // a row belongs to somebody. A signed-out traveller keeps their result on the
+  // screen they are looking at; they just cannot store it yet.
+  const user = await userFor(request, deps);
+  if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
+
   const result = calculatePersona(answers);
 
   try {
     const row = await deps.personas.upsert({
+      userId: user.id,
       id: parsed.data.id,
       answers,
       dimensions: result.dimensions,

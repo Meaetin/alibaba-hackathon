@@ -34,6 +34,7 @@ import {
 import type { CandidatePlace, PreferenceProfile } from '@/lib/planner/types'
 
 import { planRouteDeps, type PlanRouteDeps } from '../deps'
+import { signedIn } from '../session-fixture'
 import { POST } from './route'
 
 const CANDIDATES = candidates as CandidatePlace[]
@@ -63,32 +64,42 @@ const QUIZ_ANSWERS_LAST: QuizAnswers = QUESTIONS.map((question) => question.opti
 
 const originalCreate = planRouteDeps.create
 
-function post(body: unknown = BODY): Promise<Response> {
+/** Signed in unless a test says otherwise — every plan needs an owner now. */
+function post(body: unknown = BODY, cookie: string | null = currentCookie): Promise<Response> {
   return POST(
     new Request('http://localhost/api/plan', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(cookie ? { cookie } : {}),
+      },
       body: JSON.stringify(body),
     }),
   )
 }
 
+/** Set by `install`, read by `post`, so no test threads a cookie by hand. */
+let currentCookie: string | null = null
+
 interface Harness {
   store: ReturnType<typeof createInMemoryPlanStore>
   personas: ReturnType<typeof createInMemoryPersonaStore>
+  /** The signed-in traveller every request in a test is made as. */
+  session: Awaited<ReturnType<typeof signedIn>>
   /** Every `progress` written to the job row, in order. */
   progress: JobProgress[]
   google: ReturnType<typeof createFakeGoogle>
 }
 
-function install(
+async function install(
   overrides: {
     runPlan?: PlanRouteDeps['runPlan']
     enrichments?: EnrichmentStore
     personas?: ReturnType<typeof createInMemoryPersonaStore>
     failPassB?: boolean
   } = {},
-): Harness {
+): Promise<Harness> {
+  const session = await signedIn({ now: NOW })
   const store = createInMemoryPlanStore({ itineraryId: 'itinerary-1' })
   const personas = overrides.personas ?? createInMemoryPersonaStore()
   const progress: JobProgress[] = []
@@ -104,6 +115,7 @@ function install(
 
   planRouteDeps.create = (): PlanRouteDeps => ({
     store: recording,
+    users: session.users,
     personas,
     runPlan: overrides.runPlan ?? runPlan,
     now: () => NOW,
@@ -116,7 +128,8 @@ function install(
     fetch: google.fetch,
   })
 
-  return { store, personas, progress, google }
+  currentCookie = session.cookie
+  return { store, personas, progress, google, session }
 }
 
 /** The background half is fire-and-forget, so tests wait on the row. */
@@ -142,8 +155,28 @@ afterEach(() => {
 })
 
 describe('POST /api/plan', () => {
+  it('refuses to plan for a signed-out caller, and leaves no job row behind', async () => {
+    const harness = await install()
+    const response = await post(BODY, null)
+
+    expect(response.status).toBe(401)
+    // The gate has to sit in front of `createJob`, or every anonymous request
+    // leaves a queued row that nothing will ever finish.
+    expect(harness.store.rows.size).toBe(0)
+  })
+
+  it('writes the signed-in traveller onto the itinerary it saves', async () => {
+    const harness = await install()
+    const job = (await (await post()).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    // Without this the row saves with a null owner and the trip is invisible in
+    // every list — which is exactly how it behaved before accounts existed.
+    expect(harness.store.saved[0].itinerary.user_id).toBe(harness.session.user.id)
+  })
+
   it('rejects a body that is not a plan request, without a stack trace', async () => {
-    install()
+    await install()
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const response = await post({ city: 'Kyoto', totalDays: 0 })
 
@@ -159,7 +192,7 @@ describe('POST /api/plan', () => {
       release = resolve
     })
     let started = false
-    const harness = install({
+    const harness = await install({
       runPlan: async (request, deps) => {
         started = true
         await held
@@ -186,7 +219,7 @@ describe('POST /api/plan', () => {
   })
 
   it('never walks the progress bar backwards, and finishes on exactly 100', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
@@ -230,7 +263,7 @@ describe('POST /api/plan', () => {
   it('stores a friendly error when a stage throws, and logs the technical one', async () => {
     const raw = 'OpenAI 429 rate_limit_exceeded'
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const harness = install({
+    const harness = await install({
       enrichments: {
         async getMany() {
           throw new Error(raw)
@@ -257,7 +290,7 @@ describe('POST /api/plan', () => {
   })
 
   it('persists funnel_stats on the itinerary row, matching the funnel output', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
@@ -276,7 +309,7 @@ describe('POST /api/plan', () => {
   })
 
   it('persists the diagnostic record beside it, through the real handler', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
@@ -294,7 +327,7 @@ describe('POST /api/plan', () => {
   })
 
   it('stores the whole itinerary: one row per day, one per stop', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     const finished = await settled(harness.store, job.id)
 
@@ -325,7 +358,7 @@ describe('POST /api/plan', () => {
   })
 
   it('produces an itinerary the invariant suite accepts, with zero network calls', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
@@ -339,15 +372,16 @@ describe('POST /api/plan', () => {
   })
 
   it('resolves personaId into the persona, and snapshots it on the row', async () => {
-    const harness = install()
-    const stored = await harness.personas.upsert({
+    const harness = await install()
+    await harness.personas.upsert({
+      userId: harness.session.user.id,
       answers: QUIZ_ANSWERS,
       dimensions: calculatePersona(QUIZ_ANSWERS).dimensions,
       archetype: calculatePersona(QUIZ_ANSWERS).archetype.id,
       now: NOW,
     })
 
-    const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+    const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
     const [saved] = harness.store.saved
@@ -363,8 +397,9 @@ describe('POST /api/plan', () => {
   })
 
   it('rebuilds the result from the stored answers, not from the stored scores', async () => {
-    const harness = install()
-    const stored = await harness.personas.upsert({
+    const harness = await install()
+    await harness.personas.upsert({
+      userId: harness.session.user.id,
       answers: QUIZ_ANSWERS,
       // Deliberately wrong, as a scoring change would leave them. The answers
       // are the source of truth, so these must not reach the itinerary.
@@ -373,30 +408,28 @@ describe('POST /api/plan', () => {
       now: NOW,
     })
 
-    const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+    const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
     const snapshot = harness.store.saved[0].itinerary.persona!
     expect(snapshot.result.dimensions).toEqual(calculatePersona(QUIZ_ANSWERS).dimensions)
   })
 
-  it('plans without a persona when the id names no row', async () => {
-    const harness = install()
+  it('plans without a persona when the traveller has no row', async () => {
+    const harness = await install()
     const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const job = (await (
-      await post({ ...BODY, personaId: '11111111-2222-4333-8444-555555555555' })
-    ).json()) as JobRow
+    const job = (await (await post()).json()) as JobRow
     const finished = await settled(harness.store, job.id)
 
-    // A stale localStorage pointer costs personalisation, never the trip.
+    // Never taking the quiz costs personalisation, never the trip.
     expect(finished.status).toBe('completed')
     expect(harness.store.saved[0].itinerary.persona).toBeNull()
     expect(warnings).toHaveBeenCalled()
   })
 
   it('stores null persona when the traveller never took the quiz', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
     expect(harness.store.saved[0].itinerary.persona).toBeNull()
@@ -407,14 +440,15 @@ describe('POST /api/plan', () => {
     // two people, two different plans. If this stops being true the quiz is
     // collecting twelve answers and spending none of them.
     async function planAs(answers: QuizAnswers) {
-      const harness = install()
-      const stored = await harness.personas.upsert({
+      const harness = await install()
+      await harness.personas.upsert({
+        userId: harness.session.user.id,
         answers,
         dimensions: calculatePersona(answers).dimensions,
         archetype: calculatePersona(answers).archetype.id,
         now: NOW,
       })
-      const job = (await (await post({ ...BODY, personaId: stored.id })).json()) as JobRow
+      const job = (await (await post()).json()) as JobRow
       await settled(harness.store, job.id)
       return harness.store.saved[0]
     }
@@ -443,14 +477,14 @@ describe('POST /api/plan', () => {
   })
 
   it('leaves the submitted profile alone when there is no persona', async () => {
-    const harness = install()
+    const harness = await install()
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
     expect(harness.store.saved[0].itinerary.profile).toEqual(PROFILE)
   })
 
   it('still completes when Pass B is down', async () => {
-    const harness = install({ failPassB: true })
+    const harness = await install({ failPassB: true })
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
     const job = (await (await post()).json()) as JobRow
     const finished = await settled(harness.store, job.id)

@@ -13,21 +13,33 @@
  * client component, and works fine as a parent: Next renders this on the server
  * and passes the result down as children.
  *
- * ## It is not linked from anywhere, on purpose
+ * ## It is owner-only, and still not linked from anywhere
  *
- * You reach it by typing the URL. Auth was removed from this app, so a visible
- * link would put every place id, every score and every model rationale one
- * click from the itinerary page. Type the URL, or add a link behind a flag when
- * there is something to hide it behind.
+ * It renders every place id, every score and every model rationale for a trip,
+ * so it is gated exactly as `GET /api/itineraries/[id]` is: sign in, and own
+ * the trip, or get a 404. Somebody else's is a 404 rather than a 403 for the
+ * same reason it is there — a 403 confirms the id names something real.
+ *
+ * This is the one place in the app that reads the cookie through `next/headers`
+ * rather than off a `Request`. There is no `Request` in a server component, and
+ * the reason the route handlers avoid it — staying drivable from a plain
+ * `Request` in a test — does not apply to a page with no handler test.
+ *
+ * You still reach it by typing the URL. The gate makes it safe to link; nothing
+ * links it yet.
  */
 
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
+import { SESSION_COOKIE_NAME } from "@/lib/auth/session";
 import { PlannerDebugView } from "@/components/ui/debug/PlannerDebugView";
 import { getDb } from "@/lib/db/client";
 import { readPlanDiagnostics } from "@/lib/db/diagnostics";
+import { readItineraryOwner } from "@/lib/db/itineraries";
+import { createUserStore } from "@/lib/db/users";
 
 /** A long-lived Node process holding a Postgres connection. Never static. */
 export const runtime = "nodejs";
@@ -42,13 +54,16 @@ export default async function ItineraryDebugPage({
 }) {
   const { id } = await params;
 
-  let diagnostics;
+  // Read first, decide after. `notFound()` signals by throwing a Next
+  // control-flow error, so calling it inside the `catch` below would have a
+  // trip that simply isn't yours render as "the database is unavailable".
+  let read: Awaited<ReturnType<typeof readOwnedDiagnostics>>;
   try {
-    diagnostics = await readPlanDiagnostics(getDb(), id);
+    read = await readOwnedDiagnostics(id);
   } catch (error) {
-    // The technical detail stays in the log. This page has no user to protect,
-    // but a Next error overlay for "DATABASE_URL is not set" is a worse answer
-    // than a sentence naming the one thing that is actually wrong.
+    // The technical detail stays in the log. A Next error overlay for
+    // "DATABASE_URL is not set" is a worse answer than a sentence naming the
+    // one thing that is actually wrong.
     console.error(`[/itineraries/${id}/debug] could not read the diagnostics`, error);
     return (
       <Unavailable
@@ -58,8 +73,10 @@ export default async function ItineraryDebugPage({
     );
   }
 
-  // An id that names nothing — including one that is not a uuid — is a 404.
-  if (!diagnostics) notFound();
+  // An id that names nothing, one that is not a uuid, one that belongs to
+  // somebody else, and a visitor who is not signed in: all 404.
+  if (!read) notFound();
+  const diagnostics = read;
 
   return (
     <div className="planner-debug-route min-h-full bg-surface-alt">
@@ -98,4 +115,25 @@ function Unavailable({ detail, itineraryId }: { detail: string; itineraryId: str
       </Link>
     </div>
   );
+}
+
+/**
+ * The diagnostics for a trip, but only for the person who owns it. Returns
+ * `null` for every way of not being allowed to see it — signed out, not the
+ * owner, no such trip — because the page renders all four the same way, and a
+ * function that distinguished them would invite a caller to leak the
+ * difference. Throws only when the database itself is unreachable.
+ */
+async function readOwnedDiagnostics(id: string) {
+  const db = getDb();
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  const user = await createUserStore(db).userForToken(token, new Date());
+  if (!user) return null;
+
+  const owner = await readItineraryOwner(db, id);
+  if (!owner || owner.userId !== user.id) return null;
+
+  return (await readPlanDiagnostics(db, id)) ?? null;
 }

@@ -181,6 +181,52 @@ export const area_guides = pgTable("area_guides", {
     .default(sql`now() + interval '90 days'`),
 });
 
+// ─── Accounts ────────────────────────────────────────────────────────────────
+
+/**
+ * One row per person with an account. Identity lives here, in the same database
+ * as the trips it owns, so an itinerary's owner is a foreign key rather than a
+ * uuid issued by some other system that this one cannot join to.
+ *
+ * `password_hash` is the whole self-describing scrypt string — parameters, salt
+ * and digest — never a bare digest. See `src/lib/auth/password.ts`: a stored
+ * hash has to carry the cost parameters it was made with, or raising them later
+ * silently invalidates every existing password.
+ *
+ * `email` is stored already lower-cased by the route, and the unique index is
+ * what makes that load-bearing rather than cosmetic.
+ */
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  display_name: text("display_name"),
+  password_hash: text("password_hash").notNull(),
+  created_at: timestamptz("created_at").notNull().defaultNow(),
+  updated_at: timestamptz("updated_at").notNull().defaultNow(),
+});
+
+/**
+ * Live sessions. The primary key is the **sha256 of the cookie token**, never
+ * the token: a row here cannot be replayed as a login, so a database dump is
+ * not a set of live sessions. The browser holds the only copy of the secret.
+ *
+ * Opaque tokens rather than a signed JWT so that signing out is a delete rather
+ * than a wish. A stateless token stays valid until it expires no matter what
+ * the server would prefer.
+ */
+export const sessions = pgTable(
+  "sessions",
+  {
+    token_hash: text("token_hash").primaryKey(),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    expires_at: timestamptz("expires_at").notNull(),
+  },
+  (t) => [index("sessions_user_id_idx").on(t.user_id)],
+);
+
 // ─── Traveller ───────────────────────────────────────────────────────────────
 
 /**
@@ -203,6 +249,15 @@ export const area_guides = pgTable("area_guides", {
  */
 export const travel_personas = pgTable("travel_personas", {
   id: uuid("id").primaryKey().defaultRandom(),
+  /**
+   * The traveller this persona belongs to, **unique**: the prose above promises
+   * one persona per person and this is what makes that true rather than hoped
+   * for. Nullable because the quiz is open to anyone — a persona taken signed
+   * out has no owner until the browser hands its id to sign-up or sign-in.
+   */
+  user_id: uuid("user_id")
+    .unique()
+    .references(() => users.id, { onDelete: "cascade" }),
   /** `QuizAnswers` — one option index per question, `null` where unanswered. */
   answers: jsonb("answers").$type<QuizAnswers>().notNull(),
   /** Derived. The four raw 0–100 axis scores. */
@@ -217,8 +272,15 @@ export const travel_personas = pgTable("travel_personas", {
 
 export const itineraries = pgTable("itineraries", {
   id: uuid("id").primaryKey().defaultRandom(),
-  /** Nullable: auth is removed. */
-  user_id: text("user_id"),
+  /**
+   * The owner. Nullable because the rows planned before accounts existed have
+   * none, and inventing an owner for them would be a lie told in a foreign key.
+   * `POST /api/plan` requires a user, so nothing written from here on is null.
+   *
+   * `set null` rather than `cascade`: deleting an account should not silently
+   * destroy trips, and an orphaned itinerary is still readable at its own URL.
+   */
+  user_id: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   city: text("city").notNull(),
   country: text("country"),
