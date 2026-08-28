@@ -16,6 +16,8 @@ import { VISIT_STEP_MINUTES, type VisitDuration } from './duration'
 import {
   DAY_END_MIN,
   DAY_SKELETON,
+  DAY_START_MIN,
+  hhmm,
   MEAL_MAX_MINUTES,
   PACE_PLANS,
   WALK_MAX_METERS,
@@ -452,6 +454,127 @@ describe('under budget', () => {
     expect(cafe!.startMin).toBeGreaterThanOrEqual(w0)
     expect(cafe!.endMin).toBeLessThanOrEqual(w1)
     expectContiguous(day)
+  })
+})
+
+// ── the cafe a traveller was actually given ──────────────────────────────────
+
+/**
+ * The morning this packer used to throw away.
+ *
+ * Pass B is told in `assign.ts` that "a role says what a stop is, never when it
+ * is", so it tags a coffee shop `cafe_break` because it is one and puts it
+ * first because that is when you drink coffee. `stampDay` then read the role as
+ * a time and refused to seat it before 15:30. Measured on a live Ubud trip:
+ * nine dropped stops across three days, every one of them in front of lunch,
+ * and not one stop after lunch dropped on any day.
+ *
+ * Neither Gate A fixture contains a single assigned `cafe_break`, so both
+ * snapshots pass whatever this rule says. That is exactly why these tests are
+ * written by hand.
+ */
+describe('an assigned cafe break', () => {
+  const morningCafes = (): PackDayInput => ({
+    assignments: [
+      assign('coffee', 'cafe_break', 0.5, dur(45), ['coffee_shop']),
+      assign('bakery', 'cafe_break', 0.4, dur(45), ['cafe']),
+      assign('warung', 'lunch', 0.9, dur(60)),
+      assign('temple', 'activity', 0.8, dur(90)),
+      assign('bar', 'dinner', 0.7, dur(60)),
+    ],
+  })
+
+  it('starts when you arrive, instead of waiting for the afternoon', () => {
+    const day = packDay(morningCafes(), 'balanced', NO_TRAVEL)
+    const [cafeOpens] = DAY_SKELETON.find((slot) => slot.role === 'cafe_break')!.window
+    expect(segmentFor(day, 'coffee')!.startMin).toBe(DAY_START_MIN)
+    expect(segmentFor(day, 'bakery')!.startMin).toBeLessThan(cafeOpens)
+  })
+
+  // The whole point. Both cafes used to be dropped — not because the day was
+  // full but because they made lunch impossible by sitting in front of it and
+  // refusing to happen before 15:30.
+  it('does not cost the day its morning', () => {
+    const day = packDay(morningCafes(), 'balanced', NO_TRAVEL)
+    expect(day.dropped).toEqual([])
+    expect(activities(day)).toHaveLength(5)
+    // And lunch is still a lunch: only meals kept their windows.
+    const [opens, latest] = DAY_SKELETON.find((slot) => slot.role === 'lunch')!.window
+    const lunch = segmentFor(day, 'warung')!
+    expect(lunch.startMin).toBeGreaterThanOrEqual(opens)
+    expect(lunch.startMin).toBeLessThanOrEqual(latest)
+  })
+
+  it('still lets an afternoon cafe be an afternoon cafe', () => {
+    // Nothing forces it late any more, so this asserts the ordinary case is
+    // unharmed: a cafe placed after lunch simply runs after lunch.
+    const day = packDay(
+      {
+        assignments: [
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('coffee', 'cafe_break', 0.5, dur(45), ['coffee_shop']),
+          assign('bar', 'dinner', 0.7, dur(60)),
+        ],
+      },
+      'balanced',
+      NO_TRAVEL,
+    )
+    expect(day.dropped).toEqual([])
+    expect(segmentFor(day, 'coffee')!.startMin).toBeGreaterThan(segmentFor(day, 'warung')!.startMin)
+  })
+})
+
+// ── why a stop was cut ───────────────────────────────────────────────────────
+
+/**
+ * The packer drops for two unrelated reasons and used to say the same sentence
+ * about both. On the live Ubud trip "over budget — no room left in the day" was
+ * printed under days that ended at 19:15 with a 21:00 limit and a
+ * two-and-a-half-hour hole in the morning.
+ */
+describe('the reason a stop was dropped', () => {
+  it('names the meal, and the time it had to start by, when a meal was blocked', () => {
+    // Two long mornings in front of lunch, and a slow leg between every pair:
+    // lunch cannot reach 13:30 however much the visits are squeezed.
+    const day = packDay(
+      {
+        assignments: [
+          assign('longA', 'activity', 0.3, dur(180)),
+          assign('longB', 'activity', 0.2, dur(180)),
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('bar', 'dinner', 0.7, dur(60)),
+        ],
+      },
+      'balanced',
+      travel(30, 3000),
+    )
+    const [, latest] = DAY_SKELETON.find((slot) => slot.role === 'lunch')!.window
+    expect(day.dropped.length).toBeGreaterThan(0)
+    for (const cut of day.dropped) {
+      expect(cut.reason).toContain('lunch could not start by')
+      expect(cut.reason).toContain(hhmm(latest))
+      expect(cut.reason).not.toContain('over budget')
+    }
+  })
+
+  it('still says over budget when the day genuinely runs long', () => {
+    // Lunch and dinner both seated in their windows; it is the tail that does
+    // not fit, so nothing is blocked and the old sentence is the true one.
+    const day = packDay(
+      {
+        assignments: [
+          assign('warung', 'lunch', 0.9, dur(60)),
+          assign('a1', 'activity', 0.8, dur(120)),
+          assign('bar', 'dinner', 0.7, dur(60)),
+          assign('a2', 'activity', 0.4, dur(180)),
+          assign('a3', 'activity', 0.3, dur(180)),
+        ],
+      },
+      'balanced',
+      travel(20, 2000),
+    )
+    expect(day.dropped.length).toBeGreaterThan(0)
+    for (const cut of day.dropped) expect(cut.reason).toBe('over budget — no room left in the day')
   })
 })
 
