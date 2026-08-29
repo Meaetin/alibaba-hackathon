@@ -23,7 +23,7 @@ import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
 import { announcePlanningJob } from "@/lib/jobs/events";
 import { ItineraryQueueCardItem } from "@/components/ui/itinerary/ItineraryQueueCardItem";
-import { detachJob, retryJob } from "@/lib/api/client";
+import { retryJob } from "@/lib/api/client";
 import { useItinerariesQuery } from "@/hooks/queries/useItinerariesQuery";
 import { useItineraryUsageQuery } from "@/hooks/queries/useItineraryUsageQuery";
 import { queryClient } from "@/lib/query/queryClient";
@@ -109,6 +109,7 @@ export default function ItinerariesPage() {
   // persistent local queue owns it, and toasting in both places shows it twice.
   const { jobs: planningJobs, removeJob, upsertJob } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
       if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.upcomingItineraries(userId) });
@@ -136,16 +137,13 @@ export default function ItinerariesPage() {
     });
   }, [realItineraryIdsKey]);
 
+  // Local only — see the note on the same handler in `/home`. There is no
+  // detach endpoint, and `removeJob` forgets the id across pages on its own.
   const handleRemoveJob = useCallback(
-    async (jobId: string) => {
+    (jobId: string) => {
       removeJob(jobId);
-      try {
-        await detachJob(jobId);
-      } catch {
-        showToast({ title: "Couldn't dismiss that, try again later.", variant: "error" });
-      }
     },
-    [removeJob, showToast],
+    [removeJob],
   );
 
   const handleRetryJob = useCallback(

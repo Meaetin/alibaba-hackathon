@@ -147,6 +147,17 @@ export interface PlanItineraryParams {
   totalDays: number
   /** Trip name. The server falls back to the city when omitted. */
   name?: string
+  /**
+   * Places the traveller ticked before opening the create modal, as
+   * `locations.id`. The server translates them to place ids and the planner
+   * merges them into its pool.
+   *
+   * **A seed is not a pin.** These places rank first and their neighbourhoods
+   * get searched, but Pass B still decides which day each belongs to and the
+   * packer can still drop one for time. `stats.seeds` on the finished job says
+   * how many were found; the day list says which were kept.
+   */
+  seedLocationIds?: string[]
   /** The traveller. Drives retrieval, scoring, slot assignment and narration. */
   profile: PreferenceProfile
   /** Scheduler/clustering knobs. Never the traveller — see `profile`. */
@@ -506,29 +517,28 @@ export interface CreateItineraryRoutedInput {
 }
 
 /**
- * Routes the localhost demo's supported itinerary-creation cases:
+ * Routes the supported itinerary-creation cases:
  *
- *   | AI toggle | locations | → endpoint                        |
- *   | --------- | --------- | --------------------------------- |
- *   | off       | none      | POST /api/itineraries/blank       | (2b → { kind: 'blank' })
- *   | on        | none      | POST /api/plan                    | (2a → { kind: 'planning' })
- *   | on/off    | some      | unsupported until pins reach the local planner |
+ *   | AI toggle | locations | → endpoint                  |
+ *   | --------- | --------- | --------------------------- |
+ *   | off       | none      | POST /api/itineraries/blank | ({ kind: 'blank' })
+ *   | on/off    | some      | POST /api/plan, seeded      | ({ kind: 'planning' })
+ *   | on        | none      | POST /api/plan              | ({ kind: 'planning' })
  *
- * Selected locations must never be silently dropped. The local planner does
- * not accept pinned place ids yet, so that case fails with a plain demo message.
+ * **A selection always plans**, even with the AI toggle off. The toggle asks
+ * whether to fill the gaps around what you picked; it has never meant "do not
+ * schedule anything", and routing a selection to the blank-itinerary endpoint
+ * would silently throw the selection away. The toggle reaches the planner as
+ * nothing today — every plan searches around its seeds — which is a gap worth
+ * naming rather than papering over with an error.
  */
 export async function createItineraryRouted(
   input: CreateItineraryRoutedInput,
 ): Promise<ItineraryCreateResult> {
   const hasLocations = input.selectedLocationIds.length > 0
 
-  if (hasLocations) {
-    throw new Error(
-      'Planning from selected places is not available in this demo yet. Start with AI recommendations and no selected places.',
-    )
-  }
-
-  // Case 2b: no locations + AI off → empty itinerary.
+  // No locations + AI off → empty itinerary. There is nothing to plan around
+  // and nothing was asked for, so nothing is planned.
   if (!hasLocations && !input.aiRecommendations) {
     const itinerary = await createItinerary(
       input.tripName,
@@ -543,7 +553,8 @@ export async function createItineraryRouted(
     return { kind: 'blank', itinerary }
   }
 
-  // Case 2a: AI-only planning goes through this app's local pipeline.
+  // Everything else goes through this app's own pipeline, with the traveller's
+  // picks along for the ride.
   //
   // The persona is no longer sent. It used to travel as an id read from
   // `localStorage`, because that pointer was the only thing that knew which
@@ -571,6 +582,7 @@ export async function createItineraryRouted(
     // default that changes behaviour silently is a trap — so the choice is
     // made here, once, where somebody can see it.
     mode: 'themed',
+    ...(hasLocations ? { seedLocationIds: input.selectedLocationIds } : {}),
   })
   return { kind: 'planning', job }
 }

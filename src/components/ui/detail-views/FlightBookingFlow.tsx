@@ -345,7 +345,7 @@ export function FlightBookingFlow({ offer, search, selectedSeatId, onSeatSelecti
             <Plane className={cn("mt-0.5 size-4 shrink-0 text-glyph-secondary")} aria-hidden="true" />
             <div>
               <h2 className={cn("type-body-1 font-semibold text-content")}>Choose your seat on the aircraft</h2>
-              <p className={cn("type-body-3 text-content-secondary")}>The map has switched to the seat map. Select one available seat there to continue.</p>
+              <p className={cn("type-body-3 text-content-secondary")}>Pick an available seat on the aircraft map beside this panel, or continue without one.</p>
             </div>
           </div>
           {seat ? (

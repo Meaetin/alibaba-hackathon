@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback } from "react";
+import { addLocationsToCollection } from "@/lib/api/collections";
 import { createItineraryRouted } from "@/lib/api/itineraries";
+import { announcePlanningJob } from "@/lib/jobs/events";
 import type { QueueJob } from "@/lib/jobs/types";
 
 interface UseCollectionLocationBatchOperationsOptions {
@@ -15,18 +17,22 @@ export function useCollectionLocationBatchOperations({
   onRefresh,
   onJobCreated,
 }: UseCollectionLocationBatchOperationsOptions) {
+  /**
+   * Puts the given places on a collection.
+   *
+   * `destinationId` is always a **collection** id. The itinerary callers pass
+   * the trip's companion collection — `ActionToolbarItinerary.collectionId` —
+   * because an itinerary is a schedule and a place with no day and no time has
+   * nowhere to sit in one. Saving to a trip means saving to its shelf.
+   *
+   * It refreshes rather than patching local state: the response says how many
+   * places actually landed, and a place already on the shelf lands zero times.
+   */
   const handleAddToDestination = useCallback(
-    async (
-      destinationId: string,
-      locationIds: string[],
-      _backingCollectionId?: string,
-    ) => {
+    async (destinationId: string, locationIds: string[]) => {
       if (locationIds.length === 0) return;
-      // Collections have no store in this build — the table this wrote to left
-      // with Supabase. It throws rather than resolving quietly: the caller
-      // shows a success toast, and "added to collection" over a write that did
-      // not happen is worse than a plain error the traveller can see.
-      throw new Error("Collections are not available in this build.");
+      await addLocationsToCollection(destinationId, locationIds);
+      onRefresh?.();
     },
     [onRefresh],
   );
@@ -55,7 +61,15 @@ export function useCollectionLocationBatchOperations({
         latitude,
         longitude,
       });
-      if (result.kind === "planning") onJobCreated?.(result.job);
+      if (result.kind === "planning") {
+        // Announced here, not left to each caller. A plan started from a
+        // collection or a link is the same plan as one started from the create
+        // modal, and both of those pages had been throwing the row away — so
+        // the layout queue never polled it, its "Itinerary ready" toast could
+        // not fire, and the loading overlay animated nothing.
+        announcePlanningJob(result.job);
+        onJobCreated?.(result.job);
+      }
       return result;
     },
     [source, onJobCreated],

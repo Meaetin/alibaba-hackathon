@@ -63,6 +63,10 @@ const InterestSchema = z.enum([
  *  a 60-day request would ask k-means for sixty neighbourhoods in one city. */
 const MAX_TOTAL_DAYS = 14;
 
+/** Comfortably past the funnel's global cap of 60, so the bound that actually
+ *  decides what a trip can hold is the funnel's and not this number. */
+const MAX_SEED_LOCATIONS = 200;
+
 const PlanRequestSchema = z.object({
   city: z.string().trim().min(1),
   country: z.string().trim().min(1).optional(),
@@ -121,6 +125,18 @@ const PlanRequestSchema = z.object({
       radiusMeters: z.number().positive().optional(),
     })
     .optional(),
+  /**
+   * Places the traveller ticked before asking for a trip — the "generate an
+   * itinerary from these" path off a collection or a link.
+   *
+   * `locations.id`, because that is what every card in this app carries. The
+   * handler translates them to place ids before the pipeline sees them; a
+   * client that sent place ids would be a client that had to know which of the
+   * two identifiers this app's cards happen to hold.
+   *
+   * Capped rather than unbounded: a selection bigger than this is not a trip.
+   */
+  seedLocationIds: z.array(z.string().uuid()).max(MAX_SEED_LOCATIONS).optional(),
   options: z
     .object({
       maxK: z.number().int().positive().optional(),
@@ -165,15 +181,17 @@ export async function POST(request: Request): Promise<Response> {
   const user = await userFor(request, deps);
   if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
 
-  const { interestOverrides, ...trip } = parsed.data;
-  const [persona, preferences] = await Promise.all([
+  const { interestOverrides, seedLocationIds, ...trip } = parsed.data;
+  const [persona, preferences, seedPlaceIds] = await Promise.all([
     resolvePersona(user.id, deps),
     resolvePreferences(user.id, deps),
+    resolveSeeds(seedLocationIds, deps),
   ]);
   const planRequest: PlanRequest = {
     ...trip,
     profile: composeProfile(trip.profile, persona, interestOverrides, preferences),
     ...(persona ? { persona } : {}),
+    ...(seedPlaceIds.length > 0 ? { seedPlaceIds } : {}),
   };
 
   // The payload is the request as accepted, so a client reading the job row
@@ -218,6 +236,32 @@ async function resolvePersona(
   } catch (error) {
     console.error(`[POST /api/plan] the persona for ${userId} could not be read`, error);
     return undefined;
+  }
+}
+
+/**
+ * The picked places, translated from row ids to the place ids the planner
+ * speaks.
+ *
+ * **A lookup that fails plans without the picks**, the same supported ladder
+ * `resolvePersona` and `resolvePreferences` below follow: losing the selection
+ * is not worth losing the trip. It is warned about rather than surfaced,
+ * because the traveller can see for themselves whether their places turned up
+ * and an error toast over a trip that built fine is the worse of the two.
+ *
+ * Ids the database does not have are dropped inside `placeIdsForLocationIds`
+ * and counted by the pipeline as `stats.seeds.missing`.
+ */
+async function resolveSeeds(
+  locationIds: string[] | undefined,
+  deps: PlanRouteDeps,
+): Promise<string[]> {
+  if (!locationIds || locationIds.length === 0) return [];
+  try {
+    return await deps.placeIdsFor(locationIds);
+  } catch (error) {
+    console.error("[POST /api/plan] the picked places could not be resolved", error);
+    return [];
   }
 }
 
@@ -413,6 +457,7 @@ async function runPlanJob(
   try {
     await write(saveProgress());
     const { itineraryId } = await deps.store.saveItinerary(result, ownerId);
+    await saveCompanionCollection(itineraryId, ownerId, deps);
     const now = deps.now();
     return await deps.store.updateJob(
       jobId,
@@ -432,6 +477,48 @@ async function runPlanJob(
       jobId,
       { status: "failed", error: getFriendlyApiError(error, PLAN_FAILED_MESSAGE) },
       now,
+    );
+  }
+}
+
+/**
+ * The finished trip's own collection: every place it scheduled, on one shelf.
+ *
+ * It runs here rather than inside `saveItinerary` for the same reason the owner
+ * is passed in rather than looked up — the planner never learns that users or
+ * shelves exist, and a companion collection is a product decision that belongs
+ * where somebody can see it.
+ *
+ * **A failed shelf must not fail the trip.** The itinerary is already written
+ * and is the thing the traveller asked for; losing its companion costs a
+ * convenience and is logged, exactly the ladder `resolvePersona` and
+ * `resolvePreferences` above already follow. It is also why this is awaited but
+ * not inside the `try` that owns the save — a throw here would mark a job
+ * `failed` over a trip that saved perfectly.
+ */
+async function saveCompanionCollection(
+  itineraryId: string,
+  ownerId: string,
+  deps: PlanRouteDeps,
+): Promise<void> {
+  try {
+    const created = await deps.collections.createItineraryCollection(
+      itineraryId,
+      ownerId,
+      deps.now(),
+    );
+    // Undefined means the trip has no located stops, so there was nothing to
+    // put on a shelf. An empty collection beside a trip reads as "this trip
+    // saved nothing", which is a different and wrong statement.
+    if (!created) {
+      console.warn(
+        `[plan] itinerary ${itineraryId} has no located stops — no companion collection`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[plan] the companion collection for itinerary ${itineraryId} could not be created`,
+      error,
     );
   }
 }

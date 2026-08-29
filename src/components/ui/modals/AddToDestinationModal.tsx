@@ -330,8 +330,11 @@ async function fetchCollections(): Promise<DestinationItem[]> {
 
 async function fetchItineraries(): Promise<DestinationItem[]> {
   const itineraries = await getItineraries();
+  // A trip with no companion collection has nowhere to put a place: an
+  // itinerary is a schedule, and a place with no day and no time cannot sit in
+  // one. Offering it would be a save that stores nothing.
   return itineraries
-    .filter((i) => !i.is_archived)
+    .filter((i) => !i.is_archived && !!i.collection_id)
     .map((i: ItineraryWithRole) => ({
       id: i.id,
       name: i.name,

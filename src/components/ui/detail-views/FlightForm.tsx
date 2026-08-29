@@ -467,7 +467,7 @@ export function FlightForm({ initialData, itineraryStartDate, itineraryEndDate, 
   );
 }
 
-function FlightSearchForm({
+export function FlightSearchForm({
   initialDate,
   onSearch,
   onDestinationChange,
@@ -475,6 +475,7 @@ function FlightSearchForm({
   onTrackOffer,
   onSelectOffer,
   trackedOfferKeys = new Set<string>(),
+  submitLabel,
 }: {
   initialDate?: string;
   onSearch: (data: FlightSearchData) => Promise<FlightOffer[]>;
@@ -483,6 +484,13 @@ function FlightSearchForm({
   onTrackOffer?: (offer: FlightOffer, search: FlightSearchData) => void;
   onSelectOffer?: (offer: FlightOffer, search: FlightSearchData) => void;
   trackedOfferKeys?: Set<string>;
+  /**
+   * Renders the submit button inside the form. The itinerary side panel owns a
+   * sticky footer that submits by `form="flight-search-form"`, so it passes
+   * nothing; a caller without a footer must pass a label or the form has no way
+   * to submit at all.
+   */
+  submitLabel?: string;
 }) {
   const reduceMotion = useReducedMotion();
   const [originQuery, setOriginQuery] = useState(`${CHANGI_AIRPORT.city} (${CHANGI_AIRPORT.code})`);
@@ -613,6 +621,13 @@ function FlightSearchForm({
       )}
       {searchError && <p role="alert" className={cn("type-body-3 text-content-error")}>{searchError}</p>}
 
+      {submitLabel && (
+        <Button variant="primary" size="md" icon="leading" type="submit" disabled={loading}>
+          <Search className={cn("size-4")} />
+          {loading ? "Searching…" : submitLabel}
+        </Button>
+      )}
+
       {/* Flight Results */}
       {(loading || hasSearched) && (
         <div className={cn("flex flex-col gap-2")} data-region="itinerary-flight-search-results">
@@ -692,30 +707,36 @@ function FlightSearchForm({
                 </button>
 
                 {/* Ticket Actions */}
+                {(onTrackOffer || onSelectOffer) && (
                 <div className={cn("relative flex gap-2 border-t border-dashed border-edge p-2")}>
                   <span className={cn("absolute -left-2 -top-2 size-4 rounded-full border border-edge bg-surface")} aria-hidden="true" />
                   <span className={cn("absolute -right-2 -top-2 size-4 rounded-full border border-edge bg-surface")} aria-hidden="true" />
-                  <Button
-                    variant={tracked ? "secondary" : "outline"}
-                    size="sm"
-                    icon="leading"
-                    aria-label={tracked ? "Stop tracking price" : "Track price"}
-                    title={tracked ? "Stop tracking price" : "Track price"}
-                    onClick={() => origin && destination && onTrackOffer?.(offer, { origin, destination, departureDate })}
-                    className={cn("flex-1")}
-                  >
-                    {tracked ? <BellOff className={cn("size-4")} /> : <Bell className={cn("size-4")} />}
-                    {tracked ? "Stop tracking" : "Track price"}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => origin && destination && onSelectOffer?.(offer, { origin, destination, departureDate })}
-                    className={cn("flex-1")}
-                  >
-                    Select flight · {formatPrice(offer.price, offer.currency)}
-                  </Button>
+                  {onTrackOffer && (
+                    <Button
+                      variant={tracked ? "secondary" : "outline"}
+                      size="sm"
+                      icon="leading"
+                      aria-label={tracked ? "Stop tracking price" : "Track price"}
+                      title={tracked ? "Stop tracking price" : "Track price"}
+                      onClick={() => origin && destination && onTrackOffer(offer, { origin, destination, departureDate })}
+                      className={cn("flex-1")}
+                    >
+                      {tracked ? <BellOff className={cn("size-4")} /> : <Bell className={cn("size-4")} />}
+                      {tracked ? "Stop tracking" : "Track price"}
+                    </Button>
+                  )}
+                  {onSelectOffer && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => origin && destination && onSelectOffer(offer, { origin, destination, departureDate })}
+                      className={cn("flex-1")}
+                    >
+                      Select flight · {formatPrice(offer.price, offer.currency)}
+                    </Button>
+                  )}
                 </div>
+                )}
               </motion.div>
             );
           }) : (

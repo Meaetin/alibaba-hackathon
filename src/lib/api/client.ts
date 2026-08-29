@@ -151,8 +151,3 @@ export async function retryJob(jobId: string) {
   const res = await authFetch(`/api/jobs/${jobId}/retry`, { method: 'POST' })
   return unwrap(res, 'Failed to retry job')
 }
-
-export async function detachJob(jobId: string): Promise<{ success: boolean }> {
-  const res = await authFetch(`/api/jobs/${jobId}/detach`, { method: 'PATCH' })
-  return unwrap<{ success: boolean }>(res, 'Failed to detach job')
-}

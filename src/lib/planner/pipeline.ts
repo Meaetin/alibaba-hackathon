@@ -228,6 +228,26 @@ export interface PlanRequest {
    * See {@link PlanBase}.
    */
   base?: PlanBase;
+  /**
+   * Places the traveller picked themselves, by `place_id` — the "generate an
+   * itinerary from these" path off a collection or a link.
+   *
+   * They are read out of `LocationStore` and merged into the pool after
+   * retrieval, and they **skip the base circle**: `withinReach` exists to stop
+   * a search string answering for a whole province, and a place somebody named
+   * is not a stray search result. They are then ordered first at both of the
+   * funnel's ranking cuts and exempt from its quotas — see `FunnelOptions.pinned`.
+   *
+   * **This is not a pin.** A seed reaching the shortlist is not a seat in the
+   * trip: Pass B still decides which day it belongs to, and the packer can
+   * still drop it for time like any other stop. There is no locked-stop concept
+   * in this planner. `stats.seeds` is how you tell what actually happened.
+   *
+   * An id with no stored row is skipped rather than searched for — the caller
+   * holds `locations.id`s it got from this database, so a miss means a stale
+   * client, not a place we have never heard of.
+   */
+  seedPlaceIds?: readonly string[];
 }
 
 export type PlanMode = "geographic" | "themed";
@@ -492,6 +512,33 @@ export function withinReach<T extends { latitude?: number; longitude?: number }>
   return { kept, dropped };
 }
 
+/**
+ * Folds the places the traveller picked into the pool retrieval built.
+ *
+ * Three rules, and each one is a decision:
+ *
+ * - **A seed already in the pool is not added twice.** It keeps its retrieved
+ *   row, which is the fresher of the two — the stored one is whatever the last
+ *   plan left behind.
+ * - **A seed outside the base circle is added anyway.** `withinReach` is there
+ *   to stop a search string answering for a whole province; a place somebody
+ *   ticked is not a stray search result, and refusing it would be the app
+ *   silently overruling the only explicit instruction in the request.
+ * - **An id with no stored row is counted, never invented.** The caller holds
+ *   ids that came out of this database, so a miss is a stale client. Searching
+ *   Google for it would spend money guessing at what the traveller meant.
+ *
+ * Appended rather than prepended: the funnel decides order, not this.
+ */
+export function withSeeds<T extends { placeId: string }>(
+  pool: readonly T[],
+  seeds: readonly T[],
+): { pool: T[]; added: number } {
+  const known = new Set(pool.map((place) => place.placeId));
+  const fresh = seeds.filter((place) => !known.has(place.placeId));
+  return { pool: [...pool, ...fresh], added: fresh.length };
+}
+
 // ── travel legs ──────────────────────────────────────────────────────────────
 
 /**
@@ -632,6 +679,23 @@ export interface PlanStats {
     radiusMeters: number;
     kept: number;
     dropped: number;
+  };
+  /**
+   * The places the traveller picked. **Absent when none were sent** — the same
+   * rule `base` above keeps, and for the same reason: "nobody picked anything"
+   * and "everything picked was already in the pool" are different answers.
+   *
+   * `missing` is the one to read. Each is an id the client held and this
+   * database does not, so the traveller ticked a place and the plan never saw
+   * it — and nothing else in a finished itinerary would ever say so.
+   */
+  seeds?: {
+    requested: number;
+    /** Resolved to a stored row. */
+    resolved: number;
+    missing: number;
+    /** Not already in the pool retrieval built, so genuinely added by this. */
+    added: number;
   };
   clustering: {
     /** Candidates with coordinates, which is all clustering can place. */
@@ -859,12 +923,28 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
   // the pool, which makes the containment the same kind of guarantee as the
   // hallucination defence rather than a sentence in a prompt.
   const reach = withinReach(retrieval.places, base);
-  const pool = reach.kept;
   if (reach.dropped.length > 0) {
     console.warn(
       `[plan] ${reach.dropped.length} of ${retrieval.places.length} retrieved places are ` +
         `further than ${base?.radiusMeters}m from the base and were dropped ` +
         `(e.g. ${reach.dropped.slice(0, 3).map((place) => place.name).join(", ")})`,
+    );
+  }
+
+  // 1b — the places the traveller picked themselves, off a collection or a
+  //      link. Read from the store, never searched for: the ids came out of
+  //      this database, so a miss is a stale client rather than a new place.
+  const requestedSeeds = request.seedPlaceIds ?? [];
+  const seedRows = requestedSeeds.length > 0 ? await deps.store.getMany(requestedSeeds) : [];
+  const seeded = withSeeds(reach.kept, seedRows);
+  const pool = seeded.pool;
+  const pinned = new Set(seedRows.map((place) => place.placeId));
+  if (requestedSeeds.length > seedRows.length) {
+    // A place the traveller ticked that the plan never saw. Nothing in a
+    // finished itinerary would otherwise say so.
+    console.warn(
+      `[plan] ${requestedSeeds.length - seedRows.length} of ${requestedSeeds.length} ` +
+        `picked places have no stored row and were skipped`,
     );
   }
 
@@ -903,6 +983,8 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
     // A themed cluster carries its own day. Ranking them would move a premise
     // onto a different day and dropping an empty one would renumber the rest.
     dayAligned: themed !== undefined,
+    // The places the traveller picked, ordered first at both ranking cuts.
+    pinned,
   });
   const shortlistIds = funnel.shortlist.map((scored) => scored.placeId);
   const scored = new Map(funnel.shortlist.map((entry) => [entry.placeId, entry]));
@@ -1247,9 +1329,22 @@ export async function runPlan(request: PlanRequest, deps: PipelineDeps): Promise
       ...(base
         ? {
             base: {
+              // `reach.kept`, not `pool`: the seeds appended after this are
+              // outside the circle by permission, and counting them here would
+              // make the base look wider than it was asked to be.
               radiusMeters: base.radiusMeters,
-              kept: pool.length,
+              kept: reach.kept.length,
               dropped: reach.dropped.length,
+            },
+          }
+        : {}),
+      ...(requestedSeeds.length > 0
+        ? {
+            seeds: {
+              requested: requestedSeeds.length,
+              resolved: seedRows.length,
+              missing: requestedSeeds.length - seedRows.length,
+              added: seeded.added,
             },
           }
         : {}),

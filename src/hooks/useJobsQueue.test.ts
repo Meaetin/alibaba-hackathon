@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider, notifyManager } from "@tanstack/react
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { trackJob, trackedJobs } from "@/lib/jobs/tracked";
 import { useJobsQueue, type QueueJob } from "./useJobsQueue";
 
 const POLL_INTERVAL_MS = 2000;
@@ -72,7 +73,28 @@ async function advance(ms: number) {
   });
 }
 
+/**
+ * Vitest's jsdom ships no `localStorage`, so the queue's memory has to be
+ * supplied here — a real `Map` behind the four methods `tracked.ts` calls,
+ * not a spy, because these tests assert on what was stored and not on which
+ * method was reached.
+ */
+function stubLocalStorage() {
+  const entries = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => void entries.set(key, value),
+    removeItem: (key: string) => void entries.delete(key),
+    clear: () => entries.clear(),
+    key: (index: number) => Array.from(entries.keys())[index] ?? null,
+    get length() {
+      return entries.size;
+    },
+  } satisfies Storage);
+}
+
 beforeEach(() => {
+  stubLocalStorage();
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   // React Query notifies its observers through `setTimeout(cb, 0)`. Under fake
@@ -389,7 +411,7 @@ describe("useJobsQueue", () => {
     expect(result.current.jobs).toHaveLength(0);
   });
 
-  it("starts empty, because tracked ids do not survive a reload", () => {
+  it("starts empty without a traveller, because there is nothing to restore from", () => {
     const { result } = renderQueue();
     expect(result.current.jobs).toEqual([]);
     expect(result.current.isLoading).toBe(false);
@@ -411,5 +433,121 @@ describe("useJobsQueue", () => {
     expect(result.current.jobs).toHaveLength(1);
     expect(result.current.jobs[0].status).toBe("queued");
     expect(result.current.jobs[0].error).toBeNull();
+  });
+});
+
+/**
+ * The half that makes a queue card survive a navigation. Everything here turns
+ * on `restoreFor`: without it the hook is per-mount, which is what every page
+ * did while a plan queued on `/collections/[id]` was invisible on `/home`.
+ */
+describe("useJobsQueue restoring across pages", () => {
+  const USER = "traveller-1";
+
+  it("restores the ids this browser was watching, and only its own type", async () => {
+    trackJob(USER, { id: "job-plan", type: "itinerary-planning" });
+    trackJob(USER, { id: "job-link", type: "content-analysis" });
+    respondWith({ ok: true, body: makeJob({ id: "job-plan" }) });
+
+    const { result } = renderQueue({ type: "itinerary-planning", restoreFor: USER });
+    await advance(0);
+
+    expect(result.current.jobs.map((j) => j.id)).toEqual(["job-plan"]);
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/jobs/job-plan"]);
+  });
+
+  it("restores nothing for a different traveller", async () => {
+    trackJob("somebody-else", { id: "job-plan", type: "itinerary-planning" });
+    respondWith({ ok: true, body: makeJob({ id: "job-plan" }) });
+
+    const { result } = renderQueue({ type: "itinerary-planning", restoreFor: USER });
+    await advance(0);
+
+    expect(result.current.jobs).toEqual([]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("remembers a job seeded through upsertJob", async () => {
+    respondWith({ ok: true, body: makeJob() });
+    const { result } = renderQueue({ restoreFor: USER });
+
+    await act(async () => {
+      result.current.upsertJob(makeJob({ status: "queued" }));
+    });
+
+    expect(trackedJobs(USER).map((entry) => entry.id)).toEqual(["job-1"]);
+  });
+
+  it("remembers nothing when no traveller is given", async () => {
+    respondWith({ ok: true, body: makeJob() });
+    const { result } = renderQueue();
+
+    await act(async () => {
+      result.current.upsertJob(makeJob({ status: "queued" }));
+    });
+
+    expect(trackedJobs(USER)).toEqual([]);
+  });
+
+  it("forgets a job that reaches a terminal status", async () => {
+    respondWith({ ok: true, body: makeJob({ status: "completed" }) });
+    const { result } = renderQueue({ restoreFor: USER });
+
+    await act(async () => {
+      result.current.upsertJob(makeJob({ status: "processing" }));
+    });
+    expect(trackedJobs(USER)).toHaveLength(1);
+
+    await advance(POLL_INTERVAL_MS);
+    expect(trackedJobs(USER)).toEqual([]);
+  });
+
+  it("forgets a failed job too, so a read failure is not re-announced on every page", async () => {
+    respondWith({ ok: true, body: makeJob({ status: "failed", error: "Planning failed." }) });
+    const { result } = renderQueue({ restoreFor: USER });
+
+    await act(async () => {
+      result.current.upsertJob(makeJob({ status: "processing" }));
+    });
+    await advance(POLL_INTERVAL_MS);
+
+    // The card stays on the page that watched it fail — it carries the retry.
+    expect(result.current.jobs[0].status).toBe("failed");
+    expect(trackedJobs(USER)).toEqual([]);
+  });
+
+  it("forgets a dismissed job, so the next page does not restore it", async () => {
+    respondWith({ ok: true, body: makeJob() });
+    const { result } = renderQueue({ restoreFor: USER });
+
+    await act(async () => {
+      result.current.upsertJob(makeJob({ status: "processing" }));
+    });
+    await act(async () => {
+      result.current.removeJob("job-1");
+    });
+
+    expect(result.current.jobs).toEqual([]);
+    expect(trackedJobs(USER)).toEqual([]);
+  });
+
+  it("forgets an id the server answers 404 for", async () => {
+    trackJob(USER, { id: "job-gone", type: "itinerary-planning" });
+    respondWith({ ok: false, status: 404 });
+
+    renderQueue({ type: "itinerary-planning", restoreFor: USER });
+    await advance(0);
+
+    expect(trackedJobs(USER)).toEqual([]);
+  });
+
+  it("keeps an id the server merely failed to answer", async () => {
+    trackJob(USER, { id: "job-1", type: "itinerary-planning" });
+    respondWith({ ok: false, status: 500 });
+
+    renderQueue({ type: "itinerary-planning", restoreFor: USER });
+    await advance(0);
+
+    expect(trackedJobs(USER).map((entry) => entry.id)).toEqual(["job-1"]);
   });
 });

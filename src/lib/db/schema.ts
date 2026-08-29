@@ -367,6 +367,86 @@ export const itinerary_activities = pgTable(
   (t) => [unique("itinerary_activities_day_id_position_key").on(t.day_id, t.position)],
 );
 
+/**
+ * A flight on a trip: booked through Atlas, or typed in by hand.
+ *
+ * It hangs off `itineraries` rather than off a day, because a flight is not an
+ * activity — the planner never produces one, never schedules one, and
+ * `itinerary_activities` is keyed on a `day_id` and a `position` that a flight
+ * has no answer for. Deleting a trip takes its flights with it; nothing else
+ * points at them.
+ *
+ * **The column names are `ExtractedFlight`'s, field for field.** That type is
+ * what the flight card, the manual form and the edit form already speak, so a
+ * row goes to a card with no rename layer — the same rule the rest of this file
+ * keeps about snake_case.
+ *
+ * Dates and clock times are stored apart, as `date` and `text`, because that is
+ * how every airline states them and how every form in the UI collects them: a
+ * departure is "14 Sep, 23:55 local", not an instant. Composing them into one
+ * timestamp needs the airport's timezone, which this app does not have — see
+ * `ITINERARY_TIMEZONE` for the same decision made once already.
+ */
+export const itinerary_flights = pgTable(
+  "itinerary_flights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itinerary_id: uuid("itinerary_id")
+      .notNull()
+      .references(() => itineraries.id, { onDelete: "cascade" }),
+    /**
+     * Where the row came from. A fare booked through Atlas and a flight
+     * somebody typed in are the same shape and are not the same claim: only
+     * the first has a ticket number we issued, and only the first should ever
+     * be re-priced against a live search.
+     */
+    source: text("source").notNull().default("manual"),
+    flight_number: text("flight_number"),
+    airline: text("airline"),
+    depart_date: date("depart_date").notNull(),
+    /** Local clock at the departure airport, "HH:MM". Never a timestamp. */
+    depart_time: text("depart_time"),
+    depart_airport_code: text("depart_airport_code"),
+    depart_city: text("depart_city"),
+    depart_country: text("depart_country"),
+    arrive_date: date("arrive_date").notNull(),
+    /** Local clock at the arrival airport, "HH:MM". */
+    arrive_time: text("arrive_time"),
+    arrive_airport_code: text("arrive_airport_code"),
+    arrive_city: text("arrive_city"),
+    arrive_country: text("arrive_country"),
+    duration_minutes: integer("duration_minutes"),
+    /** The airline's booking reference (PNR). */
+    confirmation: text("confirmation"),
+    fare_class: text("fare_class"),
+    /**
+     * Stored as text, not `real`. A fare is a decimal amount and binary
+     * floating point is the wrong shape for money; the UI only ever formats it
+     * beside `currency` anyway, and `FlightCardProps.cost` is already a string.
+     */
+    cost: text("cost"),
+    currency: text("currency"),
+    terminal: text("terminal"),
+    baggage_allowance: text("baggage_allowance"),
+    ticket_number: text("ticket_number"),
+    /** The seat the traveller picked, e.g. "12A". Null when none was chosen —
+     *  which is different from a seat we failed to record. */
+    seat: text("seat"),
+    /** Who is flying, as given at booking. One passenger per row today. */
+    passenger_name: text("passenger_name"),
+    status: text("status").notNull().default("confirmed"),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("itinerary_flights_itinerary_idx").on(t.itinerary_id, t.depart_date),
+    check(
+      "itinerary_flights_source_check",
+      sql`${t.source} in ('booked', 'manual', 'extracted')`,
+    ),
+  ],
+);
+
 // ─── Job queue ───────────────────────────────────────────────────────────────
 
 /**
@@ -503,6 +583,89 @@ export const content_locations = pgTable(
   (t) => [
     unique("content_locations_unique_idx").on(t.content_id, t.location_id),
     index("content_locations_content_idx").on(t.content_id, t.position),
+  ],
+);
+
+// ─── Collections ─────────────────────────────────────────────────────────────
+
+/**
+ * A named set of places one traveller saved.
+ *
+ * The unit that lets a place found in a video, a place from a finished trip and
+ * a place picked off a map all sit in the same list. `content` is what one link
+ * produced and `itineraries` is what one plan produced; a collection is what a
+ * person chose, which is why it is the only one of the three with a name they
+ * typed.
+ *
+ * `itinerary_id` is how a generated trip gets its **companion collection** — a
+ * collection either backs an itinerary or is free-standing, never both, which
+ * the unique index is what makes true. The reference sits on this side rather
+ * than as `itineraries.collection_id` for two reasons: cascade runs the right
+ * way (deleting a trip takes its companion, deleting the companion leaves the
+ * trip), and `itineraries` keeps a column that every row planned before this
+ * existed would have had to leave null.
+ *
+ * **Older trips have no companion.** Nothing backfills one, so a read must
+ * answer "this trip has no collection" rather than inventing an empty one.
+ */
+export const collections = pgTable(
+  "collections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** `cascade`, like `content.user_id` and unlike `itineraries.user_id`. A
+     *  collection is a person's own shelf; orphaned, it is litter. */
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    country: text("country"),
+    region: text("region"),
+    /** Where the collection is about, from the create modal's autocomplete.
+     *  Seeds the trip form when planning from here, nothing more. */
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    is_bookmarked: boolean("is_bookmarked").notNull().default(false),
+    is_archived: boolean("is_archived").notNull().default(false),
+    /** The trip this collection was created alongside, or null for one the
+     *  traveller made themselves. Unique: one companion per trip. */
+    itinerary_id: uuid("itinerary_id")
+      .unique()
+      .references(() => itineraries.id, { onDelete: "cascade" }),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("collections_user_updated_idx").on(t.user_id, t.updated_at)],
+);
+
+/**
+ * A place in a collection.
+ *
+ * `location_id` is a plain reference with **no** cascade, for the same reason
+ * `content_locations.location_id` has none: `locations` is the shared Places
+ * cache, so removing a place from somebody's shelf must not delete the row an
+ * itinerary and three links also point at.
+ *
+ * `added_at` is on the junction rather than derived, because the grid sorts
+ * newest-added-first and "when this place was saved here" is not the same fact
+ * as "when Google's row for it was fetched".
+ */
+export const collection_locations = pgTable(
+  "collection_locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    collection_id: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    location_id: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    added_at: timestamptz("added_at").notNull().defaultNow(),
+  },
+  (t) => [
+    unique("collection_locations_unique_idx").on(t.collection_id, t.location_id),
+    index("collection_locations_collection_idx").on(t.collection_id, t.added_at),
   ],
 );
 

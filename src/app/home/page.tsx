@@ -17,8 +17,8 @@ import { AddToDestinationModal } from "@/components/ui/modals/AddToDestinationMo
 import { ConfirmDeleteModal } from "@/components/ui/modals/ConfirmDeleteModal";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
 import { useToast } from "@/contexts/ToastContext";
-import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } from "@/lib/api/client";
-import { createCollection } from "@/lib/api/collections";
+import { AlreadyAnalyzedError, LinkQuotaError, createJob, retryJob } from "@/lib/api/client";
+import { addLocationsToCollection, createCollection } from "@/lib/api/collections";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
@@ -78,7 +78,6 @@ const MOBILE_CREATE_SLIDES = [
   { key: "link", label: "Add a link" },
   { key: "collection", label: "Create a collection" },
   { key: "itinerary", label: "Plan an itinerary" },
-  { key: "flight", label: "Discover flights" },
 ] as const;
 
 function getItemHref(item: RecentContentItem): string {
@@ -190,8 +189,13 @@ export default function DashboardPage() {
     return () => window.removeEventListener("argo:content-prepended", handler);
   }, [prependItem]);
 
-  useJobsQueue({
+  // Home shows no queue card for a link — the grid is itineraries and recent
+  // content — so this instance exists for its toasts. It still has to be seeded:
+  // `upsertJob` is the only way an id enters the queue, so before this the
+  // "Link finished analyzing" toast below could never fire.
+  const { upsertJob: upsertLinkJob } = useJobsQueue({
     type: "content-analysis",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       refresh();
       showToast({
@@ -224,6 +228,7 @@ export default function DashboardPage() {
     upsertJob: upsertPlanningJob,
   } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     // No "Itinerary ready" toast here — MainLayout's persistent local queue
     // owns it, and raising it in both places shows it twice.
     onJobCompleted: (job) => {
@@ -255,16 +260,15 @@ export default function DashboardPage() {
     });
   }, [realItemIdsKey]);
 
+  // Dismissal is local: there is no detach endpoint in this repo, and a card is
+  // not a job. `removeJob` also forgets the id in `localStorage`, so it stays
+  // gone on the next page rather than being restored there. The plan itself
+  // keeps running and the trip still lands in the grid when it finishes.
   const handleRemovePlanningJob = useCallback(
-    async (jobId: string) => {
+    (jobId: string) => {
       removePlanningJob(jobId);
-      try {
-        await detachJob(jobId);
-      } catch {
-        showToast({ title: "Couldn't dismiss that, try again later.", variant: "error" });
-      }
     },
-    [removePlanningJob, showToast],
+    [removePlanningJob],
   );
 
   const handleRetryPlanningJob = useCallback(
@@ -303,10 +307,6 @@ export default function DashboardPage() {
       cardsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
-
-  const handleFlightsClick = useCallback(() => {
-    router.push("/flights");
-  }, [router]);
 
   const handleCreateCarouselPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
@@ -421,8 +421,9 @@ export default function DashboardPage() {
   const feedItems = featuredJob ? filteredContent : filteredContent.slice(1);
 
   const handleLinkSubmit = async (linkUrl: string) => {
+    let job: QueueJob;
     try {
-      await createJob("content-analysis", { url: linkUrl });
+      job = await createJob<QueueJob>("content-analysis", { url: linkUrl });
     } catch (err) {
       if (err instanceof AlreadyAnalyzedError) {
         setNewLinkModalOpen(false);
@@ -446,6 +447,7 @@ export default function DashboardPage() {
       }
       throw err;
     }
+    upsertLinkJob(job);
     if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
     setNewLinkModalOpen(false);
     setLinkValue("");
@@ -620,9 +622,23 @@ export default function DashboardPage() {
     [showToast],
   );
 
-  const handleAddToDestinationConfirm = useCallback(async () => {
-    throw new Error("Collections are not available in this build.");
-  }, []);
+  // The modal hands back the chosen destination's id and, for an itinerary, its
+  // companion collection. Places always land on a collection: an itinerary is a
+  // schedule, and a place with no day and no time has nowhere to sit in one.
+  //
+  // A trip planned before companion collections existed has none, and its
+  // `collection_id` comes back empty. That is a plain error rather than a
+  // silent no-op — "added to itinerary" over a write that did not happen is the
+  // failure this file already documents at the other end.
+  const handleAddToDestinationConfirm = useCallback(
+    async (destinationId: string, locationIds: string[], backingCollectionId?: string) => {
+      const target =
+        addToDestModal.mode === "itinerary" ? backingCollectionId : destinationId;
+      if (!target) throw new Error("That itinerary has no collection to save into.");
+      await addLocationsToCollection(target, locationIds);
+    },
+    [addToDestModal.mode],
+  );
 
   // Renders the appropriate entity card for a feed/latest item, wiring its kebab /
   // right-click actions per type (delete + add-to-destination where applicable).
@@ -725,9 +741,6 @@ export default function DashboardPage() {
             <div className="flex-[0_0_88%] snap-start">
               <CreateCard type="itinerary" className="h-[260px]" onAction={() => setNewItineraryModalOpen(true)} />
             </div>
-            <div className="flex-[0_0_88%] snap-start">
-              <CreateCard type="flight" className="h-[260px]" onAction={handleFlightsClick} />
-            </div>
           </div>
 
           <div className="flex h-8 items-center justify-center px-1">
@@ -794,7 +807,9 @@ export default function DashboardPage() {
             data-region="home-bento-grid"
             className="bento-grid [--cols:2] [--ratio:calc(320/243)] md:[--cols:2] md:[--ratio:0.72] lg:[--cols:4] lg:[--ratio:calc(292/243)] xl:[--cols:5]"
           >
-            {/* Create Cards — fixed 2×2 block, breakpoint-invariant placement */}
+            {/* Create Cards — fixed L-shaped block, breakpoint-invariant placement.
+                The fourth cell (col 2, row 2) is left to the feed: flights are
+                reached from inside an itinerary now, not from here. */}
             <div data-region="home-create-link" className="hidden md:block lg:col-start-1 lg:row-start-1">
               <CreateCard type="link" className="h-full" onAction={() => setNewLinkModalOpen(true)} />
             </div>
@@ -803,9 +818,6 @@ export default function DashboardPage() {
             </div>
             <div data-region="home-create-itinerary" className="hidden md:block lg:col-start-1 lg:row-start-2">
               <CreateCard type="itinerary" className="h-full" onAction={() => setNewItineraryModalOpen(true)} />
-            </div>
-            <div data-region="home-create-flight" className="hidden md:block lg:col-start-2 lg:row-start-2">
-              <CreateCard type="flight" className="h-full" onAction={handleFlightsClick} />
             </div>
 
             {/* Map Tile — pinned top-right (3×2 at xl, 2×2 at lg, full-width banner below) */}
