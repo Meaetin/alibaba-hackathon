@@ -461,12 +461,16 @@ describe("survivorIdsFromDays", () => {
 // ── the blob cache ───────────────────────────────────────────────────────────
 
 describe("photo blob store", () => {
-  it("keys an object by the photo resource name, stably and per width", () => {
-    const name = "places/ChIJabc/photos/AeJb1";
-    expect(photoBlobKey(name, 800)).toBe(photoBlobKey(name, 800));
-    expect(photoBlobKey(name, 800)).not.toBe(photoBlobKey(name, 1600));
-    expect(photoBlobKey(name, 800)).not.toBe(photoBlobKey("places/ChIJxyz/photos/AeJb1", 800));
-    expect(photoBlobKey(name, 800)).toMatch(/^photos\/[0-9a-f]{32}-w800\.jpg$/);
+  it("keys an object by the place, stably, and per index and width", () => {
+    // Keying by the resource name looked content-addressed and was not: Google
+    // mints a fresh name for every photo on every search, so the key was new on
+    // every run and the bucket never hit.
+    const placeId = "ChIJabc";
+    expect(photoBlobKey(placeId, 0, 800)).toBe(photoBlobKey(placeId, 0, 800));
+    expect(photoBlobKey(placeId, 0, 800)).not.toBe(photoBlobKey(placeId, 1, 800));
+    expect(photoBlobKey(placeId, 0, 800)).not.toBe(photoBlobKey(placeId, 0, 1600));
+    expect(photoBlobKey(placeId, 0, 800)).not.toBe(photoBlobKey("ChIJxyz", 0, 800));
+    expect(photoBlobKey(placeId, 0, 800)).toMatch(/^photos\/[0-9a-f]{32}-0-w800\.jpg$/);
   });
 
   it("stores the bucket URL, not Google's expiring photoUri", async () => {
@@ -480,13 +484,13 @@ describe("photo blob store", () => {
     });
 
     expect(result.places[0].photoUrls?.[0]).toBe(
-      `memory://${photoBlobKey("places/a/photos/AeJb0", 800)}`,
+      `memory://${photoBlobKey("a", 0, 800)}`,
     );
     expect(result.places[0].photoUrls?.[0]).not.toContain("googleusercontent");
   });
 
   it("does not call Google at all for a photo already in the bucket", async () => {
-    const key = photoBlobKey("places/a/photos/AeJb0", 800);
+    const key = photoBlobKey("a", 0, 800);
     const blobs = createInMemoryPhotoBlobStore({ [key]: "https://bucket.example/a.jpg" });
     const fetchMock = fakeMediaFetch();
 
@@ -580,7 +584,7 @@ describe("photo blob store", () => {
     expect(result.stats.blobHits).toBe(0);
     expect(result.stats.billedCalls).toBe(1);
     expect(result.stats.failures).toEqual([]);
-    expect(result.places[0].photoUrls).toEqual(["https://bucket.example/" + photoBlobKey("places/a/photos/AeJb0", 800)]);
+    expect(result.places[0].photoUrls).toEqual(["https://bucket.example/" + photoBlobKey("a", 0, 800)]);
   });
 
   it("composes with the real S3-shaped store: one Google call per photo, ever", async () => {
@@ -614,7 +618,7 @@ describe("photo blob store", () => {
     // A different itinerary, a different unresolved row, the same place.
     const second = await resolvePhotos([unresolved("a")], ["a"], deps);
 
-    const key = photoBlobKey("places/a/photos/AeJb0", 800);
+    const key = photoBlobKey("a", 0, 800);
     expect(first.places[0].photoUrls).toEqual([`https://images.example.test/${key}`]);
     expect(second.places[0].photoUrls).toEqual(first.places[0].photoUrls);
 

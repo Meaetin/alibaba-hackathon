@@ -4,9 +4,10 @@
  * swap these in for the `createInMemory*` factories — that's the whole point of
  * the ports, and it's why Step 10 didn't have to wait for Step 9.
  *
- * Location upserts return the merged stored rows. Enrichment is preserved, and
- * resolved media is preserved only while its photo resource-name set matches.
- * Narrow patch methods stop later stages from overwriting fresher retrieval data.
+ * Location upserts return the merged stored rows. Enrichment and resolved media
+ * are preserved across a refetch — a photo we have already paid for outlives
+ * the search that found it. Narrow patch methods stop later stages from
+ * overwriting fresher retrieval data.
  *
  * Expiry is NOT enforced here. `retrievePlaces` compares `expiresAt` against an
  * injected `now`; a store that also filtered would put a second, ambient clock
@@ -157,18 +158,14 @@ export function createLocationStore(db: Database): LocationStore {
             // stay_duration and Step 11 resolves the photo media. A refetch
             // that overwrote them with null would re-bill both.
             stay_duration: sql`coalesce(excluded.stay_duration, ${locations.stay_duration})`,
-            // Resolved media is reusable only while the resource-name set is
-            // unchanged. New names invalidate both the URLs and the stamp.
-            photo_urls: sql`case
-              when ${locations.photo_names} is not distinct from excluded.photo_names
-                then coalesce(excluded.photo_urls, ${locations.photo_urls})
-              else excluded.photo_urls
-            end`,
-            photos_resolved_at: sql`case
-              when ${locations.photo_names} is not distinct from excluded.photo_names
-                then coalesce(excluded.photos_resolved_at, ${locations.photos_resolved_at})
-              else excluded.photos_resolved_at
-            end`,
+            // A photo resource name is a per-response token, not an identifier:
+            // two identical searches seconds apart return a different name for
+            // every photo of every place. So the name set says nothing about
+            // whether the media we resolved is still the media Google has, and
+            // comparing it only threw away photos we had already paid for.
+            // Same rule as `stay_duration` — retrieval never learns these.
+            photo_urls: sql`coalesce(excluded.photo_urls, ${locations.photo_urls})`,
+            photos_resolved_at: sql`coalesce(excluded.photos_resolved_at, ${locations.photos_resolved_at})`,
           },
         })
         .returning();
@@ -206,12 +203,10 @@ export function createLocationStore(db: Database): LocationStore {
               photo_urls: update.photoUrls,
               photos_resolved_at: update.photosResolvedAt,
             })
-            .where(
-              and(
-                eq(locations.place_id, update.placeId),
-                eq(locations.photo_names, [...update.photoNames]),
-              ),
-            ),
+            // Narrowed by place alone. The old `photo_names` term compared a
+            // token that differs on every search, so it could only ever refuse
+            // a write for a photo we had just paid Google for.
+            .where(eq(locations.place_id, update.placeId)),
         ),
       );
       return getMany(updates.map((update) => update.placeId));

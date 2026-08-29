@@ -20,11 +20,11 @@
  * no photo names at all is stamped without any fetch, because there is nothing
  * to retry.
  *
- * An optional `PhotoBlobStore` sits in front of Google. **Nothing configures one
- * today**, so the pipeline stores Google's `photoUri` — free to serve, but it
- * expires, which is a known and accepted risk (see `docs/decisions.md`,
- * 2026-08-23). With a store configured, a photo is fetched at most once *ever*,
- * keyed by its resource name and shared across itineraries.
+ * An optional `PhotoBlobStore` sits in front of Google. Without one the pipeline
+ * stores Google's `photoUri` — free to serve, but it expires, which is a known
+ * and accepted risk (see `docs/decisions.md`, 2026-08-23). With a store
+ * configured, a photo is fetched at most once *ever*, keyed by the place and
+ * shared across itineraries.
  */
 
 import { createHash } from "node:crypto";
@@ -67,13 +67,24 @@ export function survivorIdsFromDays(days: readonly PackedDay[]): string[] {
 }
 
 /**
- * Object key for a stored photo. Derived from the Google resource name, which
- * is stable per photo, so two itineraries containing the same place share one
- * object and only the first one pays.
+ * Object key for a stored photo. Derived from the **place id**, so two
+ * itineraries containing the same place share one object and only the first
+ * one pays.
+ *
+ * It used to hash the Google resource name, on the belief that a name is stable
+ * per photo. It is not — the same search run twice seconds apart returns a
+ * different name for every photo of every place. So the key was new on every
+ * run, the bucket never hit, and every plan re-bought and re-stored the same
+ * image. Keying by place makes "billed once, ever" true for the first time.
+ *
+ * The trade is that this holds one photo per place. `DEFAULT_PHOTOS_PER_PLACE`
+ * is 1 and raising it is the thing this module exists to discourage, so the
+ * ordinal is folded in rather than left implicit — a second photo gets its own
+ * object instead of overwriting the first.
  */
-export function photoBlobKey(photoName: string, maxWidthPx: number): string {
-  const digest = createHash("sha256").update(photoName).digest("hex").slice(0, 32);
-  return `photos/${digest}-w${maxWidthPx}.jpg`;
+export function photoBlobKey(placeId: string, index: number, maxWidthPx: number): string {
+  const digest = createHash("sha256").update(placeId).digest("hex").slice(0, 32);
+  return `photos/${digest}-${index}-w${maxWidthPx}.jpg`;
 }
 
 /**
@@ -83,9 +94,9 @@ export function photoBlobKey(photoName: string, maxWidthPx: number): string {
  * `photos_resolved_at` being set means nothing retries.
  *
  * With it, a photo is fetched from Google at most once ever: the key is derived
- * from the photo resource name, so the second itinerary featuring Kiyomizu-dera
- * pays nothing. That cross-itinerary reuse, not the durability, is where the
- * money is.
+ * from the place id, so the second itinerary featuring Kiyomizu-dera pays
+ * nothing. That cross-itinerary reuse, not the durability, is where the money
+ * is.
  */
 export interface PhotoBlobStore {
   /** Public URL for an object we already hold, or undefined. */
@@ -220,10 +231,11 @@ export async function resolvePhotos(
 
       const names = place.photoNames.slice(0, photosPerPlace);
       const urls: string[] = [];
-      for (const name of names) {
+      for (const [index, name] of names.entries()) {
         try {
           urls.push(
             await resolveOne(name, {
+              blobKey: photoBlobKey(place.placeId, index, maxWidthPx),
               doFetch,
               apiKey: deps.apiKey,
               maxWidthPx,
@@ -273,6 +285,8 @@ export async function resolvePhotos(
 async function resolveOne(
   photoName: string,
   ctx: {
+    /** Keyed by place, not by `photoName` — see `photoBlobKey`. */
+    blobKey: string;
     doFetch: FetchLike;
     apiKey: string;
     maxWidthPx: number;
@@ -280,7 +294,7 @@ async function resolveOne(
     stats: PhotoStats;
   },
 ): Promise<string> {
-  const key = photoBlobKey(photoName, ctx.maxWidthPx);
+  const key = ctx.blobKey;
 
   if (ctx.blobs) {
     // A lookup that throws is a bucket problem, not an itinerary problem — the
