@@ -56,11 +56,16 @@ function fifteenStops(): NarrateStop[] {
   return Array.from({ length: 15 }, (_, i) => stop(i));
 }
 
-/** The per-stop block is always last; the shared prefix is always before it. */
+/** The per-stop block is always last; the shared prefix is always before it.
+ *  A block's content can also carry images since frame OCR was added, so the
+ *  text parts are picked out explicitly — narration never sends one. */
 function textOf(block: ResponsesRequest["input"][number]): string {
   return typeof block.content === "string"
     ? block.content
-    : block.content.map((part) => part.text).join("");
+    : block.content
+        .filter((part) => part.type === "input_text")
+        .map((part) => part.text)
+        .join("");
 }
 
 function payloadOf(request: ResponsesRequest): Record<string, any> {

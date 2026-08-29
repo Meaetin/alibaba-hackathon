@@ -28,14 +28,14 @@ import {
   type CollectionWithRole,
 } from "@/lib/api/collections";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
-import { deleteContent } from "@/lib/api/content";
+import { deleteContent, getContentDetail } from "@/lib/api/content";
+import { toLinkDetail, toLinkLocations, type LinkDetail, type LinkLocationItem } from "@/lib/links/detail-view";
 import { ItineraryQuotaError, getItineraries, type ItineraryWithRole } from "@/lib/api/itineraries";
 import { ItineraryLoadingScreen } from "@/components/ui/itinerary/ItineraryLoadingScreen";
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
 import { useRecordView } from "@/hooks/useRecordView";
 import { useHighlightLocation } from "@/hooks/useHighlightLocation";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
-import type { PriceRange } from "@/lib/maps/price-range";
 
 const StaticMap = dynamic(
   () => import("@/components/ui/map/StaticMap").then((mod) => mod.StaticMap),
@@ -44,39 +44,10 @@ const StaticMap = dynamic(
 
 // ───── Types ────────────────────────────────────────────────────────────────
 
-interface LinkDetail {
-  id: string;
-  url: string;
-  normalizedUrl: string;
-  title: string;
-  thumbnailUrl: string;
-  country: string;
-}
-
-interface LocationItem {
-  id: string;
-  name: string;
-  address: string;
-  type: "location";
-  latitude: number;
-  longitude: number;
-  thumbnailUrl: string;
-  primaryType: string;
-  sourceUrl: string;
-  description: string;
-  details: {
-    address: string;
-    openingHoursLines: string[];
-    phone: string;
-    website: string;
-    stayDurationMinutes: number | null;
-    priceRange: PriceRange | null;
-  };
-  images: string[];
-  isFavorite: boolean;
-  isArchived: boolean;
-  googleMapsUri: string | null;
-}
+/** Both shapes, and the mapping that fills them, live in
+ *  `src/lib/links/detail-view.ts` — a `page.tsx` may only export its default
+ *  component, so a mapper written here could never be tested. */
+type LocationItem = LinkLocationItem;
 
 
 
@@ -90,10 +61,8 @@ export default function LinkDetailPage() {
   const contentId = params?.id;
   const { setFilter } = useNavbarFilter();
 
-  // Both stay empty: there is no backend for a link, so the page always takes
-  // its "not found" branch. The setters went with the read.
-  const [linkDetail] = useState<LinkDetail | null>(null);
-  const [locations] = useState<LocationItem[]>([]);
+  const [linkDetail, setLinkDetail] = useState<LinkDetail | null>(null);
+  const [locations, setLocations] = useState<LocationItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -222,19 +191,40 @@ export default function LinkDetailPage() {
     setGenerateModalOpen(true);
   }, [selection.selectedIds, linkDetail?.title]);
 
-  // Fetch content + locations.
+  // Fetch the link and the places it named.
   //
-  // **There is no backend for a link.** This read a Supabase `content` table
-  // joined to `content_locations`, which belonged to the link-analysis service
-  // this repo does not contain. Every link therefore resolves to "not found",
-  // which is what it already did — the query failed and took the same branch.
-  // The page and its cards are left intact so that wiring a real read means
-  // replacing this effect, not rebuilding the screen.
+  // A link that is not this traveller's answers 404 exactly like one that does
+  // not exist — the API will not confirm that an id is real to somebody who
+  // does not own it — so both land in the same "not found" branch here.
   useEffect(() => {
-    setIsLoading(false);
-    setNotFound(true);
-    setFilter(null);
+    if (!contentId) {
+      setIsLoading(false);
+      setNotFound(true);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    setNotFound(false);
+
+    getContentDetail(contentId)
+      .then((detail) => {
+        if (cancelled) return;
+        setLinkDetail(toLinkDetail(detail));
+        setLocations(toLinkLocations(detail));
+        setNotFound(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error(`[links] ${contentId} could not be read`, error);
+        setNotFound(true);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
     return () => {
+      cancelled = true;
       setFilter(null);
     };
   }, [contentId, setFilter]);

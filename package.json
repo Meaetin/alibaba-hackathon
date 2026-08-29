@@ -15,6 +15,7 @@
     "personas:plan": "node --import ./scripts/lib/resolve-hooks.mjs --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/plan-persona-trips.ts",
     "personas:report": "node --import ./scripts/lib/resolve-hooks.mjs --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/persona-trips-report.ts",
     "enrichment:collect": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/collect-enrichment-batches.ts",
+    "links:analyze": "node --import ./scripts/lib/resolve-hooks.mjs --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/analyze-link.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node --env-file-if-exists=.env.local ./node_modules/.bin/drizzle-kit migrate",
     "db:push": "node --env-file-if-exists=.env.local ./node_modules/.bin/drizzle-kit push",

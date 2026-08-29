@@ -1,4 +1,18 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+/**
+ * Where `authFetch` sends everything.
+ *
+ * **Defaults to same-origin now**, not `http://localhost:8080`. That port
+ * belonged to a REST backend this repo does not contain, so defaulting to it
+ * meant every call left the app to fail against nothing. Same-origin means the
+ * handful of paths that Next now serves — `/api/content`, `/api/itineraries`,
+ * `/api/jobs` — reach the real thing and carry the session cookie, while the
+ * rest 404 instead of hitting a connection refused. Both are failures; only one
+ * of them is honest about where it looked.
+ *
+ * Setting `NEXT_PUBLIC_API_URL` still points it elsewhere, and the cookie
+ * warning below still applies when you do.
+ */
+const API_URL = process.env.NEXT_PUBLIC_API_URL || ''
 
 export type ApiError = Error & { status: number }
 
@@ -44,9 +58,11 @@ export class LinkQuotaError extends Error {
 }
 
 /**
- * A request to the old REST backend on `NEXT_PUBLIC_API_URL`.
+ * A request to the API, same-origin by default.
  *
- * **That backend is gone, so every call through here fails.** It is kept, and
+ * **Most calls through here still fail**, because most of the ported UI points
+ * at endpoints this repo does not serve. What has changed is that the ones it
+ * *does* serve now work: analyzed links, itineraries and jobs. It is kept, and
  * kept honest, because roughly forty call sites across the ported UI still
  * point at it and deleting them is a separate job from adding auth. See
  * `AGENTS.md`: `src/lib/api/**` is the named seam for a new backend.

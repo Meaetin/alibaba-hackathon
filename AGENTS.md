@@ -1741,3 +1741,152 @@ would have passed anyway are the worry, and there were already several.
 
 Ids are `00000000-0000-4000-8000-{call}{n}` now, still deterministic because the
 counter only moves forward and nothing there reads a clock or a random number.
+
+### Frame OCR is not the optional half of link analysis — it is often the only half
+`src/lib/links/**` is Argo's content-analysis worker (`backend/worker`) with the
+cloud removed: no Pub/Sub, no checkpoint artifacts, no Supabase row, no retry
+counter carried between attempts. Six stages in one local process — RapidAPI for
+metadata and media URLs, ffmpeg for audio and frames, Whisper, OpenAI vision OCR,
+one extraction call, then `retrievePlaces` to turn each named place into a
+`locations` row.
+
+**The first real video tested returned a 3-character transcript.** "3 Singapore
+Food Centres You Must Eat At" is 43 seconds of music over captions; Whisper
+heard the word "You" and nothing else. Every place in that result came from the
+twelve OCR lines and the description. A transcript-only pipeline would have
+returned a summary, a country and an empty list, and looked like it worked —
+which is why OCR was added back after being cut from the first plan.
+
+**Two runs of the same video named 8 places, then 3.** The prompt never told the
+model to read the description as carefully as the transcript, and on that post
+the five stall names are only in the description. Saying so explicitly took it
+to a stable 11/11 across three runs — and cost precision: the description opens
+with a paragraph of history, so "Ellenborough Market" (closed) matched a café of
+that name and "The Central" matched a mall. Argo's *text* prompt already
+excluded "locations mentioned only as background context"; its *video* prompt
+did not, and this port inherited the gap. With that exclusion the same video is
+a stable 8/8, all of them places the video actually recommends.
+
+**A Text Search almost always returns something, so `no_match` rarely fires.**
+That makes a hallucinated or historical name resolve to a real, wrong place
+rather than to nothing. Precision has to be won in the prompt; the resolver
+cannot recover it. Two mentions can also be one venue — "Lau Pa Sat" and "Telok
+Ayer Market" are the same market — so `stats.locationsDistinct` counts place ids
+while `resolved` keeps every mention. Same rule the debug page keeps: the record
+stays complete, the view decides.
+
+Chain outlets resolve to whichever branch Google ranks first (Lao Ban Soya
+Beancurd came back as the Sengkang branch for an Old Airport Road video). Fixing
+that needs a `locationBias` circle, which needs a coordinate the pipeline does
+not have.
+
+`detail: "low"` on the vision calls is a cost decision with a known edge: it caps
+the image at 512px, which reads overlay captions comfortably and will miss small
+background signage. Measured at ~107 input tokens per frame, so a 43-second clip
+costs about $0.003 all in — the Whisper minute costs more than the OCR does.
+
+### yt-dlp was tried first and lost to TikTok on the first attempt
+The link pipeline originally used yt-dlp: one binary, no API key, metadata and
+media in a single call, and `uploader_id` gave the YouTube `@handle` that Argo
+pays a *second* RapidAPI endpoint to recover. It worked on three YouTube videos
+and then failed on the first TikTok with `Unable to extract universal data for
+rehydration`, on a build ten days old. That is the tax on scraping — the
+extractor breaks when the platform changes its page, and it breaks for everyone
+at once. `createRapidApiMediaSource` is Argo's `social-download-all-in-one` path
+ported back in.
+
+Two things carried over from that experiment. `MediaSource` splits into
+`inspect` (the billed call, returning metadata **and** the media URLs) and
+`download` (bandwidth only), so the duration cap still refuses a seventeen-minute
+video after one cheap call and before any bytes move. And the RapidAPI response
+has **no caption field distinct from the title**, so `metadata.description` is
+empty on this path where yt-dlp filled it — which matters, because a YouTube
+description is where a creator lists every stall they visited, and that is
+exactly where five of one test video's eight places came from. On TikTok the
+title *is* the caption, so nothing is lost there.
+
+**A TikTok slideshow is not an edge case.** `duration: 0`, images, no video
+track — and travel content is full of them. `download` returns a discriminated
+union rather than a path: a slideshow's own pictures go straight to OCR as
+frames, ffmpeg never runs, and transcription is not attempted at all. Not
+attempting it is deliberately different from failing it — an image post with no
+speech is working as intended, so it must not appear in `stats.failures`. Both
+directions have a test.
+
+### `content` is the library a link job produces, and `jobs` is only the queue
+A `jobs` row is about a *run*: no owner, no delete, no dedupe. `content` +
+`content_locations` are the artifact, and the split is the one the planner
+already makes between `jobs` and `itineraries`. The full pipeline output stays
+on `jobs.result` — transcript, OCR lines, counters, model spend — and is
+diagnostics; `content` holds the handful of fields a card and a detail page
+read, plus the places.
+
+`content_locations.location_id` has **no cascade**, deliberately. `locations` is
+the shared Places cache, so deleting a link must not delete a restaurant three
+other links and an itinerary point at. Verified against Neon: deleting a link
+took its `content_locations` rows and left `locations` at 1794.
+
+`mention` is stored beside the place it resolved to. Without it there is no way
+to see that a name matched the wrong venue, which is this pipeline's known
+failure mode — a Text Search almost always returns *something*, so `no_match`
+almost never fires and a hallucinated name becomes a real, wrong place.
+
+**`normalized_url` must keep YouTube's `v` parameter.** The first version
+stripped the whole query string on the theory that all three platforms identify
+a video by its path. TikTok and Instagram do; YouTube does for `youtu.be/ID` and
+`/shorts/ID` and does **not** for `watch?v=ID`. So every watch URL collapsed to
+`youtube.com/watch`, and the second YouTube link anybody pasted came back
+"already analyzed" pointing at the first. Found by pasting two, and every unit
+test passed through it because they all used TikTok URLs. It canonicalizes
+through `youtubeVideoId` now — the same extractor the media source uses — so the
+id we fetch by and the id we deduplicate by cannot drift.
+
+### The link job is served at `POST /api/jobs`, and `authFetch` is same-origin now
+`createJob` in `src/lib/api/client.ts` has always posted `{ type, payload }` to
+`/api/jobs`, and `GET /api/jobs/[id]` is the poller both pages already use. So
+the handler lives there rather than at a prettier `/api/links/*` path that would
+have needed an adapter whose only job is to undo a rename. `jobs.type` is
+`"content-analysis"` for the same reason: it is the string `/links` and `/home`
+already pass to `useJobsQueue`.
+
+`API_URL` in `client.ts` defaulted to `http://localhost:8080`, a REST backend
+this repo does not contain, so every call left the app to fail against nothing.
+It defaults to **same-origin**. The endpoints Next now serves reach the real
+thing and carry the session cookie; the rest 404 instead of hitting a connection
+refused. Both are failures, only one is honest about where it looked — on a
+loaded `/links` page that is `/api/profile/quota` and `/api/collections`, and
+their empty states already handle it. **Leave `NEXT_PUBLIC_API_URL` blank**;
+pointing it elsewhere sends those requests off-origin without the cookie.
+
+`content_id` rides on `jobs.result`, not on a column. `buildOptimisticContent`
+keys the finished card on it so the queue card morphs into the link card in the
+same grid slot. A `jobs.content_id` column would be a second place to keep one
+fact true.
+
+### Photos are resolved for a link's places, and it is the only per-place cost
+Retrieval stores photo resource *names* for free; turning one into an image
+bills the Places Photos SKU. `analyzeLink` calls `resolvePhotos` over the places
+that **resolved**, never the pool, at one photo each — the same rule the planner
+follows with `survivorIdsFromDays`. Without it every location card on
+`/links/[id]` is a grey box, which is what the first live run looked like.
+
+It is folded into the resolve stage rather than given its own progress stage: it
+is a handful of parallel fetches on a step that already takes seconds, and the
+stage weights in `progress.ts` are measured rather than invented. A failure is
+counted on `stats.photosResolved` and in `failures` — a place with no picture is
+a card with a grey box, not a lost link.
+
+### Two link tests passed by luck because OCR batches run four at a time
+`runFrameOcr` fans out at concurrency 4, so `client.requests` is in **arrival**
+order, not batch order. Two assertions indexed into it positionally
+(`prompts[2]`, `toEqual([10, 10, 5])`) and passed for days, then went red once
+the suite got busy enough to reorder them. Both sort now. When asserting over a
+fan-out, sort or key by something in the payload — the fake in `ocr.test.ts`
+identifies a batch by decoding its first frame, for exactly this reason.
+
+### `hashvatar` is in `package.json` and was missing from `node_modules`
+Every page 500'd with `Module not found: hashvatar/react` — `/home`, `/links`,
+all of them — and `tsc` had been reporting it as a lone unrelated error the whole
+time. `npm install` fixes it. If every route dies at once and the trace names a
+package rather than your code, check `node_modules` before debugging the page.
+

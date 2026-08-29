@@ -407,6 +407,105 @@ export interface JobProgress {
   stage_ms?: number;
 }
 
+// ─── Analyzed links ──────────────────────────────────────────────────────────
+
+/**
+ * One video somebody pasted in, after the link pipeline has read it.
+ *
+ * A `jobs` row is about a *run* — it has no owner, no delete and no dedupe, and
+ * a queue is not a library. This is the artifact the run produced, and it is
+ * the same split the planner already makes between `jobs` and `itineraries`.
+ *
+ * The full pipeline output stays on `jobs.result` and is not copied here: that
+ * blob is diagnostics — transcript, OCR lines, per-stage counters — and the
+ * columns below are the handful a card and a detail page actually read.
+ */
+export const content = pgTable(
+  "content",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** `cascade`, unlike `itineraries.user_id`. A link is a cheap thing to
+     *  re-analyze and it is meaningless without the person who saved it, so an
+     *  orphan here is litter rather than a record worth keeping. */
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** As pasted, so the card can link back to the exact post. */
+    content_url: text("content_url").notNull(),
+    /**
+     * Scheme, host and path — query and fragment stripped, host lowercased.
+     *
+     * It exists for the unique index below. A TikTok arrives with `?q=` search
+     * terms and a `&t=` timestamp attached, so without normalizing, the same
+     * video pasted from two places is two links and is analyzed (and billed)
+     * twice. See `normalizeContentUrl`.
+     */
+    normalized_url: text("normalized_url").notNull(),
+    /** `webpage` is unreachable today — there is no webpage pipeline — but the
+     *  ported cards are typed against both and the column costs nothing. */
+    content_type: text("content_type").notNull().default("video"),
+    content_title: text("content_title"),
+    content_thumbnail: text("content_thumbnail"),
+    content_author: text("content_author"),
+    platform: text("platform"),
+    generated_summary: text("generated_summary"),
+    primary_country: text("primary_country"),
+    primary_region: text("primary_region"),
+    /**
+     * Distinct venues, not mentions.
+     *
+     * Denormalized on purpose: every card in the grid renders it, and counting
+     * `content_locations` per row would be a join the list query does not
+     * otherwise need. `saveContent` is the only writer.
+     */
+    location_count: integer("location_count").notNull().default(0),
+    /** Only ever `completed`. The queue card owns in-flight state, and a
+     *  half-written row would be a second source of truth for the same fact. */
+    processing_status: text("processing_status").notNull().default("completed"),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // Per person, not global: two travellers may each save the same video.
+    unique("content_user_url_idx").on(t.user_id, t.normalized_url),
+    index("content_user_created_idx").on(t.user_id, t.created_at),
+  ],
+);
+
+/**
+ * A place one link talks about.
+ *
+ * `location_id` is a plain reference with **no** cascade, and that is the whole
+ * point of the table: `locations` is the shared Places cache, so deleting a
+ * link must not delete a restaurant that three other links and an itinerary
+ * also point at.
+ *
+ * `mention` is what the model wrote — "Hoe Kee Porridge, Singapore, Singapore"
+ * — kept beside the place it resolved to. Without it there is no way to see
+ * that a mention matched the wrong venue, which is this pipeline's known
+ * failure mode: a Text Search almost always returns *something*.
+ */
+export const content_locations = pgTable(
+  "content_locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    content_id: uuid("content_id")
+      .notNull()
+      .references(() => content.id, { onDelete: "cascade" }),
+    location_id: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    /** The model's own words for this place. */
+    mention: text("mention").notNull(),
+    /** Order the model named them in, which is roughly video order. */
+    position: integer("position").notNull(),
+  },
+  (t) => [
+    unique("content_locations_unique_idx").on(t.content_id, t.location_id),
+    index("content_locations_content_idx").on(t.content_id, t.position),
+  ],
+);
+
 export const jobs = pgTable(
   "jobs",
   {

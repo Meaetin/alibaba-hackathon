@@ -34,6 +34,14 @@ export const MODELS = {
   narrate: "gpt-5.6-luna",
   /** Enrichment. ~60 concurrent tag extractions. Explicitly not a reasoning task. */
   enrich: "gpt-5.6-luna",
+  /** Frame OCR. One vision call per batch of ten frames — reading burned-in
+   *  captions, which is the easiest thing a vision model does. Measured on this
+   *  account at ~107 input tokens per frame at `detail: "low"`, so a 60-second
+   *  clip's OCR costs a tenth of what its Whisper minute does. */
+  ocr: "gpt-5.6-luna",
+  /** Link extraction. One call per video, over a transcript and a pile of OCR
+   *  lines. Reading, not reasoning. */
+  linkExtract: "gpt-5.6-luna",
 } as const;
 
 /**
@@ -63,9 +71,29 @@ export interface ResponseInputText {
   prompt_cache_breakpoint?: { mode: "explicit" };
 }
 
+/**
+ * One image in a turn. Added for frame OCR, which is the only thing in this
+ * repo that sends pictures.
+ *
+ * `image_url` is a `data:image/jpeg;base64,...` URL, not a link: the frames are
+ * temporary files on this machine and there is nowhere to serve them from.
+ *
+ * `detail` is required rather than defaulted because the default is `auto`,
+ * which bills per tile at the image's real size. `low` fixes the cost per image
+ * whatever the frame's resolution, and reading a burned-in caption does not
+ * need the tiles.
+ */
+export interface ResponseInputImage {
+  type: "input_image";
+  image_url: string;
+  detail: "low" | "high" | "auto";
+}
+
+export type ResponseInputPart = ResponseInputText | ResponseInputImage;
+
 export interface ResponseInputBlock {
   role: "system" | "developer" | "user" | "assistant";
-  content: string | ResponseInputText[];
+  content: string | ResponseInputPart[];
 }
 
 export interface ResponsesRequest {

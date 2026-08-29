@@ -81,6 +81,7 @@ function QueueCardItem({
 
 // Subset of the worker's ContentAnalysisResult that the link card reads.
 type ContentResult = {
+  content_id?: string | null;
   url?: string;
   title?: string;
   thumbnail?: string;
@@ -98,10 +99,14 @@ type ContentResult = {
 // place instead of the content table's realtime event lagging behind and making
 // the card pop out and back in.
 function buildOptimisticContent(job: QueueJob): CompletedContent | null {
-  if (!job.content_id) return null;
+  // The id is on the result, not on the row: `jobs` has no `content_id` column
+  // and adding one would be a second place to keep the same fact true. Null
+  // when the analysis succeeded but the library row could not be written —
+  // there is nothing to open, so there is no card to render.
   const result = (job.result ?? {}) as ContentResult;
+  if (!result.content_id) return null;
   return {
-    id: job.content_id,
+    id: result.content_id,
     content_type: result.content_type ?? "video",
     content_url: result.url ?? (job.payload?.url as string | undefined) ?? "",
     content_title: result.title ?? null,
@@ -144,8 +149,9 @@ export default function LinksPage() {
         title: "Link finished analyzing",
         variant: "success",
         thumbnail: result.thumbnail ?? job.progress?.thumbnail,
-        action: job.content_id
-          ? { label: "View", href: `/links/${job.content_id}` }
+        // On `job.result`, not on the row — `jobs` has no `content_id` column.
+        action: (job.result as { content_id?: string } | undefined)?.content_id
+          ? { label: "View", href: `/links/${(job.result as { content_id: string }).content_id}` }
           : undefined,
       });
       const optimistic = buildOptimisticContent(job);

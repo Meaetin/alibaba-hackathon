@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import type { MapClusterData } from "@/components/ui/map/StaticMap";
+import { getContent } from "@/lib/api/content";
 import { getItineraries } from "@/lib/api/itineraries";
 import { buildLocalityPins, type LocalityPinResult, type RawMapLocation } from "@/lib/maps/locality-pins";
 import { queryKeys } from "@/lib/query/queryKeys";
@@ -12,17 +13,21 @@ type MapClusterSource = "dashboard" | "collections" | "content" | "itineraries";
 /**
  * The pins on the static map at the top of `/home` and `/itineraries`.
  *
- * ## It plots itineraries, and only itineraries
+ * ## It plots itineraries and analyzed links
  *
  * There were four queries here — dashboard, collections, content, itineraries —
  * against Supabase tables this build does not have, so all four returned an
- * empty array and the map has always been blank. Itineraries are the one kind
- * of thing with coordinates in the database, and `readItineraryList` already
- * returns them, so all four sources answer with the same list now.
+ * empty array and the map has always been blank. Two have a backend now, and
+ * `source` finally means something: `"content"` plots links, `"itineraries"`
+ * plots trips, and the dashboard plots both.
  *
- * `source` stays in the signature because the two call sites pass different
- * values and the parameter is what a future collections backend would key on.
- * It currently changes nothing but the query key.
+ * A link's coordinate is the first place it named that has one, which is the
+ * same kind of stand-in as an itinerary card's thumbnail. A link whose places
+ * all failed to resolve has nothing to pin, and that is worth seeing as a
+ * missing pin rather than as a pin at (0, 0) in the Gulf of Guinea.
+ *
+ * One failing read must not blank the other kind's pins, so the two are settled
+ * independently — the same rule `useDashboardRecent` keeps.
  */
 export function useMapClusters(
   userId: string | null,
@@ -35,7 +40,23 @@ export function useMapClusters(
   const { data, isLoading } = useQuery<LocalityPinResult>({
     queryKey: queryKeys.mapClusters(userId ?? "", source),
     queryFn: async () => {
-      const itineraries = await getItineraries();
+      const wantsItineraries = source !== "content";
+      const wantsLinks = source === "dashboard" || source === "content";
+
+      const [tripResult, linkResult] = await Promise.allSettled([
+        wantsItineraries ? getItineraries() : Promise.resolve([]),
+        wantsLinks ? getContent() : Promise.resolve([]),
+      ]);
+
+      if (tripResult.status === "rejected") {
+        console.error("[map] the itinerary pins could not be loaded", tripResult.reason);
+      }
+      if (linkResult.status === "rejected") {
+        console.error("[map] the link pins could not be loaded", linkResult.reason);
+      }
+
+      const itineraries = tripResult.status === "fulfilled" ? tripResult.value : [];
+      const links = linkResult.status === "fulfilled" ? linkResult.value : [];
       // A trip with no resolved coordinates has nothing to pin. That happens
       // when every stop failed to persist, which is worth seeing as a missing
       // pin rather than as a pin at (0, 0) in the Gulf of Guinea.
@@ -52,7 +73,21 @@ export function useMapClusters(
               },
             ],
       );
-      return buildLocalityPins(located, "by Location");
+      const linkPins: RawMapLocation[] = links.flatMap((item) =>
+        item.latitude === null || item.longitude === null
+          ? []
+          : [
+              {
+                entityId: item.id,
+                region: item.primary_region,
+                country: item.primary_country,
+                latitude: item.latitude,
+                longitude: item.longitude,
+              },
+            ],
+      );
+
+      return buildLocalityPins([...located, ...linkPins], "by Location");
     },
     enabled: !!userId,
     staleTime: 10 * 60 * 1000,
