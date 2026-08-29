@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useLayoutEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Bell, CreditCard, Menu as MenuIcon, MessageSquareText, Plus, User } from "lucide-react";
+import { Bell, CreditCard, Menu as MenuIcon, Plus, User } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { cn } from "@/lib/utils";
@@ -13,7 +13,6 @@ import { NavTabs, type NavTab } from "@/components/ui/primitives/NavTabs";
 import { NavbarSearchBar } from "./NavbarSearchBar";
 import { NavbarProfileMenu } from "./NavbarProfileMenu";
 import { NewMenuDropdown } from "./NewMenuDropdown";
-import { FeedbackModal } from "@/components/ui/modals/FeedbackModal";
 import { FilterPill } from "./FilterPill";
 import { SearchDropdown, type RecentItem, type SearchItemType, type SearchResult } from "./SearchDropdown";
 import { useRecentlyViewedQuery } from "@/hooks/queries/useRecentlyViewedQuery";
@@ -63,7 +62,6 @@ function Navbar({
   const router = useRouter();
   const { isDesktop } = useBreakpoint();
   const { filter, setFilter } = useNavbarFilter();
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [searchActive, setSearchActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchOffset, setSearchOffset] = useState(0);
@@ -368,22 +366,8 @@ function Navbar({
                 </div>
               </div>
 
-              {/* Right: Feedback, Create, Notifications, Profile */}
+              {/* Right: Create, Notifications, Profile */}
               <div className="flex flex-1 items-center justify-end gap-1 min-w-0">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  icon="leading"
-                  aria-label="Open feedback"
-                  title="Feedback"
-                  onClick={() => {
-                    setFeedbackOpen(true);
-                  }}
-                  className="w-10 px-0 rounded-xl text-content-secondary xl:w-auto xl:pl-2 xl:pr-3"
-                >
-                  <MessageSquareText className="size-4" />
-                  <span className="hidden xl:inline">Feedback</span>
-                </Button>
                 {menusMounted ? (
                   <NewMenuDropdown
                     onNewLink={onNewLink}
@@ -460,17 +444,6 @@ function Navbar({
                       <MenuIcon className="size-4" />
                     </MenuTrigger>
                     <MenuContent align="end" sideOffset={8} className="w-[296px]" positionerClassName="z-50">
-                      <MenuItem
-                        size="lg"
-                        icon="leading"
-                        leadingIcon={<MessageSquareText className="size-4" />}
-                        onClick={() => {
-                          setFeedbackOpen(true);
-                        }}
-                      >
-                        Feedback
-                      </MenuItem>
-                      <MenuSeparator />
                       <DescriptiveMenuItem
                         leadingIcon={<CategoryBadge category="link" />}
                         title="Link"
@@ -534,7 +507,6 @@ function Navbar({
         </div>
       </header>
 
-      <FeedbackModal open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </>
   );
 }

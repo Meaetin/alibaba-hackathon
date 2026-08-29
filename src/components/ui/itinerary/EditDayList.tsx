@@ -7,14 +7,20 @@ import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { Layers, Plus, Minus, PlaneTakeoff, House } from "lucide-react";
 import { Button } from "@/components/ui/primitives/Button";
 import { ItineraryEditDayColumn } from "./ItineraryEditDayColumn";
+import { FlightActivityCard } from "./FlightActivityCard";
 import { EditDaySelector } from "./EditDaySelector";
 import { CompactActivityCard } from "./CompactActivityCard";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
+import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";
 import type { ItineraryPanelVariant } from "./ItinerarySidePanel";
 import { motionPresets, motionTransitions } from "@/lib/motion/presets";
 
 const FLIGHT_CATEGORIES = new Set(["flight", "flights"]);
+
+// The Flight tab header already provides the canonical add-flight entry point.
+// Keep the bookend prompt implemented so it can be restored without rebuilding it.
+const SHOW_FLIGHT_BOOKEND_PROMPT = false;
 
 function isFlightActivity(a: ItineraryActivityDetail): boolean {
   const cat = a.category?.toLowerCase() ?? "";
@@ -65,6 +71,8 @@ interface EditDayListProps {
   onDayScroll?: (dayIndex: number) => void;
   onAddFlight?: () => void;
   isAddingFlight?: boolean;
+  flight?: FlightCardProps | null;
+  onFlightOpen?: () => void;
   onAddLodging?: () => void;
   isAddingLodging?: boolean;
   onActivityTimeChange?: (activityId: string, startTime: string, endTime: string | null) => void;
@@ -111,6 +119,8 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
   onDayScroll,
   onAddFlight,
   isAddingFlight,
+  flight,
+  onFlightOpen,
   onAddLodging,
   isAddingLodging,
   onActivityTimeChange,
@@ -242,6 +252,12 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
     );
   }, [days, panelVariant]);
 
+  const flightDayIndex = useMemo(() => {
+    if (!flight?.departDate) return 0;
+    const index = days.findIndex((day) => day.date?.slice(0, 10) === flight.departDate?.slice(0, 10));
+    return index >= 0 ? index : 0;
+  }, [days, flight?.departDate]);
+
   const isFlightMode = panelVariant === "flight";
 
   const lodgingActivities = useMemo(() => {
@@ -289,6 +305,18 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
 
         {/* Flight Activities */}
         <div className={cn("flight-activities-list", "flex flex-col gap-2 px-3")}>
+          {flight && flightActivities.length === 0 && (
+            <FlightActivityCard
+              flight={flight}
+              date={days[flightDayIndex]?.date}
+              onAction={onFlightOpen ?? (() => {})}
+            />
+          )}
+
+          {!flight && SHOW_FLIGHT_BOOKEND_PROMPT && flightActivities.length === 0 && (
+            <FlightActivityCard date={days[0]?.date} onAction={onAddFlight ?? (() => {})} />
+          )}
+
           {flightActivities.map((activity) => (
             <CompactActivityCard
               key={activity.id}
@@ -475,6 +503,8 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
             onToggleActivityLock={onToggleActivityLock}
             onActivityTimeChange={onActivityTimeChange}
             onActivityOptimize={onActivityOptimize}
+            flight={i === flightDayIndex ? flight : undefined}
+            onFlightOpen={i === flightDayIndex ? onFlightOpen : undefined}
           />
         </div>
       ))}

@@ -5,7 +5,9 @@ import { cn } from "@/lib/utils";
 import { formatDayDate, parseTimeMins } from "./activity-utils";
 import { CompactActivityCard, getActivityCardLayout } from "./CompactActivityCard";
 import { TransportDetailRow } from "./TransportDetailRow";
+import { InlineFlightRow } from "./InlineFlightRow";
 import type { ItineraryDayDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
+import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";
 
 interface CompactDayColumnProps {
   day: ItineraryDayDetail;
@@ -13,6 +15,8 @@ interface CompactDayColumnProps {
   timezone?: string;
   onActivityClick?: (activity: ItineraryActivityDetail) => void;
   activityNotePreviews?: Map<string, string>;
+  flight?: FlightCardProps | null;
+  onFlightOpen?: () => void;
   className?: string;
 }
 
@@ -34,6 +38,8 @@ function CompactDayColumn({
   timezone,
   onActivityClick,
   activityNotePreviews,
+  flight,
+  onFlightOpen,
   className,
 }: CompactDayColumnProps) {
   const dateLabel = useMemo(() => {
@@ -54,6 +60,16 @@ function CompactDayColumn({
         return parseTimeMins(a.start_time) - parseTimeMins(b.start_time);
       });
   }, [day.activities]);
+
+  const flightInsertionIndex = useMemo(() => {
+    if (!flight || !onFlightOpen) return -1;
+    if (!flight.departTime) return 0;
+    const flightMinutes = parseTimeMins(flight.departTime);
+    const index = sortedActivities.findIndex((activity) =>
+      activity.start_time ? parseTimeMins(activity.start_time) > flightMinutes : false
+    );
+    return index >= 0 ? index : sortedActivities.length;
+  }, [flight, onFlightOpen, sortedActivities]);
 
   return (
     <div
@@ -76,11 +92,15 @@ function CompactDayColumn({
       {/* Activities */}
       <div className="compact-day-activities flex flex-col gap-2">
         {sortedActivities.length === 0 ? (
-          <div className="compact-day-empty flex items-center justify-center py-6 text-content-secondary type-body-2">
-            No activities planned
-          </div>
+          <>
+            {flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+            <div className="compact-day-empty flex items-center justify-center py-6 text-content-secondary type-body-2">
+              No activities planned
+            </div>
+          </>
         ) : (
-          sortedActivities.map((activity, i) => {
+          <>
+          {sortedActivities.map((activity, i) => {
             const layout = getActivityCardLayout(activity);
             // travel_* on a row describes the leg from that activity to the
             // next one, so the leg arriving at activity[i] lives on the
@@ -92,6 +112,7 @@ function CompactDayColumn({
 
             return (
               <div key={activity.id} data-activity-id={activity.id} className="compact-day-activity-item flex flex-col gap-2">
+                {i === flightInsertionIndex && flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
                 {showTransportBefore && (
                   <TransportDetailRow
                     distanceMeters={prevActivity.travel_distance_meters ?? null}
@@ -113,7 +134,9 @@ function CompactDayColumn({
                 />
               </div>
             );
-          })
+          })}
+          {flightInsertionIndex === sortedActivities.length && flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+          </>
         )}
       </div>
     </div>

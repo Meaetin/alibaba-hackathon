@@ -23,6 +23,12 @@ export type PlaceSearchRunner = (query: string, includedTypes: string[]) => Prom
 const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "";
 const MAP_ID = process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID_LIGHT ?? "map-light";
 
+function resolveMapStrokeColor(color: string): string {
+  const token = /^var\((--[^,)]+)(?:,[^)]+)?\)$/.exec(color)?.[1];
+  if (!token) return color;
+  return getComputedStyle(document.documentElement).getPropertyValue(token).trim() || color;
+}
+
 function getCenter(locations: MapLocation[]): google.maps.LatLngLiteral {
   if (locations.length === 0) return { lat: 20, lng: 0 };
   const sum = locations.reduce(
@@ -355,7 +361,7 @@ function GoogleMapDetailInner({ locations, polylines, defaultCenter, defaultZoom
       />
       {/* Route Polylines — white casing under a vibrant solid line */}
       {polylines?.map((segment) => {
-        const mainColor = segment.color ?? (() => {
+        const mainColor = segment.color ? resolveMapStrokeColor(segment.color) : (() => {
           const palette = getDayPalette(segment.dayIndex);
           const colors = PALETTE_COLORS[palette];
           return resolvedTheme === 'dark' ? colors.dark : colors.light;

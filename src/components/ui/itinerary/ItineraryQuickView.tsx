@@ -8,11 +8,14 @@ import { parseLocalDate } from "@/lib/utils/itinerary";
 import { getDayColor } from "@/components/ui/calendar/ActivityTimeslot";
 import { CompactDayColumn } from "./CompactDayColumn";
 import type { ItineraryDetail, ItineraryActivityDetail } from "@/lib/db/itinerary-detail";
+import type { FlightCardProps } from "@/components/ui/detail-views/FlightCard";
 
 interface ItineraryQuickViewProps {
   itinerary: ItineraryDetail;
   onActivityClick?: (activity: ItineraryActivityDetail, dayIndex: number) => void;
   activityNotePreviews?: Map<string, string>;
+  flight?: FlightCardProps | null;
+  onFlightOpen?: () => void;
   className?: string;
 }
 
@@ -26,9 +29,14 @@ export function ItineraryQuickView({
   itinerary,
   onActivityClick,
   activityNotePreviews,
+  flight,
+  onFlightOpen,
   className,
 }: ItineraryQuickViewProps) {
   const days = itinerary.days;
+  const flightDayIndex = flight?.departDate
+    ? Math.max(0, days.findIndex((day) => day.date?.slice(0, 10) === flight.departDate?.slice(0, 10)))
+    : 0;
   const { resolvedTheme } = useTheme();
   const prefersReducedMotion = useReducedMotion();
   const isDark = resolvedTheme === "dark";
@@ -149,6 +157,8 @@ export function ItineraryQuickView({
               dayIndex={index}
               timezone="UTC"
               activityNotePreviews={activityNotePreviews}
+              flight={index === flightDayIndex ? flight : undefined}
+              onFlightOpen={index === flightDayIndex ? onFlightOpen : undefined}
               onActivityClick={
                 onActivityClick
                   ? (activity) => onActivityClick(activity, index)

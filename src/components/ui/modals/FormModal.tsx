@@ -49,6 +49,8 @@ const formModalIconCircleVariants = cva(
 
 interface FormModalProps extends VariantProps<typeof formModalIconRingVariants> {
   className?: string;
+  /** Optional class for a bounded, independently scrollable content slot. */
+  contentClassName?: string;
   trigger?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -77,6 +79,7 @@ interface FormModalProps extends VariantProps<typeof formModalIconRingVariants> 
 
 function FormModal({
   className,
+  contentClassName,
   trigger,
   open,
   onOpenChange,
@@ -123,7 +126,7 @@ function FormModal({
           )}
           <form
             onSubmit={onSubmit}
-            className="form-modal-form flex w-full flex-col items-center gap-3"
+            className="form-modal-form flex min-h-0 w-full flex-1 flex-col items-center gap-3"
           >
             {/* Icon Section */}
             <div className="form-modal-icon-section flex items-center justify-center w-full">
@@ -165,10 +168,14 @@ function FormModal({
             </div>
 
             {/* Content Slot */}
-            {children}
+            {contentClassName ? (
+              <div className={cn("form-modal-content min-h-0 w-full", contentClassName)}>
+                {children}
+              </div>
+            ) : children}
 
             {/* Button Group */}
-            <div className="form-modal-buttons flex items-center justify-center gap-3 pt-6 w-full">
+            <div className="form-modal-buttons flex w-full shrink-0 items-center justify-center gap-3 pt-6">
               {cancelCloses ? (
                 <Dialog.Close
                   render={

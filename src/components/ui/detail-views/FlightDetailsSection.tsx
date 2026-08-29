@@ -19,6 +19,8 @@ interface FlightDetailsSectionProps extends ComponentPropsWithoutRef<"div"> {
   terminal?: string;
   ticketNumber?: string;
   currency?: string;
+  airline?: string;
+  compactTicket?: boolean;
   onEdit?: () => void;
   onDelete?: () => void;
 }
@@ -26,7 +28,7 @@ interface FlightDetailsSectionProps extends ComponentPropsWithoutRef<"div"> {
 function Field({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className={cn("flight-detail-field flex flex-col gap-0.5 min-w-0", className)}>
-      <span className="type-body-3 font-medium text-content-secondary">{label}</span>
+      <span className="type-body-2 font-medium text-content-secondary">{label}</span>
       <span className="type-body-2 font-medium text-content truncate">{value}</span>
     </div>
   );
@@ -48,6 +50,8 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
       terminal,
       ticketNumber,
       currency,
+      airline,
+      compactTicket = false,
       onEdit,
       onDelete,
       ...props
@@ -61,6 +65,42 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
     const departLine = [departDate ?? "", departTime ? stripSeconds(departTime) : ""].filter(Boolean).join(" ").trim();
     const arriveLine = [arriveDate ?? "", arriveTime ? stripSeconds(arriveTime) : ""].filter(Boolean).join(" ").trim();
     const fallbackTime = time ? stripSeconds(time) : "—";
+
+    if (compactTicket) {
+      const fields = [
+        { label: "Booking Ref.", value: confirmation },
+        { label: "Airline", value: airline },
+        { label: "Baggage", value: baggageAllowance },
+        { label: "Terminal", value: terminal },
+        { label: "Ticket No.", value: ticketNumber },
+      ].filter((field): field is { label: string; value: string } => Boolean(field.value));
+
+      return (
+        <div
+          ref={ref}
+          data-slot="flight-details-section"
+          className={cn("flight-details-section relative grid grid-cols-2 gap-x-3 gap-y-2 p-3", className)}
+          {...props}
+        >
+          {fields.map((field) => <Field key={field.label} label={field.label} value={field.value} />)}
+          <div
+            className="flight-details-more absolute right-2 top-2 opacity-0 transition-opacity group-hover/flight:opacity-100"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <Menu>
+              <MenuTrigger className="flex size-7 items-center justify-center rounded-lg hover:bg-surface-muted-hover">
+                <MoreVertical className="size-3.5 text-content-tertiary" />
+              </MenuTrigger>
+              <MenuContent align="end" side="bottom" sideOffset={4}>
+                <MenuItem size="sm" icon="leading" leadingIcon={<Pencil className="size-3.5" />} onClick={onEdit}>Edit</MenuItem>
+                <MenuItem size="sm" icon="leading" variant="destructive" leadingIcon={<Trash2 className="size-3.5" />} onClick={onDelete}>Delete</MenuItem>
+              </MenuContent>
+            </Menu>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div
