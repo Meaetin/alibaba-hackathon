@@ -2086,6 +2086,21 @@ trip with no located stops gets **no** collection rather than an empty one —
 an empty shelf reads as "this trip saved nothing", which is a different and
 wrong statement.
 
+**A companion is hidden from `listCollections`, and only from there.** The trip
+is already in the grid as a trip, so listing its shelf beside it shows one set of
+places twice under two names. The filter is `isNull(collections.itinerary_id)` in
+the store — one place, because `GET /api/collections` is what the grid, the
+rubber-band toolbar and all three "Save to" pickers read. `readCollection` still
+answers for it: the "Save to itinerary" menus post places to that id, so hidden
+from the list must not mean gone.
+
+Two assertions in `collections.test.ts` used `listCollections` to prove a
+companion had or had not been created, and both now pass whatever the creation
+rule says. They read `store.rows` instead. Watch the double's id sequence when
+seeding a row beside a companion — `nextId` starts at
+`00000000-0000-4000-a000-000000000001`, so a hand-written row on that id is
+silently overwritten by the shelf the test then mints.
+
 **Older trips have no companion and nothing backfills one.** `readItineraryList`
 returns `collection_id: ""` for them, and the three "Save to itinerary" menus
 filter on it. Posting places to a collection id of `""` would be a write that

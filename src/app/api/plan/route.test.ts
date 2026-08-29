@@ -277,7 +277,11 @@ describe('POST /api/plan', () => {
     const job = (await (await post()).json()) as JobRow
     await settled(harness.store, job.id)
 
-    const [collection] = await harness.collections.listCollections(harness.session.user.id)
+    // Not `listCollections` — a companion is deliberately absent from the grid,
+    // because the trip is already in it as a trip. The stored row is what says
+    // the shelf was made.
+    const [row] = [...harness.collections.rows.values()]
+    const collection = (await harness.collections.readCollection(row.id, harness.session.user.id))!
     expect(collection.name).toBe(BODY.name)
     expect(collection.location_count).toBeGreaterThan(0)
 

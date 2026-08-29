@@ -13,7 +13,7 @@
  * That is the whole reason this table is a junction rather than a copy.
  */
 
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 
 import {
@@ -106,6 +106,13 @@ export interface AddLocationsResult {
 }
 
 export interface CollectionStore {
+  /**
+   * The traveller's free-standing shelves. A trip's **companion** collection is
+   * deliberately absent: it is already on the page as the trip itself, and the
+   * "Save to itinerary" menus reach it by the id `readItineraryList` hands out.
+   * Listing it too would put one shelf in the grid twice under two names.
+   * `readCollection` still answers for it — hidden from the list is not gone.
+   */
   listCollections(userId: string): Promise<CollectionListItem[]>;
   /** Undefined for an id that does not exist **and** for one owned by somebody
    *  else. The caller cannot tell the two apart, which is the point. */
@@ -184,7 +191,7 @@ export function createCollectionStore(db: Database): CollectionStore {
       const rows = await db
         .select()
         .from(collections)
-        .where(eq(collections.user_id, userId))
+        .where(and(eq(collections.user_id, userId), isNull(collections.itinerary_id)))
         .orderBy(desc(collections.updated_at));
       if (rows.length === 0) return [];
 
@@ -534,7 +541,7 @@ export function createInMemoryCollectionStore(seed?: {
 
     async listCollections(userId) {
       return [...rows.values()]
-        .filter((row) => row.user_id === userId)
+        .filter((row) => row.user_id === userId && row.itinerary_id === null)
         .sort(
           (a, b) =>
             new Date(ISO(b.updated_at)).getTime() - new Date(ISO(a.updated_at)).getTime(),

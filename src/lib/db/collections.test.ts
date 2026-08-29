@@ -193,6 +193,7 @@ describe("adding places", () => {
 
 describe("the companion collection", () => {
   const TRIP = "00000000-0000-4000-8000-0000000000e1";
+  const FREE_STANDING = "00000000-0000-4000-a000-0000000000f1";
 
   it("holds every place the trip scheduled, deduped", async () => {
     const collections = createInMemoryCollectionStore({
@@ -224,7 +225,9 @@ describe("the companion collection", () => {
     });
 
     expect(await collections.createItineraryCollection(TRIP, ALICE, NOW)).toBeUndefined();
-    expect(await collections.listCollections(ALICE)).toEqual([]);
+    // Not `listCollections` — a companion never appears there, so that
+    // assertion would hold even if a shelf had been created.
+    expect(collections.rows.size).toBe(0);
   });
 
   it("gives one trip one companion, however often it is asked", async () => {
@@ -235,7 +238,27 @@ describe("the companion collection", () => {
 
     expect(await collections.createItineraryCollection(TRIP, ALICE, NOW)).toBeDefined();
     expect(await collections.createItineraryCollection(TRIP, ALICE, LATER)).toBeUndefined();
-    expect(await collections.listCollections(ALICE)).toHaveLength(1);
+    expect(collections.rows.size).toBe(1);
+  });
+
+  it("stays out of the list, and stays readable by id", async () => {
+    // The trip is already in the grid as a trip. Listing its shelf beside it
+    // would show one set of places twice under two names — while the "Save to
+    // itinerary" menus still post to this id, so hiding it must not lose it.
+    const collections = createInMemoryCollectionStore({
+      // Not the double's own `00000000-0000-4000-a000-0000000000001` sequence:
+      // the companion it is about to mint would land on the same id.
+      rows: [collectionRow(FREE_STANDING, ALICE)],
+      locations: { [HOE_KEE.id]: HOE_KEE },
+      itineraryStops: { [TRIP]: { name: "Three days in Singapore", locationIds: [HOE_KEE.id] } },
+    });
+    const companion = await collections.createItineraryCollection(TRIP, ALICE, NOW);
+
+    const listed = await collections.listCollections(ALICE);
+    expect(listed.map((card) => card.id)).toEqual([FREE_STANDING]);
+
+    const detail = await collections.readCollection(companion!.collectionId, ALICE);
+    expect(detail?.name).toBe("Three days in Singapore");
   });
 });
 
