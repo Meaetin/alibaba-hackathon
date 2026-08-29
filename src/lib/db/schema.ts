@@ -367,6 +367,86 @@ export const itinerary_activities = pgTable(
   (t) => [unique("itinerary_activities_day_id_position_key").on(t.day_id, t.position)],
 );
 
+/**
+ * A flight on a trip: booked through Atlas, or typed in by hand.
+ *
+ * It hangs off `itineraries` rather than off a day, because a flight is not an
+ * activity — the planner never produces one, never schedules one, and
+ * `itinerary_activities` is keyed on a `day_id` and a `position` that a flight
+ * has no answer for. Deleting a trip takes its flights with it; nothing else
+ * points at them.
+ *
+ * **The column names are `ExtractedFlight`'s, field for field.** That type is
+ * what the flight card, the manual form and the edit form already speak, so a
+ * row goes to a card with no rename layer — the same rule the rest of this file
+ * keeps about snake_case.
+ *
+ * Dates and clock times are stored apart, as `date` and `text`, because that is
+ * how every airline states them and how every form in the UI collects them: a
+ * departure is "14 Sep, 23:55 local", not an instant. Composing them into one
+ * timestamp needs the airport's timezone, which this app does not have — see
+ * `ITINERARY_TIMEZONE` for the same decision made once already.
+ */
+export const itinerary_flights = pgTable(
+  "itinerary_flights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    itinerary_id: uuid("itinerary_id")
+      .notNull()
+      .references(() => itineraries.id, { onDelete: "cascade" }),
+    /**
+     * Where the row came from. A fare booked through Atlas and a flight
+     * somebody typed in are the same shape and are not the same claim: only
+     * the first has a ticket number we issued, and only the first should ever
+     * be re-priced against a live search.
+     */
+    source: text("source").notNull().default("manual"),
+    flight_number: text("flight_number"),
+    airline: text("airline"),
+    depart_date: date("depart_date").notNull(),
+    /** Local clock at the departure airport, "HH:MM". Never a timestamp. */
+    depart_time: text("depart_time"),
+    depart_airport_code: text("depart_airport_code"),
+    depart_city: text("depart_city"),
+    depart_country: text("depart_country"),
+    arrive_date: date("arrive_date").notNull(),
+    /** Local clock at the arrival airport, "HH:MM". */
+    arrive_time: text("arrive_time"),
+    arrive_airport_code: text("arrive_airport_code"),
+    arrive_city: text("arrive_city"),
+    arrive_country: text("arrive_country"),
+    duration_minutes: integer("duration_minutes"),
+    /** The airline's booking reference (PNR). */
+    confirmation: text("confirmation"),
+    fare_class: text("fare_class"),
+    /**
+     * Stored as text, not `real`. A fare is a decimal amount and binary
+     * floating point is the wrong shape for money; the UI only ever formats it
+     * beside `currency` anyway, and `FlightCardProps.cost` is already a string.
+     */
+    cost: text("cost"),
+    currency: text("currency"),
+    terminal: text("terminal"),
+    baggage_allowance: text("baggage_allowance"),
+    ticket_number: text("ticket_number"),
+    /** The seat the traveller picked, e.g. "12A". Null when none was chosen —
+     *  which is different from a seat we failed to record. */
+    seat: text("seat"),
+    /** Who is flying, as given at booking. One passenger per row today. */
+    passenger_name: text("passenger_name"),
+    status: text("status").notNull().default("confirmed"),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("itinerary_flights_itinerary_idx").on(t.itinerary_id, t.depart_date),
+    check(
+      "itinerary_flights_source_check",
+      sql`${t.source} in ('booked', 'manual', 'extracted')`,
+    ),
+  ],
+);
+
 // ─── Job queue ───────────────────────────────────────────────────────────────
 
 /**

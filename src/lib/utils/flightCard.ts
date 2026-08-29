@@ -31,7 +31,7 @@ export function mapExtractedFlightToCardProps(f: ExtractedFlight): FlightCardPro
     arriveTime: arrTime,
     airline: f.airline,
     fareClass: f.fare_class,
-    cost: f.cost != null ? String(f.cost) : "",
+    cost: f.cost ?? "",
     currency: f.currency,
     confirmation: f.confirmation ?? "",
     flightNumber: f.flight_number ?? "",
@@ -39,6 +39,7 @@ export function mapExtractedFlightToCardProps(f: ExtractedFlight): FlightCardPro
     terminal: f.terminal,
     baggageAllowance: f.baggage_allowance,
     ticketNumber: f.ticket_number,
+    seat: f.seat,
     sourceAttachmentId: f.source_attachment_id ?? null,
   };
 }

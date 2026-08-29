@@ -64,7 +64,7 @@ import type { DragStartEvent, DragEndEvent, Over } from "@dnd-kit/core";
 import { Kanban, type KanbanDropTarget } from "@/components/ui/primitives/Kanban";
 import type { LodgingFormData } from "@/components/ui/detail-views/LodgingForm";
 import { LocationDetailView } from "@/components/ui/detail-views/LocationDetailView";
-import { extractFlightsFromPDF, getFlights, createFlight, type ExtractedFlight } from "@/lib/api/flights";
+import { extractFlightsFromPDF, getFlights, createFlight, updateFlight, deleteFlight, type ExtractedFlight } from "@/lib/api/flights";
 import { getLodgings } from "@/lib/api/lodgings";
 import { uploadAttachment, deleteAttachment, getAttachmentSignedUrl, type ItineraryAttachmentSummary } from "@/lib/api/attachments";
 import { FilePillHeader } from "@/components/ui/detail-views/FilePillHeader";
@@ -497,21 +497,40 @@ export default function ItineraryDetailPage() {
     setPanelState({ variant: "flight-booking", offer, search });
   }, []);
 
-  const completeFlightBooking = useCallback((confirmation: FlightBookingConfirmation) => {
+  /**
+   * A finished booking becomes a row, then a card.
+   *
+   * The card is rendered optimistically from the confirmation and reconciled
+   * with the stored row when the write lands, so the panel closes onto a filled
+   * list rather than a spinner. Its id is the one the database issued — the old
+   * `atlas-${bookingReference}` was minted in the browser and belonged to
+   * nothing, so edit and delete had no row to name.
+   *
+   * A failed write still shows the card. The traveller has a ticket number
+   * either way and the airline was not asked whether we managed to file it; the
+   * toast says the trip did not keep it, which is the honest version of what
+   * happened.
+   */
+  const completeFlightBooking = useCallback(async (confirmation: FlightBookingConfirmation) => {
     const { offer } = confirmation;
+    const departDate = offer.departureTime.slice(0, 10);
+    const arriveDate = offer.arrivalTime.slice(0, 10);
+    const fromCity = flightSearchOrigin?.code === offer.departureAirport ? flightSearchOrigin.city : offer.departureAirport;
+    const toCity = flightSearchDestination?.code === offer.arrivalAirport ? flightSearchDestination.city : offer.arrivalAirport;
+
     const bookedFlight: FlightCardProps = {
       id: `atlas-${confirmation.bookingReference}`,
       fromCode: offer.departureAirport,
-      fromCity: flightSearchOrigin?.code === offer.departureAirport ? flightSearchOrigin.city : offer.departureAirport,
+      fromCity,
       toCode: offer.arrivalAirport,
-      toCity: flightSearchDestination?.code === offer.arrivalAirport ? flightSearchDestination.city : offer.arrivalAirport,
+      toCity,
       time: `${offer.departureTime} → ${offer.arrivalTime}`,
       cost: String(confirmation.total),
       confirmation: confirmation.bookingReference,
       flightNumber: offer.flightNumbers.join(" · "),
-      departDate: offer.departureTime.slice(0, 10),
+      departDate,
       departTime: offer.departureTime.slice(11, 16),
-      arriveDate: offer.arrivalTime.slice(0, 10),
+      arriveDate,
       arriveTime: offer.arrivalTime.slice(11, 16),
       airline: offer.carrier,
       flightDuration: `${Math.floor(offer.durationMinutes / 60)}h ${offer.durationMinutes % 60}m`,
@@ -520,19 +539,64 @@ export default function ItineraryDetailPage() {
       baggageAllowance: confirmation.baggageLabel,
       currency: offer.currency,
       ticketNumber: confirmation.ticketNumber,
+      seat: confirmation.seatId || undefined,
     };
-    setFlights((current) => [bookedFlight, ...current.filter((flight) => flight.confirmation !== confirmation.bookingReference)]);
+    const withoutThisBooking = (list: FlightCardProps[]) =>
+      list.filter((flight) => flight.confirmation !== confirmation.bookingReference);
+    setFlights((current) => [bookedFlight, ...withoutThisBooking(current)]);
     setFlightBookingSeatMode(false);
     setFlightBookingSeatId(null);
     setFlightBookingPassengerName("");
     setPanelState({ variant: "flight" });
+
+    let saved = false;
+    if (itineraryId) {
+      try {
+        const row = await createFlight(itineraryId, {
+          source: "booked",
+          flight_number: offer.flightNumbers.join(" · "),
+          airline: offer.carrier,
+          depart_date: departDate,
+          depart_time: offer.departureTime.slice(11, 16),
+          depart_airport_code: offer.departureAirport,
+          depart_city: fromCity,
+          arrive_date: arriveDate,
+          arrive_time: offer.arrivalTime.slice(11, 16),
+          arrive_airport_code: offer.arrivalAirport,
+          arrive_city: toCity,
+          duration_minutes: offer.durationMinutes,
+          confirmation: confirmation.bookingReference,
+          cost: String(confirmation.total),
+          currency: offer.currency,
+          terminal: offer.departureTerminal,
+          baggage_allowance: confirmation.baggageLabel,
+          ticket_number: confirmation.ticketNumber,
+          seat: confirmation.seatId || undefined,
+          passenger_name: confirmation.passengerName || undefined,
+        });
+        // The stored row wins: it carries the real id, and `stops` is the only
+        // thing it cannot say — the table holds one leg, not a segment list —
+        // so that one field is carried over from the offer.
+        setFlights((current) => [
+          { ...mapExtractedFlightToCardProps(row), stops: offer.stops },
+          ...withoutThisBooking(current),
+        ]);
+        saved = true;
+      } catch (err) {
+        console.error("[flights] the booked flight could not be saved", err);
+      }
+    }
+
+    const seatNote = confirmation.seatId
+      ? `Ticket ${confirmation.ticketNumber} · Seat ${confirmation.seatId}`
+      : `Ticket ${confirmation.ticketNumber} · No seat selected`;
     showToast({
-      title: `${offer.flightNumbers.join(" · ")} added to your itinerary`,
-      description: confirmation.seatId
-        ? `Ticket ${confirmation.ticketNumber} · Seat ${confirmation.seatId}`
-        : `Ticket ${confirmation.ticketNumber} · No seat selected`,
+      title: saved
+        ? `${offer.flightNumbers.join(" · ")} added to your itinerary`
+        : `${offer.flightNumbers.join(" · ")} booked, but not saved to this trip`,
+      description: saved ? seatNote : `${seatNote}. It will be gone when you reload — add it by hand to keep it.`,
     });
-  }, [flightSearchDestination, flightSearchOrigin, showToast]);
+  }, [flightSearchDestination, flightSearchOrigin, itineraryId, showToast]);
 
   // The edit workspace is intentionally desktop/tablet-only for now. If the
   // viewport crosses into the phone breakpoint while editing, return to the
@@ -2415,6 +2479,31 @@ export default function ItineraryDetailPage() {
     return () => { setFilter(null); };
   }, [bannerUrl, itinerary?.id, itinerary?.name, setFilter]);
 
+  // Hydrate the trip's flights. This is what makes a booking survive a reload:
+  // `completeFlightBooking` writes the row, and this reads it back on the next
+  // visit. Nothing loaded flights before, which is the other half of why a
+  // booked fare used to vanish the moment the page re-rendered from scratch.
+  //
+  // On mount rather than when the Flight tab opens, unlike lodgings: the flight
+  // list also draws the airport markers and route polylines on the map, and a
+  // tab-gated fetch would leave the map wrong until somebody clicked.
+  useEffect(() => {
+    if (!itineraryId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getFlights(itineraryId);
+        if (cancelled) return;
+        setFlights(rows.map(mapExtractedFlightToCardProps));
+      } catch (err) {
+        // An empty flight list and a failed fetch look identical on the page,
+        // so the difference goes to the terminal rather than nowhere.
+        console.error("[flights] the trip's flights could not be loaded", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [itineraryId]);
+
   // Load airport coords directly from the `locations` table (the backend upserts
   // them during flight upload/create via the resolveAirport helper). Used to draw
   // airport markers + route polylines in editFlightMapData below.
@@ -3956,7 +4045,8 @@ export default function ItineraryDetailPage() {
                   onFlightFormSubmit={async (data, expandDates) => {
                     if (!itineraryId) return;
                     try {
-                      const result = await createFlight(itineraryId, {
+                      const row = await createFlight(itineraryId, {
+                        source: "manual",
                         flight_number: data.flightNumber,
                         airline: data.airline,
                         depart_date: data.departDate,
@@ -3967,7 +4057,7 @@ export default function ItineraryDetailPage() {
                         arrive_time: data.arriveTime,
                         arrive_airport_code: data.toCode,
                         arrive_city: data.toCity,
-                        cost: data.cost ? parseFloat(data.cost) : undefined,
+                        cost: data.cost,
                         currency: data.currency,
                         confirmation: data.confirmation,
                         fare_class: data.fareClass,
@@ -3975,22 +4065,10 @@ export default function ItineraryDetailPage() {
                         baggage_allowance: data.baggageAllowance,
                         ticket_number: data.ticketNumber,
                       });
-                      setFlights((prev) => [...prev, {
-                        id: result.id,
-                        fromCode: data.fromCode,
-                        fromCity: data.fromCity,
-                        toCode: data.toCode,
-                        toCity: data.toCity,
-                        time: `${data.departDate} ${data.departTime}${data.arriveDate ? ` → ${data.arriveDate} ${data.arriveTime ?? ""}` : ""}`,
-                        departTime: data.departTime,
-                        cost: data.cost ?? "",
-                        currency: data.currency,
-                        confirmation: data.confirmation ?? "",
-                        flightNumber: data.flightNumber,
-                        terminal: data.terminal,
-                        baggageAllowance: data.baggageAllowance,
-                        ticketNumber: data.ticketNumber,
-                      }]);
+                      // The card is built from the stored row, not from the form,
+                      // so what the list shows and what a reload shows cannot
+                      // disagree about a field the server normalized.
+                      setFlights((prev) => [...prev, mapExtractedFlightToCardProps(row)]);
                       if (expandDates) {
                         const allDates = [data.departDate, data.arriveDate].filter(Boolean) as string[];
                         let newFrom = dateRange?.from;
@@ -4013,10 +4091,7 @@ export default function ItineraryDetailPage() {
                   onFlightDelete={async (flightId) => {
                     if (!itineraryId) return;
                     try {
-                      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
-                        method: "DELETE",
-                        credentials: 'same-origin',
-                      });
+                      await deleteFlight(itineraryId, flightId);
                       setFlights(prev => prev.filter(f => f.id !== flightId));
                       const isFlightActivity = (a: { id: string; source_flight_id?: string | null }) =>
                         a.source_flight_id === flightId || a.id.includes(flightId);
@@ -4029,46 +4104,31 @@ export default function ItineraryDetailPage() {
                   onFlightEditSubmit={async (flightId, data, expandDates) => {
                     if (!itineraryId) return;
                     try {
-                      await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/itineraries/${itineraryId}/flights/${flightId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "same-origin",
-                        body: JSON.stringify({
-                          flight_number: data.flightNumber,
-                          airline: data.airline,
-                          depart_date: data.departDate,
-                          depart_time: data.departTime,
-                          depart_airport_code: data.fromCode,
-                          depart_city: data.fromCity,
-                          arrive_date: data.arriveDate ?? data.departDate,
-                          arrive_time: data.arriveTime,
-                          arrive_airport_code: data.toCode,
-                          arrive_city: data.toCity,
-                          cost: data.cost ? parseFloat(data.cost) : undefined,
-                          currency: data.currency,
-                          confirmation: data.confirmation,
-                          fare_class: data.fareClass,
-                          terminal: data.terminal,
-                          baggage_allowance: data.baggageAllowance,
-                          ticket_number: data.ticketNumber,
-                        }),
-                      });
-                      setFlights(prev => prev.map(f => f.id === flightId ? {
-                        ...f,
-                        fromCode: data.fromCode,
-                        fromCity: data.fromCity,
-                        toCode: data.toCode,
-                        toCity: data.toCity,
-                        time: `${data.departDate} ${data.departTime}${data.arriveDate ? ` → ${data.arriveDate} ${data.arriveTime ?? ""}` : ""}`,
-                        departTime: data.departTime,
-                        cost: data.cost ?? "",
+                      const row = await updateFlight(itineraryId, flightId, {
+                        flight_number: data.flightNumber,
+                        airline: data.airline,
+                        depart_date: data.departDate,
+                        depart_time: data.departTime,
+                        depart_airport_code: data.fromCode,
+                        depart_city: data.fromCity,
+                        arrive_date: data.arriveDate ?? data.departDate,
+                        arrive_time: data.arriveTime,
+                        arrive_airport_code: data.toCode,
+                        arrive_city: data.toCity,
+                        cost: data.cost,
                         currency: data.currency,
-                        confirmation: data.confirmation ?? "",
-                        flightNumber: data.flightNumber,
+                        confirmation: data.confirmation,
+                        fare_class: data.fareClass,
                         terminal: data.terminal,
-                        baggageAllowance: data.baggageAllowance,
-                        ticketNumber: data.ticketNumber,
-                      } : f));
+                        baggage_allowance: data.baggageAllowance,
+                        ticket_number: data.ticketNumber,
+                      });
+                      // `stops` is not a column — it belongs to the Atlas offer,
+                      // not to the row — so the existing card's value is kept
+                      // rather than dropped by the remap.
+                      setFlights(prev => prev.map(f => f.id === flightId
+                        ? { ...mapExtractedFlightToCardProps(row), stops: f.stops }
+                        : f));
                       if (expandDates) {
                         const allDates = [data.departDate, data.arriveDate].filter(Boolean) as string[];
                         let newFrom = dateRange?.from;

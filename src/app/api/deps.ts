@@ -16,6 +16,7 @@ import OpenAI from "openai";
 
 import { createContentStore, type ContentStore } from "@/lib/db/content";
 import { getDb, type Database } from "@/lib/db/client";
+import { createFlightStore, type FlightStore } from "@/lib/db/flights";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
 import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
 import { createUserStore, type UserRow, type UserStore } from "@/lib/db/users";
@@ -93,6 +94,28 @@ export const itineraryRouteDeps: {
   create: () => {
     const db = getDb();
     return { db, users: createUserStore(db), now: () => new Date() };
+  },
+};
+
+/**
+ * `GET`/`POST /api/itineraries/[id]/flights` and the two on `[flightId]`.
+ *
+ * It carries the flight store **and** the database, because the handlers need
+ * both: the store to read and write the rows, and `readItineraryOwner` to
+ * answer whose trip they are on. The ownership check is deliberately not
+ * pushed into the store — see the note at the top of `src/lib/db/flights.ts`.
+ */
+export const flightRouteDeps: {
+  create: () => { db: Database; flights: FlightStore; users: UserStore; now: () => Date };
+} = {
+  create: () => {
+    const db = getDb();
+    return {
+      db,
+      flights: createFlightStore(db),
+      users: createUserStore(db),
+      now: () => new Date(),
+    };
   },
 };
 

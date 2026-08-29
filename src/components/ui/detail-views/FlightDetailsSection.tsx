@@ -18,6 +18,8 @@ interface FlightDetailsSectionProps extends ComponentPropsWithoutRef<"div"> {
   baggageAllowance?: string;
   terminal?: string;
   ticketNumber?: string;
+  /** The seat picked at booking, e.g. "12A". Only a booked fare has one. */
+  seat?: string;
   currency?: string;
   airline?: string;
   compactTicket?: boolean;
@@ -49,6 +51,7 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
       baggageAllowance,
       terminal,
       ticketNumber,
+      seat,
       currency,
       airline,
       compactTicket = false,
@@ -60,7 +63,7 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
   ) => {
     const stripSeconds = (t: string) => t.replace(/(\d{2}:\d{2}):\d{2}/g, "$1");
     const costDisplay = currency ? `${currency} ${cost || "—"}` : (cost || "—");
-    const hasSecondaryRow = !!(baggageAllowance || terminal || ticketNumber);
+    const hasSecondaryRow = !!(baggageAllowance || terminal || ticketNumber || seat);
     const hasPerLegTimes = !!(departTime || departDate || arriveTime || arriveDate);
     const departLine = [departDate ?? "", departTime ? stripSeconds(departTime) : ""].filter(Boolean).join(" ").trim();
     const arriveLine = [arriveDate ?? "", arriveTime ? stripSeconds(arriveTime) : ""].filter(Boolean).join(" ").trim();
@@ -73,6 +76,7 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
         { label: "Baggage", value: baggageAllowance },
         { label: "Terminal", value: terminal },
         { label: "Ticket No.", value: ticketNumber },
+        { label: "Seat", value: seat },
       ].filter((field): field is { label: string; value: string } => Boolean(field.value));
 
       return (
@@ -141,6 +145,7 @@ const FlightDetailsSection = forwardRef<HTMLDivElement, FlightDetailsSectionProp
             {baggageAllowance && <Field label="Baggage" value={baggageAllowance} />}
             {terminal && <Field label="Terminal" value={terminal} />}
             {ticketNumber && <Field label="Ticket No." value={ticketNumber} />}
+            {seat && <Field label="Seat" value={seat} />}
           </div>
         )}
 

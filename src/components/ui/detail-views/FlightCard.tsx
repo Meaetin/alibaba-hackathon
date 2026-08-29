@@ -31,6 +31,8 @@ interface FlightCardProps extends ComponentPropsWithoutRef<"div"> {
   baggageAllowance?: string;
   currency?: string;
   ticketNumber?: string;
+  /** The seat picked at booking, e.g. "12A". Only a booked fare has one. */
+  seat?: string;
   /** Attachment id this flight was extracted from. Drives card clickability. */
   sourceAttachmentId?: string | null;
   /** Muted, non-interactive state (Figma State=Disabled). */
@@ -68,6 +70,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
       baggageAllowance,
       currency,
       ticketNumber,
+      seat,
       sourceAttachmentId,
       disabled = false,
       onEdit,
@@ -138,6 +141,7 @@ const FlightCard = forwardRef<HTMLDivElement, FlightCardProps>(
           baggageAllowance={baggageAllowance}
           terminal={terminal}
           ticketNumber={ticketNumber}
+          seat={seat}
           currency={currency}
           airline={airline}
           compactTicket
