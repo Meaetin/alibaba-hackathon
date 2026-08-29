@@ -18,7 +18,7 @@ import { ConfirmDeleteModal } from "@/components/ui/modals/ConfirmDeleteModal";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
 import { useToast } from "@/contexts/ToastContext";
 import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } from "@/lib/api/client";
-import { createCollection } from "@/lib/api/collections";
+import { addLocationsToCollection, createCollection } from "@/lib/api/collections";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
@@ -78,7 +78,6 @@ const MOBILE_CREATE_SLIDES = [
   { key: "link", label: "Add a link" },
   { key: "collection", label: "Create a collection" },
   { key: "itinerary", label: "Plan an itinerary" },
-  { key: "flight", label: "Discover flights" },
 ] as const;
 
 function getItemHref(item: RecentContentItem): string {
@@ -307,10 +306,6 @@ export default function DashboardPage() {
       cardsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 100);
   };
-
-  const handleFlightsClick = useCallback(() => {
-    router.push("/flights");
-  }, [router]);
 
   const handleCreateCarouselPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
@@ -626,9 +621,23 @@ export default function DashboardPage() {
     [showToast],
   );
 
-  const handleAddToDestinationConfirm = useCallback(async () => {
-    throw new Error("Collections are not available in this build.");
-  }, []);
+  // The modal hands back the chosen destination's id and, for an itinerary, its
+  // companion collection. Places always land on a collection: an itinerary is a
+  // schedule, and a place with no day and no time has nowhere to sit in one.
+  //
+  // A trip planned before companion collections existed has none, and its
+  // `collection_id` comes back empty. That is a plain error rather than a
+  // silent no-op — "added to itinerary" over a write that did not happen is the
+  // failure this file already documents at the other end.
+  const handleAddToDestinationConfirm = useCallback(
+    async (destinationId: string, locationIds: string[], backingCollectionId?: string) => {
+      const target =
+        addToDestModal.mode === "itinerary" ? backingCollectionId : destinationId;
+      if (!target) throw new Error("That itinerary has no collection to save into.");
+      await addLocationsToCollection(target, locationIds);
+    },
+    [addToDestModal.mode],
+  );
 
   // Renders the appropriate entity card for a feed/latest item, wiring its kebab /
   // right-click actions per type (delete + add-to-destination where applicable).
@@ -731,9 +740,6 @@ export default function DashboardPage() {
             <div className="flex-[0_0_88%] snap-start">
               <CreateCard type="itinerary" className="h-[260px]" onAction={() => setNewItineraryModalOpen(true)} />
             </div>
-            <div className="flex-[0_0_88%] snap-start">
-              <CreateCard type="flight" className="h-[260px]" onAction={handleFlightsClick} />
-            </div>
           </div>
 
           <div className="flex h-8 items-center justify-center px-1">
@@ -800,7 +806,9 @@ export default function DashboardPage() {
             data-region="home-bento-grid"
             className="bento-grid [--cols:2] [--ratio:calc(320/243)] md:[--cols:2] md:[--ratio:0.72] lg:[--cols:4] lg:[--ratio:calc(292/243)] xl:[--cols:5]"
           >
-            {/* Create Cards — fixed 2×2 block, breakpoint-invariant placement */}
+            {/* Create Cards — fixed L-shaped block, breakpoint-invariant placement.
+                The fourth cell (col 2, row 2) is left to the feed: flights are
+                reached from inside an itinerary now, not from here. */}
             <div data-region="home-create-link" className="hidden md:block lg:col-start-1 lg:row-start-1">
               <CreateCard type="link" className="h-full" onAction={() => setNewLinkModalOpen(true)} />
             </div>
@@ -809,9 +817,6 @@ export default function DashboardPage() {
             </div>
             <div data-region="home-create-itinerary" className="hidden md:block lg:col-start-1 lg:row-start-2">
               <CreateCard type="itinerary" className="h-full" onAction={() => setNewItineraryModalOpen(true)} />
-            </div>
-            <div data-region="home-create-flight" className="hidden md:block lg:col-start-2 lg:row-start-2">
-              <CreateCard type="flight" className="h-full" onAction={handleFlightsClick} />
             </div>
 
             {/* Map Tile — pinned top-right (3×2 at xl, 2×2 at lg, full-width banner below) */}

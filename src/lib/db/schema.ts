@@ -586,6 +586,89 @@ export const content_locations = pgTable(
   ],
 );
 
+// ─── Collections ─────────────────────────────────────────────────────────────
+
+/**
+ * A named set of places one traveller saved.
+ *
+ * The unit that lets a place found in a video, a place from a finished trip and
+ * a place picked off a map all sit in the same list. `content` is what one link
+ * produced and `itineraries` is what one plan produced; a collection is what a
+ * person chose, which is why it is the only one of the three with a name they
+ * typed.
+ *
+ * `itinerary_id` is how a generated trip gets its **companion collection** — a
+ * collection either backs an itinerary or is free-standing, never both, which
+ * the unique index is what makes true. The reference sits on this side rather
+ * than as `itineraries.collection_id` for two reasons: cascade runs the right
+ * way (deleting a trip takes its companion, deleting the companion leaves the
+ * trip), and `itineraries` keeps a column that every row planned before this
+ * existed would have had to leave null.
+ *
+ * **Older trips have no companion.** Nothing backfills one, so a read must
+ * answer "this trip has no collection" rather than inventing an empty one.
+ */
+export const collections = pgTable(
+  "collections",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** `cascade`, like `content.user_id` and unlike `itineraries.user_id`. A
+     *  collection is a person's own shelf; orphaned, it is litter. */
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    country: text("country"),
+    region: text("region"),
+    /** Where the collection is about, from the create modal's autocomplete.
+     *  Seeds the trip form when planning from here, nothing more. */
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+    is_bookmarked: boolean("is_bookmarked").notNull().default(false),
+    is_archived: boolean("is_archived").notNull().default(false),
+    /** The trip this collection was created alongside, or null for one the
+     *  traveller made themselves. Unique: one companion per trip. */
+    itinerary_id: uuid("itinerary_id")
+      .unique()
+      .references(() => itineraries.id, { onDelete: "cascade" }),
+    created_at: timestamptz("created_at").notNull().defaultNow(),
+    updated_at: timestamptz("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("collections_user_updated_idx").on(t.user_id, t.updated_at)],
+);
+
+/**
+ * A place in a collection.
+ *
+ * `location_id` is a plain reference with **no** cascade, for the same reason
+ * `content_locations.location_id` has none: `locations` is the shared Places
+ * cache, so removing a place from somebody's shelf must not delete the row an
+ * itinerary and three links also point at.
+ *
+ * `added_at` is on the junction rather than derived, because the grid sorts
+ * newest-added-first and "when this place was saved here" is not the same fact
+ * as "when Google's row for it was fetched".
+ */
+export const collection_locations = pgTable(
+  "collection_locations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    collection_id: uuid("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    location_id: uuid("location_id")
+      .notNull()
+      .references(() => locations.id),
+    added_at: timestamptz("added_at").notNull().defaultNow(),
+  },
+  (t) => [
+    unique("collection_locations_unique_idx").on(t.collection_id, t.location_id),
+    index("collection_locations_collection_idx").on(t.collection_id, t.added_at),
+  ],
+);
+
 export const jobs = pgTable(
   "jobs",
   {

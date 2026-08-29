@@ -26,18 +26,25 @@
  *
  * ## What is a constant, and why
  *
- * `is_public`, `is_bookmarked`, `is_archived`, `public_token` and
- * `collection_id` are on the card type and have no column here — they belonged
- * to the sharing, bookmarking and collection features that left with the old
- * REST backend. They are pinned to their "off" value rather than made optional,
- * so the card components keep compiling without a rename layer. `user_role` is
- * always `"owner"`: this query is scoped to the owner, and collaborators went
- * with the same backend.
+ * `is_public`, `is_bookmarked`, `is_archived` and `public_token` are on the
+ * card type and have no column here — they belonged to the sharing and
+ * bookmarking features that left with the old REST backend. They are pinned to
+ * their "off" value rather than made optional, so the card components keep
+ * compiling without a rename layer. `user_role` is always `"owner"`: this
+ * query is scoped to the owner, and collaborators went with the same backend.
+ *
+ * **`collection_id` is real now, and it is empty for older trips.** A plan
+ * saved since companion collections shipped has one; the thirty-odd planned
+ * before do not, and nothing backfills them. The empty string is what the "Save
+ * to itinerary" menus filter on — posting places to a collection id of `""` is
+ * a write that quietly does nothing, which is the failure this repo keeps
+ * documenting from the other end.
  */
 
 import { and, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
 import type { Database } from "./client";
+import { itineraryCollectionIds } from "./collections";
 import { endDateFor, overviewFrom } from "./itinerary-detail";
 import { isUuid } from "./itineraries";
 import { itineraries, itinerary_activities, itinerary_days, locations } from "./schema";
@@ -91,7 +98,11 @@ export async function readItineraryList(
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);
-  const [counts, thumbnails] = await Promise.all([activityCounts(db, ids), firstPhotos(db, ids)]);
+  const [counts, thumbnails, companions] = await Promise.all([
+    activityCounts(db, ids),
+    firstPhotos(db, ids),
+    itineraryCollectionIds(db, ids),
+  ]);
 
   return rows.map((row) => {
     const overview = overviewFrom(row.planner_debug);
@@ -110,7 +121,7 @@ export async function readItineraryList(
       end_date: endDateFor(row.start_date, row.total_days),
       total_days: row.total_days,
       total_activities: counts.get(row.id) ?? 0,
-      collection_id: "",
+      collection_id: companions.get(row.id) ?? "",
       user_role: "owner" as const,
       is_bookmarked: false,
       is_archived: false,

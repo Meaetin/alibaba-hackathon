@@ -22,6 +22,10 @@ import {
   type PlanStore,
   type SavedItinerary,
 } from '@/lib/db/itineraries'
+import {
+  createInMemoryCollectionStore,
+  type LocationRow,
+} from '@/lib/db/collections'
 import { createInMemoryPersonaStore } from '@/lib/db/personas'
 import { createSavedPreferences, PREFERENCE_REGISTRY } from '@/lib/preferences/registry'
 import { QUESTIONS, calculatePersona } from '@/lib/persona/quiz'
@@ -63,6 +67,62 @@ const BODY: PlanRequest = {
 
 const NOW = new Date('2026-08-24T09:00:00.000Z')
 
+/** A well-formed uuid this database has no row for. The schema takes uuids, so
+ *  a stale selection has to be caught by the lookup rather than by validation. */
+const MISSING_ID = '00000000-0000-4000-9000-000000000001'
+
+/**
+ * A `locations.id` for every candidate.
+ *
+ * `createInMemoryPlanStore` defaults this map to empty, which stores `null` in
+ * every activity's `location_id` — and a trip whose stops point at nothing has
+ * nothing to put on a companion collection. Seeding it is what makes the
+ * companion assertion below test the wiring rather than the empty case.
+ */
+const PLACE_LOCATION_IDS = new Map(
+  CANDIDATES.map((place, index) => [
+    place.placeId,
+    `00000000-0000-4000-b000-${String(index + 1).padStart(12, '0')}`,
+  ]),
+)
+
+/** The rows those ids name. Only the identity fields matter here — the
+ *  collection double reads the map to tell a known id from an invented one. */
+const COMPANION_LOCATIONS: Record<string, LocationRow> = Object.fromEntries(
+  [...PLACE_LOCATION_IDS].map(([placeId, id]) => [id, locationRow(id, placeId)]),
+)
+
+function locationRow(id: string, placeId: string): LocationRow {
+  return {
+    id,
+    place_id: placeId,
+    name: placeId,
+    latitude: null,
+    longitude: null,
+    types: [],
+    primary_type: null,
+    rating: null,
+    user_rating_count: null,
+    price_level: null,
+    price_range: null,
+    formatted_address: null,
+    city: null,
+    opening_periods: null,
+    review_snippets: null,
+    editorial_summary: null,
+    review_summary: null,
+    serves_vegetarian_food: null,
+    shortlist_hydrated_at: null,
+    photo_names: null,
+    photo_urls: null,
+    photos_resolved_at: null,
+    business_status: null,
+    google_maps_uri: null,
+    stay_duration: null,
+    fetched_at: NOW,
+  }
+}
+
 /** A complete quiz: every question answered with its first option. */
 const QUIZ_ANSWERS: QuizAnswers = Array(QUESTIONS.length).fill(0)
 /** The opposite traveller: every question answered with its last option. */
@@ -90,6 +150,7 @@ let currentCookie: string | null = null
 interface Harness {
   store: ReturnType<typeof createInMemoryPlanStore>
   personas: ReturnType<typeof createInMemoryPersonaStore>
+  collections: ReturnType<typeof createInMemoryCollectionStore>
   /** The signed-in traveller every request in a test is made as. */
   session: Awaited<ReturnType<typeof signedIn>>
   /** Every `progress` written to the job row, in order. */
@@ -106,10 +167,23 @@ async function install(
   } = {},
 ): Promise<Harness> {
   const session = await signedIn({ now: NOW })
-  const store = createInMemoryPlanStore({ itineraryId: 'itinerary-1' })
+  const store = createInMemoryPlanStore({
+    itineraryId: 'itinerary-1',
+    locationIds: PLACE_LOCATION_IDS,
+  })
   const personas = overrides.personas ?? createInMemoryPersonaStore()
   const progress: JobProgress[] = []
   const google = createFakeGoogle({ places: CANDIDATES })
+
+  // The companion collection is built from the trip's own stops, and the plan
+  // store is the only thing that knows what they were. Recording them as the
+  // save happens is what lets the collection double answer for a trip that did
+  // not exist when it was constructed.
+  const itineraryStops: Record<string, { name: string; locationIds: (string | null)[] }> = {}
+  const collections = createInMemoryCollectionStore({
+    locations: COMPANION_LOCATIONS,
+    itineraryStops,
+  })
 
   const recording: PlanStore & typeof store = {
     ...store,
@@ -117,12 +191,29 @@ async function install(
       if (patch.progress) progress.push(patch.progress)
       return store.updateJob(id, patch, now)
     },
+    async saveItinerary(result, ownerId) {
+      const out = await store.saveItinerary(result, ownerId)
+      const saved = store.saved[store.saved.length - 1]
+      itineraryStops[out.itineraryId] = {
+        name: saved.itinerary.name,
+        locationIds: saved.activities.map((activity) => activity.location_id ?? null),
+      }
+      return out
+    },
   }
 
   planRouteDeps.create = (): PlanRouteDeps => ({
     store: recording,
     users: session.users,
     personas,
+    collections,
+    // The real one is a select over `locations`; this is the same mapping the
+    // seed above defines, read the other way round.
+    placeIdsFor: async (locationIds) =>
+      locationIds.flatMap((id) => {
+        const placeId = [...PLACE_LOCATION_IDS].find(([, rowId]) => rowId === id)?.[0]
+        return placeId ? [placeId] : []
+      }),
     runPlan: overrides.runPlan ?? runPlan,
     now: () => NOW,
     rng: mulberry32(1337),
@@ -135,7 +226,7 @@ async function install(
   })
 
   currentCookie = session.cookie
-  return { store, personas, progress, google, session }
+  return { store, personas, collections, progress, google, session }
 }
 
 /** The background half is fire-and-forget, so tests wait on the row. */
@@ -179,6 +270,96 @@ describe('POST /api/plan', () => {
     // Without this the row saves with a null owner and the trip is invisible in
     // every list — which is exactly how it behaved before accounts existed.
     expect(harness.store.saved[0].itinerary.user_id).toBe(harness.session.user.id)
+  })
+
+  it('gives the finished trip a companion collection holding its stops', async () => {
+    const harness = await install()
+    const job = (await (await post()).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    const [collection] = await harness.collections.listCollections(harness.session.user.id)
+    expect(collection.name).toBe(BODY.name)
+    expect(collection.location_count).toBeGreaterThan(0)
+
+    // Every place the trip scheduled, and no more. A shelf holding places the
+    // trip did not visit would be a different list wearing the trip's name.
+    const scheduled = new Set(
+      harness.store.saved[0].activities.flatMap((activity) =>
+        activity.location_id ? [activity.location_id] : [],
+      ),
+    )
+    const shelved = new Set(
+      (harness.collections.members.get(collection.id) ?? []).map((entry) => entry.locationId),
+    )
+    expect(shelved).toEqual(scheduled)
+  })
+
+  it('still completes the job when the companion collection cannot be created', async () => {
+    const harness = await install()
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {})
+    harness.collections.createItineraryCollection = async () => {
+      throw new Error('collections table is on fire')
+    }
+
+    const job = (await (await post()).json()) as JobRow
+    const row = await settled(harness.store, job.id)
+
+    // The itinerary is already written and is the thing the traveller asked
+    // for. Failing the job over its shelf would throw away a finished trip.
+    expect(row.status).toBe('completed')
+    expect(row.itinerary_id).toBe('itinerary-1')
+    expect(errors).toHaveBeenCalled()
+  })
+
+  it('translates the picked location ids into place ids for the planner', async () => {
+    const harness = await install()
+    // Two rows this database has, and one it does not.
+    const picked = [...PLACE_LOCATION_IDS.values()].slice(0, 2)
+    let seen: PlanRequest | undefined
+    planRouteDeps.create = ((create) => () => {
+      const deps = create()
+      return {
+        ...deps,
+        runPlan: async (request: PlanRequest, runDeps: Parameters<typeof runPlan>[1]) => {
+          seen = request
+          return deps.runPlan(request, runDeps)
+        },
+      }
+    })(planRouteDeps.create)
+
+    const job = (await (await post({ ...BODY, seedLocationIds: [...picked, MISSING_ID] })).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    // Row ids in, place ids out — every card in the app holds the first and the
+    // planner speaks only the second. The unknown one is dropped here rather
+    // than failing the plan; the pipeline counts it as `stats.seeds.missing`.
+    const expected = [...PLACE_LOCATION_IDS]
+      .filter(([, rowId]) => picked.includes(rowId))
+      .map(([placeId]) => placeId)
+    expect(seen?.seedPlaceIds).toEqual(expected)
+  })
+
+  it('sends no seeds at all when nothing was picked', async () => {
+    const harness = await install()
+    let seen: PlanRequest | undefined
+    planRouteDeps.create = ((create) => () => {
+      const deps = create()
+      return {
+        ...deps,
+        runPlan: async (request: PlanRequest, runDeps: Parameters<typeof runPlan>[1]) => {
+          seen = request
+          return deps.runPlan(request, runDeps)
+        },
+      }
+    })(planRouteDeps.create)
+
+    const job = (await (await post()).json()) as JobRow
+    await settled(harness.store, job.id)
+
+    // Absent, not empty. `stats.seeds` is omitted when nobody picked anything,
+    // and an empty array would make the pipeline report a selection of zero.
+    expect(seen).toBeDefined()
+    expect(seen?.seedPlaceIds).toBeUndefined()
   })
 
   it('rejects a body that is not a plan request, without a stack trace', async () => {

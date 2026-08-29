@@ -1884,6 +1884,77 @@ the suite got busy enough to reorder them. Both sort now. When asserting over a
 fan-out, sort or key by something in the payload — the fake in `ocr.test.ts`
 identifies a batch by decoding its first frame, for exactly this reason.
 
+### Flights are persisted now, and `/flights` is gone
+`itinerary_flights` hangs off `itineraries`, not off a day: the planner never
+produces a flight, never schedules one, and `itinerary_activities` is keyed on a
+`day_id` and a `position` a flight has no answer for. Deleting a trip takes its
+flights by cascade; nothing else points at them.
+
+**Nothing about a flight used to survive a reload, and it was not a bug in one
+place.** `completeFlightBooking` only called `setFlights`. Manual add, edit and
+delete all reached `NEXT_PUBLIC_API_URL` — the REST backend on `:8080` this repo
+does not contain. And **nothing ever loaded flights on mount**, so even a
+working write would have shown an empty tab on the next visit. All three are
+fixed together; fixing any one alone would have looked identical from outside.
+
+The columns are `ExtractedFlight`'s, field for field. That name is historical —
+the first flights came out of a PDF — but it is the type the card, the manual
+form and the edit form already speak, so a row reaches a card with no rename
+layer. `seat` and `passenger_name` are the two additions, both from the booking
+confirmation and both previously visible only on the confirmation screen; `seat`
+renders on the card now, because a column nothing reads is the pattern this file
+already warns about.
+
+**Dates and clock times are stored apart** (`date` + `text`). That is how an
+airline states them and how every form collects them: a departure is "14 Sep,
+23:55 local", not an instant. Composing them needs the airport's timezone, which
+this app does not have.
+
+**`cost` is text, and the read must not `Number()` it.** The first version did,
+and a smoke test against Neon showed "412.50" coming back as `412.5` — a decimal
+amount through binary floating point, quietly missing its cents. `ExtractedFlight.cost`
+is a string end to end now.
+
+`source` is `booked | manual | extracted`, held by a check constraint. An
+*invalid* one falls back to `manual` rather than failing the write: the flight is
+real either way, and refusing to save a traveller's booking over a label loses
+the thing that matters to keep the thing that does not.
+
+Two things the routes keep that are worth not re-deriving. `refuseUnlessOwner`
+(`access.ts`) answers **404, never 403** for somebody else's trip, and a
+database failure throws past it so the handler can answer 500 — an outage must
+not render as a missing trip. And every single-flight write narrows by the
+itinerary **and** the flight id in the same `where`, so an id guessed from one
+trip cannot be edited or deleted through another.
+
+`parse.ts` and `access.ts` sit beside the handlers for the reason `deps.ts`
+does: a route file may export only its handler.
+
+**A booking that fails to save still shows its card, and the toast says so.**
+The traveller has a ticket number either way and the airline was not asked
+whether we managed to file it.
+
+Eleven of twelve guards here are mutation-checked green→red. The twelfth is
+worth knowing: **the allowlist that stops a browser choosing its own `id` exists
+twice** — `toFlightInput` in `parse.ts` and `toColumns` in `src/lib/db/flights.ts`
+— and turning *either* into a spread leaves all 25 tests passing. Only both
+together go red. Real defence in depth, and a standing reminder that a green
+suite is not evidence the layer you are editing works.
+
+PDF extraction is the one flight call still unbacked. It needs a
+document-extraction service; it keeps its `NEXT_PUBLIC_API_URL` base so it fails
+against a named address rather than 404ing on our own origin.
+
+**`/flights` was deleted**, with its layout and the home page's "Discover
+flights" `CreateCard` and carousel slide. Everything it did — Atlas fare search,
+the booking flow, the seat map — the itinerary Flight tab already did, and the
+page had no way to attach a booking to a trip. `/api/flights/search` stays; the
+tab depends on it. The home bento's create block is an L of three now, and the
+feed flows into the fourth cell.
+
+Flight price watches are still React state and still lost on reload. Different
+feature, different table, not done.
+
 ### `hashvatar` is in `package.json` and was missing from `node_modules`
 Every page 500'd with `Module not found: hashvatar/react` — `/home`, `/links`,
 all of them — and `tsc` had been reporting it as a lone unrelated error the whole
@@ -1958,3 +2029,118 @@ being green for free:
   the row *after* the fake pipeline had reported a later stage carrying its own
   metadata. It blocks inside the metadata stage now and reads the row there,
   which is the only window where the seed is the only thing on the row.
+
+### The collections UI was complete and had no backend at all
+`src/lib/api/collections.ts` called fourteen endpoints and **none of them
+existed**. The create modal, the rubber-band selection toolbar, the "Save to"
+pickers on `/links/[id]` and `/itineraries/[id]`, the detail grid, the map, the
+inline create-and-save — all of it shipped, none of it had ever talked to
+anything. `handleAddToDestination` threw on purpose and `createItineraryRouted`
+threw on any selection. Two tables and six routes turned the whole surface on;
+two UI files changed.
+
+`collections` + `collection_locations`, and the junction's `location_id` carries
+**no cascade** — the same rule `content_locations` keeps. `locations` is the
+shared Places cache, so removing a place from one traveller's shelf must not
+delete a restaurant an itinerary and three links also point at. That identity is
+also what makes "save this place from a video" free: a link's card, a
+collection's card and an itinerary activity all hold the same `locations.id`.
+
+`CollectionStore` (`src/lib/db/collections.ts`) follows `content.ts` — port,
+Postgres implementation, in-memory double — and keeps the same ownership rule:
+**somebody else's collection is a 404, never a 403**, with the owner check inside
+the `where` rather than as a comparison afterwards.
+
+Two rules worth knowing before touching `addLocations`. It reports what
+**landed**, never what was offered: `{ added, duplicates, unknown }`, because a
+toast reading "added 8" over a grid showing 6 is the lie nobody reports. And it
+moves `updated_at` only when something actually changed — `/collections` sorts
+by it, so a no-op add that reordered the grid would be a write the traveller did
+not make.
+
+What is deliberately still missing: collaborators, invite and public tokens
+(`InviteModal` and `/collections/public/[token]` 404 exactly as before), and
+`POST /api/collections/[id]/locations/from-google-maps`, so the "Add place"
+button on the collection page still fails.
+
+### A finished plan gets a companion collection, and the link is on the collection
+The ported cards have always assumed every itinerary has a backing collection —
+`ActionToolbarItinerary.collectionId`, with a comment claiming the database
+enforces it. Saving a place "to a trip" means saving it to that trip's shelf: an
+itinerary is a schedule and a place with no day and no time has nowhere to sit
+in one.
+
+`collections.itinerary_id` is unique and nullable, so a collection either backs
+a trip or is free-standing. The foreign key sits on **this** side rather than as
+`itineraries.collection_id` for two reasons: cascade runs the right way
+(deleting a trip takes its companion; deleting the companion leaves the trip),
+and `itineraries` gains no column that every row planned before this would have
+left null.
+
+It is created by `POST /api/plan`, never by `saveItinerary` — the planner does
+not know shelves exist, the same rule that makes the route and not the store
+decide who owns a trip. **A failed shelf must not fail the trip**: the itinerary
+is already written and is the thing the traveller asked for, so the failure is
+logged, exactly the ladder `resolvePersona` and `resolvePreferences` follow. A
+trip with no located stops gets **no** collection rather than an empty one —
+an empty shelf reads as "this trip saved nothing", which is a different and
+wrong statement.
+
+**Older trips have no companion and nothing backfills one.** `readItineraryList`
+returns `collection_id: ""` for them, and the three "Save to itinerary" menus
+filter on it. Posting places to a collection id of `""` would be a write that
+quietly does nothing.
+
+### `seedPlaceIds` plans from the traveller's own picks — and a seed is not a pin
+`createItineraryRouted` used to throw on any selection: "the local planner does
+not accept pinned place ids yet." It does now, as `PlanRequest.seedPlaceIds`.
+
+The route takes `seedLocationIds` (`locations.id`, which is what every card in
+this app holds) and translates once through `placeIdsForLocationIds` in
+`stores.ts`; the planner speaks `place_id` from retrieval to the funnel and
+neither side learns the other's identifier. An id with no row is **dropped**, not
+raised — a stale selection must not lose the other eleven places somebody
+picked — and surfaces as `stats.seeds.missing`.
+
+In `runPlan` the seeds are read from `LocationStore` and merged by `withSeeds`
+after retrieval. Three rules, each a decision: a seed already in the pool is not
+added twice (the retrieved row is the fresher one); a seed **skips the base
+circle**, because `withinReach` exists to stop a search string answering for a
+whole province and a place somebody ticked is not a stray search result; and an
+id with no stored row is counted, never searched for. `stats.base.kept` reads
+`reach.kept.length` and not `pool.length` for the same reason — otherwise the
+base reports a circle wider than the one it enforced.
+
+`FunnelOptions.pinned` is how they rank. Picks sort first at the per-cluster cap
+and are admitted ahead of the greedy walk at the global cap, which exempts them
+from the restaurant and cuisine quotas — a quota exists to stop a shortlist
+*nobody chose* being all noodles. They are **not** exempt from the hard filters
+(a shut door is a fact, not a preference) nor from the caps themselves, and both
+tails are recorded in `dropped` with their own wording.
+
+Two things that had to move for this and are worth knowing:
+
+- **The reserve loop's restaurant count is now guarded by `isRestaurant`.** It
+  used to increment unconditionally, which was safe only while the reserve held
+  restaurants and nothing else. A picked museum counted as one would have shrunk
+  the quota for everybody.
+- **A cluster's best few restaurants are held out of the competition for the
+  per-cluster cap whenever anything is pinned.** Without it a traveller who
+  picks twenty sights in one neighbourhood takes every slot, the meal reserve
+  finds no restaurant left to reserve, and the day ships with nowhere to eat —
+  `lost_meal` arriving by a new route. `held` is empty when nothing was picked,
+  so both Gate A snapshots are untouched.
+
+**Say this out loud before anyone relies on it: a seed reaching the shortlist is
+not a seat in the trip.** Pass B still decides which day a place belongs to and
+`packDay` can still drop it for time like any other stop. There is no locked-stop
+concept in this planner and adding one touches `funnel`, `assign`, `pack` and
+`validate`. `stats.seeds` and the day list are the only honest answers to "did my
+places make it".
+
+The pipeline wiring has its own test, because `withSeeds` and the funnel's
+`pinned` both pass while nothing hands them anything — which is the failure this
+file already records twice (`dietary: request.profile.dietary`, and the
+feasibility ladder). `RunOptions.stored` in `pipeline.test.ts` seeds
+`LocationStore` with a row no search can reach, which is the only way to prove a
+seed came out of the store rather than out of retrieval.

@@ -14,13 +14,19 @@
 
 import OpenAI from "openai";
 
+import { createCollectionStore, type CollectionStore } from "@/lib/db/collections";
 import { createContentStore, type ContentStore } from "@/lib/db/content";
 import { getDb, type Database } from "@/lib/db/client";
 import { createFlightStore, type FlightStore } from "@/lib/db/flights";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
 import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
 import { createUserStore, type UserRow, type UserStore } from "@/lib/db/users";
-import { createEnrichmentStore, createLocationStore, createSearchCache } from "@/lib/db/stores";
+import {
+  createEnrichmentStore,
+  createLocationStore,
+  createSearchCache,
+  placeIdsForLocationIds,
+} from "@/lib/db/stores";
 import type { EnrichmentStore } from "@/lib/planner/enrich";
 import type { FetchLike } from "@/lib/planner/http";
 import { createWhisperTranscriber, type Transcriber } from "@/lib/links/audio";
@@ -40,6 +46,21 @@ export interface PlanRouteDeps {
   users: UserStore;
   /** Resolves `personaId` on the request body into the traveller's answers. */
   personas: PersonaStore;
+  /** Where the finished trip's stops also land, as its companion shelf. The
+   *  planner knows nothing about it — the route creates it, the same way the
+   *  route and not `saveItinerary` decides who owns a trip. */
+  collections: CollectionStore;
+  /**
+   * `locations.id` to `place_id`, for the places a traveller picked before
+   * asking for a trip.
+   *
+   * Injected rather than imported so the handler stays drivable with no
+   * database, the same reason `runPlan` is a dependency here. Every card in the
+   * app holds a row id and the planner speaks place ids; this is the one place
+   * the two meet. Unknown ids come back missing, never raised — see
+   * `placeIdsForLocationIds`.
+   */
+  placeIdsFor: (locationIds: readonly string[]) => Promise<string[]>;
   runPlan: typeof runPlan;
   /** Injected clocks and randomness. Nothing in the pipeline reads the ambient
    *  ones, and the handler must not reintroduce them. */
@@ -67,6 +88,8 @@ function defaultPlanRouteDeps(): PlanRouteDeps {
     store: createPlanStore(db),
     users: createUserStore(db),
     personas: createPersonaStore(db),
+    collections: createCollectionStore(db),
+    placeIdsFor: (locationIds) => placeIdsForLocationIds(db, locationIds),
     runPlan,
     now: () => new Date(),
     rng: Math.random,
@@ -221,6 +244,27 @@ export const contentRouteDeps: {
   create: () => {
     const db = getDb();
     return { content: createContentStore(db), users: createUserStore(db), now: () => new Date() };
+  },
+};
+
+/**
+ * `GET`/`POST /api/collections`, the four on `[id]`, and the two on its
+ * locations.
+ *
+ * As light as `contentRouteDeps` and for the same reason: a shelf of places
+ * needs none of the pipeline — no Google, no OpenAI. Just the rows and the
+ * person asking for them.
+ */
+export const collectionRouteDeps: {
+  create: () => { collections: CollectionStore; users: UserStore; now: () => Date };
+} = {
+  create: () => {
+    const db = getDb();
+    return {
+      collections: createCollectionStore(db),
+      users: createUserStore(db),
+      now: () => new Date(),
+    };
   },
 };
 

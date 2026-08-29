@@ -47,7 +47,12 @@ import {
   type PlanRequest,
   type PlanResult,
 } from './pipeline'
-import { buildSearchPlan, createInMemoryLocationStore, createInMemorySearchCache } from './retrieval'
+import {
+  buildSearchPlan,
+  createInMemoryLocationStore,
+  createInMemorySearchCache,
+  type RetrievedPlace,
+} from './retrieval'
 import { createTravelEstimate } from './travel-estimate'
 import { QUESTIONS, calculatePersona } from '@/lib/persona/quiz'
 import { MODELS } from './openai'
@@ -95,6 +100,9 @@ interface RunOptions {
   travel?: TravelRouting
   /** Stand in for the Kyoto fixture — for the rules a hand-built pool proves. */
   places?: readonly CandidatePlace[]
+  /** Rows already in `LocationStore` and reachable by no search. The only way
+   *  to prove a seed came out of the store rather than out of retrieval. */
+  stored?: readonly RetrievedPlace[]
 }
 
 async function plan(options: RunOptions = {}): Promise<{
@@ -111,7 +119,7 @@ async function plan(options: RunOptions = {}): Promise<{
     {
       googleApiKey: 'test-key',
       cache: createInMemorySearchCache(),
-      store: createInMemoryLocationStore(),
+      store: createInMemoryLocationStore(options.stored),
       enrichments: createInMemoryEnrichmentStore(options.enrichments),
       responses: createFakeResponses({
         ...(options.failPassB ? { fail: 'assign' as const } : {}),
@@ -1465,6 +1473,108 @@ describe('themed mode', () => {
  * drive apart, with 215 of 388 retrieved places joining no theme at all. The
  * base is a coordinate the create modal already collected and threw away.
  */
+describe('the places the traveller picked', () => {
+  /** A stored row no search in this fixture can reach. */
+  function storedPlace(placeId: string, at: { latitude: number; longitude: number }): RetrievedPlace {
+    return {
+      placeId,
+      name: placeId,
+      types: ['tourist_attraction'],
+      rating: 4.6,
+      userRatingCount: 4000,
+      latitude: at.latitude,
+      longitude: at.longitude,
+      city: 'Kyoto',
+      reviewSnippets: null,
+      shortlistHydratedAt: null,
+      photoNames: [],
+      photoUrls: null,
+      photosResolvedAt: null,
+      fetchedAt: NOW,
+    }
+  }
+
+  const IN_KYOTO = { latitude: 35.0116, longitude: 135.7681 }
+
+  it('comes out of the store and into the trip', async () => {
+    // The assertion that matters is that the *arguments* are wired. `withSeeds`
+    // and the funnel's `pinned` both have their own tests and both would pass
+    // while nothing in the pipeline handed them anything — which is the failure
+    // this repo has already shipped twice.
+    //
+    // `result.places` is every place on a timeline, so this asserts the pick
+    // was actually scheduled. That is true here and is **not** a promise the
+    // pipeline makes: Pass B still chooses the day and the packer can still
+    // drop a stop for time. A seed is not a pin.
+    const picked = storedPlace('picked-1', IN_KYOTO)
+
+    const { result } = await plan({ stored: [picked] })
+    expect(result.places.has('picked-1')).toBe(false)
+
+    const seeded = await plan({
+      stored: [picked],
+      request: { seedPlaceIds: ['picked-1'] },
+    })
+    expect(seeded.result.places.has('picked-1')).toBe(true)
+    expect(seeded.result.stats.seeds).toEqual({
+      requested: 1,
+      resolved: 1,
+      missing: 1 - 1,
+      added: 1,
+    })
+  })
+
+  it('keeps a pick that the base circle would have refused', async () => {
+    // Osaka, about 40 km from the Kyoto base. `withinReach` exists to stop a
+    // search string answering for a whole province; a place somebody ticked is
+    // not a stray search result.
+    const far = storedPlace('picked-far', { latitude: 34.6937, longitude: 135.5023 })
+
+    const { result } = await plan({
+      stored: [far],
+      request: {
+        base: { latitude: 35.0116, longitude: 135.7681, radiusMeters: 25_000 },
+        seedPlaceIds: ['picked-far'],
+      },
+    })
+
+    expect(result.places.has('picked-far')).toBe(true)
+    expect(result.stats.seeds?.added).toBe(1)
+
+    // And it is not counted as something the circle kept. `base.kept` used to
+    // read `pool.length`, which after seeding would report a circle wider than
+    // the one that was actually enforced.
+    const { result: unseeded } = await plan({
+      stored: [far],
+      request: { base: { latitude: 35.0116, longitude: 135.7681, radiusMeters: 25_000 } },
+    })
+    expect(result.stats.base?.kept).toBe(unseeded.stats.base?.kept)
+  })
+
+  it('counts a pick this database has never heard of, and plans anyway', async () => {
+    const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const { result } = await plan({ request: { seedPlaceIds: ['picked-1', 'not-a-place'] } })
+
+    expect(result.stats.seeds).toEqual({
+      requested: 2,
+      resolved: 0,
+      missing: 2,
+      added: 0,
+    })
+    expect(result.days.length).toBeGreaterThan(0)
+    expect(warnings).toHaveBeenCalled()
+  })
+
+  it('omits the counter entirely when nobody picked anything', async () => {
+    // Same rule `stats.base` keeps: "nobody picked anything" and "everything
+    // picked was already in the pool" are different answers, and a zero row
+    // would claim the second when the first is true.
+    const { result } = await plan()
+    expect(result.stats.seeds).toBeUndefined()
+  })
+})
+
 describe('the base circle', () => {
   const KYOTO = { latitude: 35.0116, longitude: 135.7681, radiusMeters: 25_000 }
 

@@ -31,6 +31,47 @@ import { locations, place_enrichments, place_search_cache } from "./schema";
 type LocationRow = typeof locations.$inferSelect;
 type LocationInsert = typeof locations.$inferInsert;
 
+/**
+ * `locations.id` to `place_id`, in the order the ids were given.
+ *
+ * The seam between the browser and the planner. Every card in this app carries
+ * a `locations.id` — that is what a collection, a link and an itinerary
+ * activity all point at — while the planner speaks `place_id` from retrieval
+ * through to the funnel. `POST /api/plan` translates once, here, rather than
+ * teaching either side the other's identifier.
+ *
+ * An unknown id is **dropped**, not raised. It means a client held a row this
+ * database no longer has, which is a stale selection rather than a bad request
+ * — and failing the whole plan over one stale tick would lose the other eleven
+ * places the traveller picked. The caller counts the gap: `stats.seeds.missing`
+ * is where it surfaces.
+ *
+ * Not a `LocationStore` method: nothing in the planner knows a location has a
+ * row id, and putting it on the port would be adding a seam for a caller that
+ * is not the planner. Same call `PersonaStore` makes about living outside
+ * `stores.ts`.
+ */
+export async function placeIdsForLocationIds(
+  db: Database,
+  locationIds: readonly string[],
+): Promise<string[]> {
+  const wanted = [...new Set(locationIds)];
+  if (wanted.length === 0) return [];
+
+  const rows = await db
+    .select({ id: locations.id, place_id: locations.place_id })
+    .from(locations)
+    .where(inArray(locations.id, wanted));
+
+  const byId = new Map(rows.map((row) => [row.id, row.place_id]));
+  // Input order, deduped — the traveller picked them in some order and the
+  // funnel's pinned sort is stable within the picked group.
+  return wanted.flatMap((id) => {
+    const placeId = byId.get(id);
+    return placeId ? [placeId] : [];
+  });
+}
+
 /** `place_search_cache`. */
 export function createSearchCache(db: Database): SearchCache {
   return {

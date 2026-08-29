@@ -135,11 +135,17 @@ export default function LinkDetailPage() {
   }, []);
 
   // Itineraries offered in the ActionToolbar "Save to" menu.
+  //
+  // Only ones with a companion collection. Saving to a trip means saving to its
+  // shelf, and a trip planned before companions existed has none — offering it
+  // would post places to an empty collection id and quietly store nothing.
   useEffect(() => {
     let cancelled = false;
     getItineraries()
       .then((list) => {
-        if (!cancelled) setSaveItineraries(list.filter((i) => !i.is_archived));
+        if (!cancelled) {
+          setSaveItineraries(list.filter((i) => !i.is_archived && !!i.collection_id));
+        }
       })
       .catch(() => {
         if (!cancelled) setSaveItineraries([]);

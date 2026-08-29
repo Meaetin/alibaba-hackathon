@@ -630,3 +630,139 @@ describe('persona knobs in the funnel', () => {
     ).toEqual(['borderline'])
   })
 })
+
+describe('the traveller\'s own picks', () => {
+  it('keeps a picked place the per-cluster cap would have cut', () => {
+    // Ranked last of 100 by rating, so nothing but the pick itself can save it.
+    const places = fillCluster('c0', 100)
+    const worst = places.reduce((low, place) =>
+      (place.rating ?? 0) < (low.rating ?? 0) ? place : low,
+    )
+
+    const without = runFunnel([makeCluster(places)], makeProfile())
+    expect(without.shortlist.map((s) => s.placeId)).not.toContain(worst.placeId)
+
+    const withPick = runFunnel([makeCluster(places)], makeProfile(), {
+      pinned: new Set([worst.placeId]),
+    })
+    expect(withPick.shortlist.map((s) => s.placeId)).toContain(worst.placeId)
+  })
+
+  it('admits picked restaurants past the cuisine quota', () => {
+    // Five ramen shops, a quota of three. Nobody asked for the first four; the
+    // traveller asked for all five.
+    const ramen = Array.from({ length: 5 }, (_, j) =>
+      makePlace(`ramen-${j}`, {
+        types: ['restaurant', 'ramen_restaurant'],
+        rating: 4.0 + j * 0.1,
+        userRatingCount: 900,
+      }),
+    )
+    const cluster = makeCluster([...ramen, ...fillCluster('c0', 10)])
+    const picked = new Set(ramen.map((place) => place.placeId))
+
+    const without = runFunnel([cluster], makeProfile(), { maxPerCuisine: 3, mealsPerCluster: 0 })
+    const kept = without.shortlist.filter((s) => picked.has(s.placeId))
+    expect(kept.length).toBeLessThan(5)
+
+    const withPicks = runFunnel([cluster], makeProfile(), {
+      maxPerCuisine: 3,
+      mealsPerCluster: 0,
+      pinned: picked,
+    })
+    expect(withPicks.shortlist.filter((s) => picked.has(s.placeId))).toHaveLength(5)
+  })
+
+  it('still refuses a picked place the hard filters refuse, and says why', () => {
+    // A pick is a preference. A shut door is a fact, and the two are not the
+    // same kind of thing — so this one is dropped like any other, with a reason.
+    const closed = makePlace('closed-1', { businessStatus: 'CLOSED_PERMANENTLY' })
+    const result = runFunnel([makeCluster([closed, ...fillCluster('c0', 5)])], makeProfile(), {
+      pinned: new Set(['closed-1']),
+    })
+
+    expect(result.shortlist.map((s) => s.placeId)).not.toContain('closed-1')
+    const drop = result.dropped.find((d) => d.placeId === 'closed-1')
+    expect(drop?.stage).toBe('afterFilters')
+    expect(drop?.reason).toBeTruthy()
+  })
+
+  it('drops the tail when more places are picked in one area than the cap holds', () => {
+    // Twenty-five picks in one neighbourhood is not a day. The cap stays a cap,
+    // and the five it cannot hold are recorded rather than silently lost.
+    const places = fillCluster('c0', 25)
+    const result = runFunnel([makeCluster(places)], makeProfile(), {
+      perClusterCap: 20,
+      pinned: new Set(places.map((place) => place.placeId)),
+    })
+
+    const cut = result.dropped.filter((d) => d.stage === 'afterClusterCap')
+    expect(cut).toHaveLength(5)
+    expect(cut[0].reason).toMatch(/more than 20 places were picked/)
+  })
+
+  it('never hands Pass B more than the global cap, however many were picked', () => {
+    // The picks are admitted ahead of the greedy walk, which is what exempts
+    // them from the quotas — so without a bound here a hundred ticks would
+    // become a hundred-place shortlist and the cap would mean nothing.
+    const clusters = Array.from({ length: 6 }, (_, i) => makeCluster(fillCluster(`c${i}`, 20)))
+    const everything = new Set(clusters.flatMap((c) => c.places.map((p) => p.placeId)))
+
+    const result = runFunnel(clusters, makeProfile(), { globalCap: 60, pinned: everything })
+
+    expect(everything.size).toBeGreaterThan(60)
+    expect(result.shortlist).toHaveLength(60)
+    const cut = result.dropped.filter((d) => d.reason.includes('more than 60 places were picked'))
+    expect(cut.length).toBe(everything.size - 60)
+  })
+
+  it('seats every cluster a meal before spending the cap on picks', () => {
+    // Picks are admitted past the quotas, so without meals going first a big
+    // selection would eat the whole cap and a day would have nowhere to eat.
+    const clusters = Array.from({ length: 4 }, (_, i) =>
+      makeCluster([
+        ...fillCluster(`c${i}`, 30),
+        ...fillCluster(`r${i}`, 4, ['restaurant', 'japanese_restaurant']),
+      ]),
+    )
+    const sights = new Set(
+      clusters.flatMap((c) => c.places.filter((p) => !isRestaurant(p)).map((p) => p.placeId)),
+    )
+
+    const result = runFunnel(clusters, makeProfile(), { globalCap: 60, pinned: sights })
+
+    expect(result.shortlist).toHaveLength(60)
+    for (let i = 0; i < 4; i += 1) {
+      // The `r{i}-` places are this cluster's restaurants; a shortlist with
+      // none of them is a day that cannot eat.
+      const meals = result.shortlist.filter((s) => s.placeId.startsWith(`r${i}-`))
+      expect(meals.length, `cluster ${i} got ${meals.length} meals`).toBeGreaterThan(0)
+    }
+  })
+
+  it('cuts the lowest-scored picks first when there are too many', () => {
+    const places = fillCluster('c0', 20)
+    const best = [...places].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))[0]
+    const worst = [...places].sort((a, b) => (a.rating ?? 0) - (b.rating ?? 0))[0]
+
+    const result = runFunnel([makeCluster(places)], makeProfile(), {
+      globalCap: 5,
+      pinned: new Set(places.map((place) => place.placeId)),
+    })
+
+    const kept = result.shortlist.map((s) => s.placeId)
+    expect(kept).toContain(best.placeId)
+    expect(kept).not.toContain(worst.placeId)
+  })
+
+  it('narrows exactly as before when nothing was picked', () => {
+    // What keeps both Gate A snapshots still: an empty selection is not a
+    // selection, and the funnel must not notice the option exists.
+    const clusters = Array.from({ length: 4 }, (_, i) => makeCluster(fillCluster(`c${i}`, 40)))
+    const before = runFunnel(clusters, makeProfile())
+    const after = runFunnel(clusters, makeProfile(), { pinned: new Set() })
+
+    expect(after.shortlist.map((s) => s.placeId)).toEqual(before.shortlist.map((s) => s.placeId))
+    expect(after.stats).toEqual(before.stats)
+  })
+})

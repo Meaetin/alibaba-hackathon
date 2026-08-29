@@ -213,15 +213,20 @@ export default function CollectionDetailPage() {
     };
   }, [collectionId]);
 
-  // Itineraries offered in the ActionToolbar "Save to" menu (excludes the one
-  // backed by this collection, if any).
+  // Itineraries offered in the ActionToolbar "Save to" menu.
+  //
+  // Excludes the one backed by this collection, and every trip with no
+  // companion collection at all — saving to a trip means saving to its shelf,
+  // and a trip planned before companions existed has none.
   useEffect(() => {
     let cancelled = false;
     getItineraries()
       .then((list) => {
         if (!cancelled) {
           setSaveItineraries(
-            list.filter((i) => !i.is_archived && i.collection_id !== collectionId),
+            list.filter(
+              (i) => !i.is_archived && !!i.collection_id && i.collection_id !== collectionId,
+            ),
           );
         }
       })

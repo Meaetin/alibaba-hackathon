@@ -107,6 +107,36 @@ export async function updateCollection(
   return updated
 }
 
+/** What `POST /api/collections/[id]/locations` reports back. Counted from the
+ *  rows that landed, never the ids that were sent. */
+export interface AddLocationsResult {
+  added: number
+  /** Already on this collection. Adding twice is idempotent, not an error. */
+  duplicates: number
+  /** Ids with no `locations` row, skipped rather than invented. */
+  unknown: number
+}
+
+/**
+ * Puts places on a collection.
+ *
+ * The ids are `locations.id` — the shared Places cache row — which is what every
+ * caller already holds: a link's cards come from `content_locations`, a
+ * collection's from `collection_locations`, and an itinerary activity carries
+ * `location_id`. That shared identity is the whole point of the junction, and
+ * it is why saving a place from a video costs nothing extra.
+ */
+export async function addLocationsToCollection(
+  collectionId: string,
+  locationIds: string[],
+): Promise<AddLocationsResult> {
+  const res = await authFetch(`/api/collections/${collectionId}/locations`, {
+    method: 'POST',
+    body: JSON.stringify({ location_ids: locationIds }),
+  })
+  return unwrap<AddLocationsResult>(res, 'Failed to add locations to collection')
+}
+
 export interface AddFromGoogleMapsResult {
   location: Location
   alreadyInCollection: boolean

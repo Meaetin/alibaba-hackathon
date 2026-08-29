@@ -71,6 +71,27 @@ export interface FunnelOptions {
    * one would silently renumber every day after it, which is worse.
    */
   dayAligned?: boolean;
+  /**
+   * Place ids the traveller picked themselves — `PlanRequest.seedPlaceIds`.
+   *
+   * They are ordered **first** at both ranking cuts and admitted ahead of the
+   * greedy walk, which exempts them from the restaurant and cuisine quotas.
+   * A quota exists to stop a shortlist that nobody chose being all noodles; a
+   * place somebody chose is not that shortlist.
+   *
+   * Two things they are **not** exempt from, deliberately:
+   *
+   * - **The hard filters.** A permanently closed place is closed however much
+   *   the traveller wants it, and the drop is recorded with its reason like
+   *   any other.
+   * - **The caps themselves.** More pinned places than a cap can hold is a
+   *   selection no trip could seat, and silently widening the cap for it would
+   *   hand Pass B a shortlist it cannot rank.
+   *
+   * Empty by default, so a funnel run with no selection narrows exactly as it
+   * always did — which is what keeps both Gate A snapshots still.
+   */
+  pinned?: ReadonlySet<string>;
 }
 
 export const FUNNEL_DEFAULTS = {
@@ -82,6 +103,7 @@ export const FUNNEL_DEFAULTS = {
   unlocated: [],
   knobs: DEFAULT_SCORING_KNOBS,
   dayAligned: false,
+  pinned: new Set<string>(),
 } as const satisfies Required<FunnelOptions>;
 
 /** Stage names double as the stats keys: a new stage added to `FunnelStages`
@@ -182,6 +204,12 @@ function roleOf(place: CandidatePlace): (typeof CLUSTER_ROLES)[number] {
   return "activity";
 }
 
+/** 1 for a place the traveller picked, 0 otherwise. A sort key, so that
+ *  "picked first, then by score" is one comparator rather than two passes. */
+function rank(pinned: ReadonlySet<string>, placeId: string): number {
+  return pinned.has(placeId) ? 1 : 0;
+}
+
 export function scoreCluster(
   places: readonly CandidatePlace[],
   profile: PreferenceProfile,
@@ -220,7 +248,7 @@ export function runFunnel(
   profile: PreferenceProfile,
   options: FunnelOptions = {},
 ): FunnelResult {
-  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated, knobs, dayAligned } = {
+  const { perClusterCap, globalCap, maxRestaurantShare, maxPerCuisine, mealsPerCluster, unlocated, knobs, dayAligned, pinned } = {
     ...FUNNEL_DEFAULTS,
     ...options,
   };
@@ -255,14 +283,49 @@ export function runFunnel(
         return { place, scored };
       })
       .sort((a, b) => b.scored.score - a.scored.score);
-    for (const { place } of ranked.slice(perClusterCap)) {
+
+    // The cluster's own best few restaurants are held out of the competition
+    // for the cap. Without this a traveller who picks twenty sights in one
+    // neighbourhood takes every slot, the meal reserve below finds no
+    // restaurant left to reserve, and the day ships with nowhere to eat — the
+    // `lost_meal` failure this file already knows about, arriving by a new
+    // route. Empty when nothing was picked, so nothing moves for anyone else.
+    const held =
+      pinned.size === 0
+        ? new Set<string>()
+        : new Set(
+            ranked
+              .filter(({ place }) => isRestaurant(place))
+              .slice(0, mealsPerCluster)
+              .map(({ place }) => place.placeId),
+          );
+
+    // Meals, then the traveller's picks, then score. `ranked` stays in score
+    // order and only the *choice* of survivors changes, so what Pass B reads is
+    // ordered the way it always was.
+    const surviving = new Set(
+      [...ranked]
+        .sort(
+          (a, b) =>
+            rank(held, b.place.placeId) - rank(held, a.place.placeId) ||
+            rank(pinned, b.place.placeId) - rank(pinned, a.place.placeId) ||
+            b.scored.score - a.scored.score,
+        )
+        .slice(0, perClusterCap)
+        .map(({ place }) => place.placeId),
+    );
+
+    for (const { place } of ranked) {
+      if (surviving.has(place.placeId)) continue;
       dropped.push({
         placeId: place.placeId,
         stage: "afterClusterCap",
-        reason: `outside the top ${perClusterCap} of its cluster`,
+        reason: pinned.has(place.placeId)
+          ? `picked, but more than ${perClusterCap} places were picked in one area`
+          : `outside the top ${perClusterCap} of its cluster`,
       });
     }
-    return ranked.slice(0, perClusterCap).map(({ place }) => place);
+    return ranked.filter(({ place }) => surviving.has(place.placeId)).map(({ place }) => place);
   });
   const afterClusterCap = cappedByCluster.flat();
 
@@ -289,20 +352,57 @@ export function runFunnel(
   // Every cluster's best few restaurants are claimed up front and admitted
   // ahead of the greedy walk, so a day in a quiet neighborhood still gets fed.
   // They're taken from the ranked pool, not added to it — the cap is unchanged.
-  const reserved = new Set<string>();
+  const mealReserve = new Set<string>();
   for (const places of cappedByCluster) {
     for (const place of places
       .filter(isRestaurant)
       .sort((a, b) => scores.get(b.placeId)!.score - scores.get(a.placeId)!.score)
       .slice(0, mealsPerCluster)) {
-      reserved.add(place.placeId);
+      mealReserve.add(place.placeId);
     }
   }
-  for (const place of ranked) {
-    if (!reserved.has(place.placeId)) continue;
-    restaurantCount += 1;
-    for (const c of cuisineTypes(place)) cuisineCounts.set(c, (cuisineCounts.get(c) ?? 0) + 1);
+  // The traveller's own picks are admitted in the same pass, which is what
+  // exempts them from the restaurant and cuisine quotas below.
+  const reserved = new Set(mealReserve);
+  for (const place of afterClusterCap) {
+    if (pinned.has(place.placeId)) reserved.add(place.placeId);
+  }
+
+  /** Admitted ahead of the greedy walk, so past the quotas. Restaurant and
+   *  cuisine counts still move, which is what makes the quotas mean anything
+   *  for everybody who comes after. The `isRestaurant` guard is why a picked
+   *  museum no longer shrinks the restaurant quota for the rest of the pool. */
+  const admitReserved = (place: CandidatePlace) => {
+    if (isRestaurant(place)) {
+      restaurantCount += 1;
+      for (const c of cuisineTypes(place)) cuisineCounts.set(c, (cuisineCounts.get(c) ?? 0) + 1);
+    }
     afterGlobalCap.push(place);
+  };
+
+  // Meals first, and the order is the decision: the meal reserve is bounded by
+  // construction (`mealsPerCluster` per cluster) and a day that cannot eat is a
+  // worse trip than a day missing one of the traveller's picks.
+  for (const place of ranked) {
+    if (mealReserve.has(place.placeId)) admitReserved(place);
+  }
+
+  // Then the picks, and unlike the meal reserve they **meet the global cap**. A
+  // selection has no bound of its own, and a shortlist bigger than the cap is
+  // one Pass B cannot rank — which is the whole reason the cap exists. `ranked`
+  // is score-ordered, so the tail this cuts is the lowest-scored of the picks
+  // rather than an arbitrary few.
+  for (const place of ranked) {
+    if (mealReserve.has(place.placeId) || !pinned.has(place.placeId)) continue;
+    if (afterGlobalCap.length >= globalCap) {
+      dropped.push({
+        placeId: place.placeId,
+        stage: "afterGlobalCap",
+        reason: `picked, but more than ${globalCap} places were picked`,
+      });
+      continue;
+    }
+    admitReserved(place);
   }
 
   for (const place of ranked) {
