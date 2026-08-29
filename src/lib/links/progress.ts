@@ -43,6 +43,18 @@ const TOTAL_MS = LINK_STAGES.reduce((sum, entry) => sum + entry.ms, 0);
 export const LINK_STAGE_COUNT = LINK_STAGES.length;
 
 /**
+ * How long a run may go without a progress write before it counts as dead.
+ *
+ * A whole analysis is twenty seconds and every stage writes as it starts, so
+ * fifteen minutes of silence means the process that was running it is gone —
+ * a restarted dev server, a crash between stages, a machine that slept. It is
+ * exported so the retry button and the retry endpoint agree: the card offers a
+ * retry on a stuck job, and a server using a different bound would answer "it
+ * is still running" to the one thing the traveller can see is not.
+ */
+export const LINK_STUCK_MS = 15 * 60 * 1000;
+
+/**
  * Where a stage sits on the bar, how long it should take, and how much of the
  * run is left after it.
  *

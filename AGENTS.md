@@ -1890,3 +1890,71 @@ all of them — and `tsc` had been reporting it as a lone unrelated error the wh
 time. `npm install` fixes it. If every route dies at once and the trace names a
 package rather than your code, check `node_modules` before debugging the page.
 
+
+### A job the client never seeds is a job with no card, and the card was already built
+`/links` had the whole loading card — `LinkQueueCard` with the video's poster
+frame, a progress bar walking measured stage weights, a failed state with a
+retry button — and it had never once rendered. `handleLinkSubmit` did
+`await createJob(...)` and **threw the returned row away**, and `useJobsQueue`
+starts watching an id only through `upsertJob`. So the link analysed fine, the
+`content` row landed, and the page showed nothing at all until the next refresh.
+`/home`'s content-analysis queue had the same hole, which is why its "Link
+finished analyzing" toast could never fire either.
+
+Nothing downstream was wrong. `runLinkJob` writes progress at every stage and
+`toLinkJobProgress` has always carried the thumbnail; RapidAPI's `inspect` is
+the first stage, so the frame is on the row from the `download` write onward and
+the card is a grey box for about two seconds before it fills.
+
+The lesson is the one this file keeps writing down from the other end: a
+component with no data source renders an empty state, which looks exactly like
+"nothing is happening". Check the seam, not the component.
+
+### Retry re-runs the row it was given, and `queued` is what resets the bar
+`POST /api/jobs/[id]/retry` resets the failed row and starts `runLinkJob` on it
+again. A second `POST /api/jobs` would also work and would hand back a **second
+id**, so the card the traveller clicked would leave the grid and a different one
+would appear — while this way `useJobsQueue` is already polling the id.
+
+`runLinkJob` moved to `src/app/api/jobs/run.ts` for it, because a route file may
+export only its handler.
+
+Three things decided here:
+
+- **The reset writes `status: "queued"`, not `processing`.**
+  `useProgressAnimation` refuses to walk backwards while a job is processing —
+  by design, since a reconcile pass can hand it a staler row than the poll it
+  already applied. A retry stamped `processing` therefore leaves the bar parked
+  at the percentage the failure died on. `queued` is the one status that reads
+  as zero.
+- **The failed run's thumbnail is kept and passed into the new run.** The
+  metadata stage has none of its own until RapidAPI answers, so without the seed
+  a retry blanks the card for two seconds. Same reason `runLinkJob` holds the
+  thumbnail across stages, one level up.
+- **`LINK_STUCK_MS` lives in `progress.ts` and is imported by both sides.** The
+  card offers a retry on an in-flight job that has been silent for fifteen
+  minutes; an endpoint using a different bound would answer "it is still
+  running" to the one thing the traveller can see is not.
+
+**The remove button is gone from the link queue card.** `/api/jobs/[id]/detach`
+does not exist in this repo, so the X dropped the card and then raised
+"Couldn't remove link, try again later." A card that only lives until the next
+reload does not need one.
+
+### Three assertions in the retry suite passed while testing nothing
+Mutation-checking all eleven guards caught them, and each was a different way of
+being green for free:
+
+- **Two 409s that no assertion could tell apart.** The "already finished" test
+  used a row whose `updated_at` was current, so the *still running* rung refused
+  it first. It passed with the completed guard deleted. Both tests assert the
+  message now, and the finished one is silent past `LINK_STUCK_MS` so only its
+  own rung can fire.
+- **A reset of a field nothing can populate.** `result: null` was in the patch
+  and asserted, but only a finished run writes a result and a finished run is
+  refused — so the line could never turn red. Removed, with the reason written
+  where it was.
+- **A seeded thumbnail asserted after the seed stopped mattering.** The test read
+  the row *after* the fake pipeline had reported a later stage carrying its own
+  metadata. It blocks inside the metadata stage now and reads the row there,
+  which is the only window where the seed is the only thing on the row.

@@ -10,7 +10,7 @@ import { LinkQueueCard } from "@/components/ui/links/LinkQueueCard";
 import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { useToast } from "@/contexts/ToastContext";
-import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } from "@/lib/api/client";
+import { AlreadyAnalyzedError, LinkQuotaError, createJob, retryJob } from "@/lib/api/client";
 import { deleteContent } from "@/lib/api/content";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
@@ -19,6 +19,7 @@ import type { QueueJob } from "@/lib/jobs/types";
 import { usePaginatedContent } from "@/hooks/usePaginatedContent";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useProgressAnimation } from "@/hooks/useProgressAnimation";
+import { LINK_STUCK_MS } from "@/lib/links/progress";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
 import { useLinkUsageQuery } from "@/hooks/queries/useLinkUsageQuery";
@@ -27,15 +28,11 @@ import type { CompletedContent } from "@/hooks/usePaginatedContent";
 
 type SortOption = "modified" | "alphabetical";
 
-const STUCK_THRESHOLD_MS = 15 * 60 * 1000;
-
 function QueueCardItem({
   job,
-  onRemove,
   onRetry,
 }: {
   job: QueueJob;
-  onRemove: (id: string) => void;
   onRetry: (job: QueueJob) => Promise<void>;
 }) {
   const visualProgress = useProgressAnimation(job);
@@ -44,7 +41,7 @@ function QueueCardItem({
   const isFailed = job.status === "failed";
   const isStuckInFlight =
     ["processing", "queued"].includes(job.status) &&
-    Date.now() - new Date(job.updated_at).getTime() > STUCK_THRESHOLD_MS;
+    Date.now() - new Date(job.updated_at).getTime() > LINK_STUCK_MS;
   const canRetry = isFailed || isStuckInFlight;
 
   // Clear the retrying state once the backend acks the retry (job leaves "failed").
@@ -72,7 +69,6 @@ function QueueCardItem({
       thumbnailUrl={job.progress?.thumbnail ?? undefined}
       errorMessage="Couldn't analyze this link. Click retry to try again."
       className="h-full"
-      onRemove={() => onRemove(job.id)}
       onRetry={canRetry ? handleRetry : undefined}
       isRetrying={isRetrying}
     />
@@ -141,7 +137,7 @@ export default function LinksPage() {
   // lands (see effect below).
   const [optimisticCompleted, setOptimisticCompleted] = useState<CompletedContent[]>([]);
 
-  const { jobs: queueJobs, removeJob, upsertJob } = useJobsQueue({
+  const { jobs: queueJobs, upsertJob } = useJobsQueue({
     type: "content-analysis",
     onJobCompleted: (job) => {
       const result = (job.result ?? {}) as ContentResult;
@@ -203,16 +199,6 @@ export default function LinksPage() {
     });
   }, [completedContent]);
 
-  const handleRemoveJob = async (jobId: string) => {
-    removeJob(jobId);
-    try {
-      await detachJob(jobId);
-      if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
-    } catch {
-      showToast({ title: "Couldn't remove link, try again later.", variant: "error" });
-    }
-  };
-
   const handleRetryJob = async (job: QueueJob) => {
     try {
       // The endpoint returns the reset row (queued, or pending if dispatched).
@@ -227,8 +213,13 @@ export default function LinksPage() {
   };
 
   const handleLinkSubmit = async (linkUrl: string) => {
+    // The created row goes straight into the queue. `useJobsQueue` starts
+    // watching an id only through `upsertJob`, so throwing this row away — which
+    // is what happened before — meant no queue card, no polling and no
+    // completion toast: the link was analyzed and nothing on the page said so.
+    let job: QueueJob;
     try {
-      await createJob("content-analysis", { url: linkUrl });
+      job = await createJob<QueueJob>("content-analysis", { url: linkUrl });
     } catch (err) {
       if (err instanceof AlreadyAnalyzedError) {
         setNewLinkModalOpen(false);
@@ -252,6 +243,7 @@ export default function LinksPage() {
       }
       throw err;
     }
+    upsertJob(job);
     if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
     setNewLinkModalOpen(false);
     setLinkValue("");
@@ -344,11 +336,7 @@ export default function LinksPage() {
                 data-region="links-queue-card"
                 className="h-full"
               >
-                <QueueCardItem
-                  job={job}
-                  onRemove={handleRemoveJob}
-                  onRetry={handleRetryJob}
-                />
+                <QueueCardItem job={job} onRetry={handleRetryJob} />
               </motion.div>
             ))}
 

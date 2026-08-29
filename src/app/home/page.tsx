@@ -190,7 +190,11 @@ export default function DashboardPage() {
     return () => window.removeEventListener("argo:content-prepended", handler);
   }, [prependItem]);
 
-  useJobsQueue({
+  // Home shows no queue card for a link — the grid is itineraries and recent
+  // content — so this instance exists for its toasts. It still has to be seeded:
+  // `upsertJob` is the only way an id enters the queue, so before this the
+  // "Link finished analyzing" toast below could never fire.
+  const { upsertJob: upsertLinkJob } = useJobsQueue({
     type: "content-analysis",
     onJobCompleted: (job) => {
       refresh();
@@ -421,8 +425,9 @@ export default function DashboardPage() {
   const feedItems = featuredJob ? filteredContent : filteredContent.slice(1);
 
   const handleLinkSubmit = async (linkUrl: string) => {
+    let job: QueueJob;
     try {
-      await createJob("content-analysis", { url: linkUrl });
+      job = await createJob<QueueJob>("content-analysis", { url: linkUrl });
     } catch (err) {
       if (err instanceof AlreadyAnalyzedError) {
         setNewLinkModalOpen(false);
@@ -446,6 +451,7 @@ export default function DashboardPage() {
       }
       throw err;
     }
+    upsertLinkJob(job);
     if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
     setNewLinkModalOpen(false);
     setLinkValue("");
