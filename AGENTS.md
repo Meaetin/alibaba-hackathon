@@ -185,15 +185,65 @@ Don't share code between them.
 `photos.ts`. Don't reach for a vendor SDK — R2, Neon Object Storage, Supabase
 Storage and S3 all satisfy `ObjectStore`, so the backend is `PHOTO_BLOB_*` env,
 not code. It's optional: unset, the pipeline stores Google's expiring `photoUri`
-and still produces a trip. Keys are content-addressed (`photoBlobKey`), which is
-what makes a photo billable once across every itinerary — never key a photo by
-place or itinerary id.
+and still produces a trip.
 
-Photo resolution is valid only for the exact ordered `photo_names` set. A
-retrieval refetch with the same names preserves `photo_urls` and
-`photos_resolved_at`; changed names invalidate both. Photo writes go through
-`LocationStore.updatePhotoResolution`, which patches only while the stored names
-still match — never write a stale full location row from `photos.ts`.
+`photoBlobKey(placeId, index, maxWidthPx)` is keyed by the **place**, which is
+what makes a photo billable once across every itinerary. It used to hash the
+photo resource name and the doc comment called that content-addressing — see the
+next section for why that was wrong in both directions.
+
+### A Google photo resource name is a per-response token, not an identifier
+Run the same Text Search twice, seconds apart, and **all twenty places come back
+with a different `photos[].name` for every photo**. Nothing about the place has
+changed; the name is minted per response. This one false belief was wired into
+two places and cost money in both.
+
+**It wiped photos we had already paid for.** The `locations` upsert invalidated
+`photo_urls` and `photos_resolved_at` whenever `photo_names` changed, which is
+every single search. So each replan of a city silently un-resolved its whole
+pool, and only the ~20 stops that survived *that* run bought their media back.
+Measured on 2026-08-29 before the fix: **1,433 of 1,684 locations with photo
+names had no resolved photo, and 144 of 686 itinerary stops rendered a grey
+box** — a fifth of every trip in the database. The counters said everything was
+fine, because from inside one run it was: `resolvePhotos` reported
+`failures: []`, and the wipe happened later, during somebody else's plan.
+
+**It defeated the blob cache.** A key derived from the name was new on every
+run, so the bucket never hit and every plan re-fetched and re-stored the same
+image under a fresh object. `blobHits` was 0 across every job on file.
+
+Both are fixed. The upsert `coalesce`s photo state like `stay_duration` already
+did, and `updatePhotoResolution` narrows by `place_id` alone — the old
+`photo_names` term in its `where` could only ever refuse a write for media we
+had just bought. `scripts/backfill-itinerary-photos.ts` (`npm run
+photos:backfill`) repaired the existing rows; it targets stops in an itinerary
+rather than all of `locations`, because paying the Photos SKU for a place nobody
+will see is the mistake `resolvePhotos`' two-argument signature exists to make
+inexpressible.
+
+**The name expires; the `photoUri` looks like it does not, and this repo has
+been claiming otherwise since 2026-08-23.** Measured 2026-08-29: two searches
+give two names for one photo, and **both resolve to the identical
+`lh3.googleusercontent.com` URL**, which carries no signature and no expiry
+parameter. Resolving the same name twice returns that same URL again. Google's
+docs say the *name* expires and must not be cached, and say nothing at all about
+the URI's lifetime. So "the pipeline stores Google's expiring `photoUri`",
+repeated in `photos.ts` and `docs/decisions.md`, is an assumption nobody has
+tested — treat it as unproven rather than as a fact, and note that a genuinely
+aged URL is no longer available to test with, because the backfill overwrote the
+twelve that existed.
+
+That weakens one argument for the bucket and not the other. Keep `PHOTO_BLOB_*`
+set for **cost**: with it a photo is bought once ever across every itinerary,
+which is measurable in `stats.blobHits` and was worth nothing at all while the
+key was derived from the name.
+
+**Both stores have to answer this the same way**, and only one of them was
+tested. Breaking the in-memory `updatePhotoResolution` left all 30 offline tests
+green while the Postgres equivalent went red — and every planner test runs
+against the double, so the offline suite was proving nothing about what actually
+gets written. `retrieval.test.ts` pins it now. All six guards in this change are
+mutation-checked.
 
 ### `src/lib/db` is the single source of column truth
 Drizzle tables in `src/lib/db/schema.ts`; the row type is

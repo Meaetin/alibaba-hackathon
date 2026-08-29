@@ -180,7 +180,9 @@ describe.skipIf(!DATABASE_URL)("neon schema", () => {
     expect(read.shortlistHydratedAt).toEqual(hydratedAt);
   });
 
-  it("invalidates resolved photos when Google returns a different resource-name set", async () => {
+  it("keeps resolved photos when Google returns a different resource-name set", async () => {
+    // Google hands back a fresh token for every photo on every search, so a
+    // changed name set is the normal case and says nothing about the media.
     const store = createLocationStore(db);
     const placeId = `${RUN_TAG}-photo-version`;
     const resolvedAt = new Date("2026-08-01T00:00:00.000Z");
@@ -199,15 +201,16 @@ describe.skipIf(!DATABASE_URL)("neon schema", () => {
     ]);
 
     expect(merged.photoNames).toEqual(["places/abc/photos/new"]);
-    expect(merged.photoUrls).toBeNull();
-    expect(merged.photosResolvedAt).toBeNull();
+    expect(merged.photoUrls).toEqual(["https://example.test/old.jpg"]);
+    expect(merged.photosResolvedAt).toEqual(resolvedAt);
   });
 
-  it("rejects a stale photo write after the resource-name set changes", async () => {
+  it("applies a photo write whose resource-name set no longer matches the row", async () => {
     const store = createLocationStore(db);
     const placeId = `${RUN_TAG}-stale-photo-write`;
     const oldNames = ["places/abc/photos/old"];
     const newNames = ["places/abc/photos/new"];
+    const resolvedAt = new Date("2026-08-01T00:00:00.000Z");
 
     await store.upsertMany([{ ...fullPlace(placeId), photoNames: oldNames }]);
     await store.upsertMany([{ ...fullPlace(placeId), photoNames: newNames }]);
@@ -215,15 +218,15 @@ describe.skipIf(!DATABASE_URL)("neon schema", () => {
       {
         placeId,
         photoNames: oldNames,
-        photoUrls: ["https://example.test/stale.jpg"],
-        photosResolvedAt: new Date("2026-08-01T00:00:00.000Z"),
+        photoUrls: ["https://example.test/resolved.jpg"],
+        photosResolvedAt: resolvedAt,
       },
     ]);
 
     const [read] = await store.getMany([placeId]);
     expect(read.photoNames).toEqual(newNames);
-    expect(read.photoUrls).toBeNull();
-    expect(read.photosResolvedAt).toBeNull();
+    expect(read.photoUrls).toEqual(["https://example.test/resolved.jpg"]);
+    expect(read.photosResolvedAt).toEqual(resolvedAt);
   });
 
   it("defaults place_search_cache.expires_at to +30 days", async () => {

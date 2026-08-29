@@ -801,7 +801,11 @@ describe("location merge state", () => {
     expect(merged.shortlistHydratedAt).toEqual(hydratedAt);
   });
 
-  it("invalidates resolved photo state when a refetch changes the resource names", async () => {
+  it("keeps resolved photo state when a refetch changes the resource names", async () => {
+    // A resource name is a per-response token: the same search run twice
+    // returns a different one for every photo. Treating that as "the photo
+    // changed" threw away media we had already paid the Photos SKU for, on
+    // every replan, for every place in the pool.
     const existing = resolved("a");
     const store = createInMemoryLocationStore([existing]);
 
@@ -815,8 +819,31 @@ describe("location merge state", () => {
     ]);
 
     expect(merged.photoNames).toEqual(["places/a/photos/two"]);
-    expect(merged.photoUrls).toBeNull();
-    expect(merged.photosResolvedAt).toBeNull();
+    expect(merged.photoUrls).toEqual(existing.photoUrls);
+    expect(merged.photosResolvedAt).toEqual(resolvedAt);
+  });
+
+  it("applies a photo write whose resource-name set no longer matches the row", async () => {
+    // The double and the Postgres store have to answer this the same way: every
+    // planner test runs against the double, so a disagreement here means the
+    // offline suite proves nothing about what actually gets written.
+    const existing = resolved("a");
+    const store = createInMemoryLocationStore([
+      { ...existing, photoUrls: null, photosResolvedAt: null },
+    ]);
+
+    await store.updatePhotoResolution([
+      {
+        placeId: "a",
+        photoNames: ["places/a/photos/a-name-from-an-earlier-search"],
+        photoUrls: ["https://images.example.test/resolved.jpg"],
+        photosResolvedAt: resolvedAt,
+      },
+    ]);
+
+    const [read] = await store.getMany(["a"]);
+    expect(read.photoUrls).toEqual(["https://images.example.test/resolved.jpg"]);
+    expect(read.photosResolvedAt).toEqual(resolvedAt);
   });
 
   it("returns merged store state from a cache miss so photo resolution does not re-bill", async () => {

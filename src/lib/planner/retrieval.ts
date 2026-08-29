@@ -421,7 +421,10 @@ export interface RetrievedPlace extends CandidatePlace {
    *  Google had no summary and no reviews". Without it every place Google is
    *  quiet about would be refetched on every replan, at Atmosphere prices. */
   shortlistHydratedAt: Date | null;
-  /** Google photo resource names. Free, always populated. */
+  /** Google photo resource names. Free, always populated — but a **per-response
+   *  token**, not an identifier: two identical searches seconds apart return a
+   *  different name for every photo. Use it to fetch media, never to decide
+   *  whether media we already hold is still current. */
   photoNames: string[];
   /** Filled at Step 11 only. Null here, always. */
   photoUrls: string[] | null;
@@ -454,7 +457,8 @@ export interface LocationStore {
   updateShortlistHydration(
     updates: readonly ShortlistHydration[],
   ): Promise<RetrievedPlace[]>;
-  /** Applies only while the stored resource-name set still matches. */
+  /** Narrowed by place. `photoNames` rides along for the caller's own record;
+   *  it is not a precondition, because the names always differ. */
   updatePhotoResolution(
     updates: readonly {
       placeId: string;
@@ -489,7 +493,6 @@ export function createInMemoryLocationStore(seed?: readonly RetrievedPlace[]): L
     async upsertMany(places) {
       return places.map((place) => {
         const existing = rows.get(place.placeId);
-        const namesUnchanged = existing && sameStrings(existing.photoNames, place.photoNames);
         const merged: RetrievedPlace = existing
           ? {
               ...place,
@@ -500,12 +503,8 @@ export function createInMemoryLocationStore(seed?: readonly RetrievedPlace[]): L
               servesVegetarianFood:
                 place.servesVegetarianFood ?? existing.servesVegetarianFood,
               shortlistHydratedAt: place.shortlistHydratedAt ?? existing.shortlistHydratedAt,
-              photoUrls: namesUnchanged
-                ? (place.photoUrls ?? existing.photoUrls)
-                : place.photoUrls,
-              photosResolvedAt: namesUnchanged
-                ? (place.photosResolvedAt ?? existing.photosResolvedAt)
-                : place.photosResolvedAt,
+              photoUrls: place.photoUrls ?? existing.photoUrls,
+              photosResolvedAt: place.photosResolvedAt ?? existing.photosResolvedAt,
             }
           : place;
         rows.set(place.placeId, merged);
@@ -525,7 +524,7 @@ export function createInMemoryLocationStore(seed?: readonly RetrievedPlace[]): L
     async updatePhotoResolution(updates) {
       for (const update of updates) {
         const existing = rows.get(update.placeId);
-        if (!existing || !sameStrings(existing.photoNames, update.photoNames)) continue;
+        if (!existing) continue;
         rows.set(update.placeId, {
           ...existing,
           photoUrls: update.photoUrls,
@@ -1015,10 +1014,6 @@ function normalizePlace(raw: RawPlace, city: string, now: Date): RetrievedPlace 
 
 function dedupeStrings(values: readonly string[]): string[] {
   return [...new Set(values)];
-}
-
-function sameStrings(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
 function dedupeByPlaceId(places: readonly RetrievedPlace[]): RetrievedPlace[] {

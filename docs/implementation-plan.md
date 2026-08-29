@@ -492,10 +492,12 @@ without a rename layer that would be its own three-way sync.
 `createLocationStore` — with no call-site changes. `getMany` returns rows in the
 order asked for, and `upsertMany` returns the merged stored rows so later stages
 see preserved enrichment/photo state rather than the pre-upsert network object.
-`stay_duration` and hydrated reviews survive a refetch. Resolved photos survive
-only while `photo_names` is unchanged; a new resource-name set invalidates the
-URLs and resolution stamp. Photo and review writes use narrow patch methods so
-they cannot overwrite fresher retrieval data.
+`stay_duration`, hydrated reviews and resolved photos all survive a refetch. The
+photo state used to be conditioned on `photo_names` being unchanged; that was
+wrong, because Google mints a fresh resource name for every photo on every
+search — see "A Google photo resource name is a per-response token" in
+`AGENTS.md`. Photo and review writes use narrow patch methods so they cannot
+overwrite fresher retrieval data.
 
 Expiry is not enforced in the store. `retrievePlaces` compares `expiresAt`
 against an injected `now`, and a store that also filtered would put a second,
