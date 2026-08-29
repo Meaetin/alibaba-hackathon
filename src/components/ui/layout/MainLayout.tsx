@@ -102,6 +102,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
 
   const { upsertJob: upsertPlanningJob } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.itineraries() });
       const itineraryId = job.result?.itinerary_id as string | undefined;

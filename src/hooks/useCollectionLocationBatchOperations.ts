@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { addLocationsToCollection } from "@/lib/api/collections";
 import { createItineraryRouted } from "@/lib/api/itineraries";
+import { announcePlanningJob } from "@/lib/jobs/events";
 import type { QueueJob } from "@/lib/jobs/types";
 
 interface UseCollectionLocationBatchOperationsOptions {
@@ -60,7 +61,15 @@ export function useCollectionLocationBatchOperations({
         latitude,
         longitude,
       });
-      if (result.kind === "planning") onJobCreated?.(result.job);
+      if (result.kind === "planning") {
+        // Announced here, not left to each caller. A plan started from a
+        // collection or a link is the same plan as one started from the create
+        // modal, and both of those pages had been throwing the row away — so
+        // the layout queue never polled it, its "Itinerary ready" toast could
+        // not fire, and the loading overlay animated nothing.
+        announcePlanningJob(result.job);
+        onJobCreated?.(result.job);
+      }
       return result;
     },
     [source, onJobCreated],

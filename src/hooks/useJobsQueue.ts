@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { queryOptions, useQueries, useQueryClient } from "@tanstack/react-query";
+import { trackJob, trackedJobs, untrackJob } from "@/lib/jobs/tracked";
 import type { QueueJob } from "@/lib/jobs/types";
 
 export type { QueueJob } from "@/lib/jobs/types";
@@ -72,25 +73,35 @@ function compareQueueJobs(a: QueueJob, b: QueueJob): number {
  * two seconds per job, stopping the moment a job reaches `completed` or
  * `failed`.
  *
- * **The queue does not survive a page reload.** The set of job ids being watched
- * lives in React state, seeded only by `upsertJob`. The realtime version could
- * rebuild the list from Supabase by querying `jobs` for the signed-in user, but
- * auth was removed from this app, so there is no user to query by and no
- * server-side list endpoint to replace it. Reload the page mid-plan and the
- * queue card disappears; the job itself keeps running and the itinerary still
- * lands in the list when it finishes.
+ * **The set of watched ids lives in React state**, seeded by `upsertJob`. Pass
+ * `restoreFor` and it is also mirrored into `localStorage` under that
+ * traveller's id, so a job queued on one page is still watched on the next one
+ * and after a reload. See `src/lib/jobs/tracked.ts` for what is stored and why
+ * it is only ever ids. Without `restoreFor` the queue is per-mount, which is
+ * what every page did before: navigate away mid-plan and the card was gone,
+ * while the job itself kept running.
  *
- * `isLoading` is therefore effectively always `false`. `upsertJob` hands the
- * hook a complete row, so there is no initial list to fetch and nothing to wait
- * on. It stays in the return value because the five pages destructure it.
+ * `isLoading` is effectively always `false` for a seeded job — `upsertJob`
+ * hands the hook a complete row, so there is nothing to wait on. A *restored*
+ * id has no row until its first poll answers, which is why the card appears a
+ * beat after the page does. It stays in the return value because the five pages
+ * destructure it.
  */
 export function useJobsQueue({
   type,
+  restoreFor,
   onJobCompleted,
   onJobFailed,
   onJobRejected,
 }: {
   type?: string;
+  /**
+   * The signed-in traveller, or `null` while the session is still loading.
+   * Given one, the queue remembers its ids across navigations under that id —
+   * a key rather than a flag, because a shared key would show one account the
+   * other's trips.
+   */
+  restoreFor?: string | null;
   onJobCompleted?: (job: QueueJob) => void;
   onJobFailed?: (job: QueueJob) => void;
   onJobRejected?: (job: QueueJob) => void;
@@ -113,6 +124,21 @@ export function useJobsQueue({
   const completedForCleanupRef = useRef<string[]>([]);
 
   const queryClient = useQueryClient();
+
+  // Seeds the subscription list from what this browser was watching, once per
+  // traveller per mount. Re-reading storage on every render would fight
+  // `removeJob`: a dismissed card would come straight back on the next one.
+  const restoredForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!restoreFor || restoredForRef.current === restoreFor) return;
+    restoredForRef.current = restoreFor;
+    const restored = trackedJobs(restoreFor, type).map((entry) => entry.id);
+    if (restored.length === 0) return;
+    setTrackedIds((previous) => {
+      const missing = restored.filter((id) => !previous.includes(id));
+      return missing.length === 0 ? previous : [...previous, ...missing];
+    });
+  }, [restoreFor, type]);
 
   const results = useQueries({
     queries: trackedIds.map((jobId) => jobQueryOptions(jobId)),
@@ -141,6 +167,11 @@ export function useJobsQueue({
       const previous = lastStatusRef.current.get(job.id);
       if (previous === job.status) continue;
       lastStatusRef.current.set(job.id, job.status);
+      // A terminal job stops being remembered, failures included. A failed card
+      // stays on the page that watched it fail — it carries the retry — but
+      // restoring it on every later page load would re-announce a failure the
+      // traveller has already read.
+      if (isTerminal(job.status) && restoreFor) untrackJob(restoreFor, job.id);
       if (job.status === "failed") {
         onJobFailedRef.current?.(job);
       } else if (job.status === "completed") {
@@ -156,7 +187,7 @@ export function useJobsQueue({
       completedForCleanupRef.current.push(...completed);
       setTrackedIds((previous) => previous.filter((id) => !completed.includes(id)));
     }
-  }, [jobs]);
+  }, [jobs, restoreFor]);
 
   // TanStack Query warns that removing an actively observed query causes a
   // hard loading state. `trackedIds` changes first; this effect runs after the
@@ -175,11 +206,30 @@ export function useJobsQueue({
     console.error("useJobsQueue: a tracked job could not be fetched");
   }, [connectionError]);
 
-  /** Stops polling this id and drops its card. */
-  const removeJob = useCallback((jobId: string) => {
-    lastStatusRef.current.delete(jobId);
-    setTrackedIds((previous) => previous.filter((id) => id !== jobId));
-  }, []);
+  // A 404 is a row that is gone — a database reset, or an id from an account
+  // that is no longer signed in. Polling already stops; forgetting it is what
+  // stops the *next* page load from starting again. `untrackJob` writes only
+  // when the id is actually stored, so this costs one write and not one a
+  // render.
+  useEffect(() => {
+    if (!restoreFor) return;
+    results.forEach((result, index) => {
+      const error = result.error;
+      if (error instanceof JobFetchError && error.status === 404) {
+        untrackJob(restoreFor, trackedIds[index]);
+      }
+    });
+  }, [results, trackedIds, restoreFor]);
+
+  /** Stops polling this id and drops its card, on this page and the next. */
+  const removeJob = useCallback(
+    (jobId: string) => {
+      lastStatusRef.current.delete(jobId);
+      if (restoreFor) untrackJob(restoreFor, jobId);
+      setTrackedIds((previous) => previous.filter((id) => id !== jobId));
+    },
+    [restoreFor],
+  );
 
   /**
    * Starts tracking a job, or replaces the row we hold for one already tracked.
@@ -191,10 +241,15 @@ export function useJobsQueue({
     (job: QueueJob) => {
       lastStatusRef.current.set(job.id, job.status);
       if (job.status === "completed") {
+        if (restoreFor) untrackJob(restoreFor, job.id);
         completedForCleanupRef.current.push(job.id);
         setTrackedIds((previous) => previous.filter((id) => id !== job.id));
         return;
       }
+      // Remembered here rather than at the six call sites that create a job:
+      // this is the one function an id enters the queue through, so it is the
+      // one place that cannot be forgotten.
+      if (restoreFor) trackJob(restoreFor, job);
       // Write straight into the cache so a re-seed (the retry endpoint handing
       // back a reset row) shows immediately instead of waiting for the next poll.
       queryClient.setQueryData(jobQueryKey(job.id), (previous: QueueJob | undefined) =>
@@ -204,7 +259,7 @@ export function useJobsQueue({
         previous.includes(job.id) ? previous : [...previous, job.id],
       );
     },
-    [queryClient],
+    [queryClient, restoreFor],
   );
 
   return { jobs, isLoading, connectionError, removeJob, upsertJob };

@@ -20,6 +20,7 @@ import { useQuotaGate } from "@/hooks/useQuotaGate";
 import { useLinkDetailsDial } from "@/hooks/useLinkDetailsDial";
 import { useCollectionLocationBatchOperations } from "@/hooks/useCollectionLocationBatchOperations";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
+import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { ActionToolbar, type ActionToolbarItinerary } from "@/components/ui/dashboard/ActionToolbar";
 import { NewItineraryModal } from "@/components/ui/modals/NewItineraryModal";
 import {
@@ -60,6 +61,7 @@ export default function LinkDetailPage() {
   const router = useRouter();
   const contentId = params?.id;
   const { setFilter } = useNavbarFilter();
+  const userId = useSessionUserId();
 
   const [linkDetail, setLinkDetail] = useState<LinkDetail | null>(null);
   const [locations, setLocations] = useState<LocationItem[]>([]);
@@ -71,8 +73,9 @@ export default function LinkDetailPage() {
   useRecordView("link", contentId);
   useHighlightLocation();
 
-  const { jobs: planningJobs } = useJobsQueue({
+  const { jobs: planningJobs, upsertJob: upsertPlanningJob } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       const itineraryId = (job.result as Record<string, unknown> | undefined)
         ?.itinerary_id as string | undefined;
@@ -117,6 +120,10 @@ export default function LinkDetailPage() {
   const batchOps = useCollectionLocationBatchOperations({
     source: "links",
     onRefresh: () => selection.clearSelection(),
+    // Seeds the queue above. `upsertJob` is the only way an id enters it, and
+    // without this the loading overlay rendered `job={null}` — a progress bar
+    // that never moved and a plan that never redirected when it landed.
+    onJobCreated: upsertPlanningJob,
   });
 
   // Collections offered in the ActionToolbar "Save to" menu.

@@ -111,19 +111,9 @@ export default function CollectionDetailPage() {
     getCollection(collectionId).then(setCollection);
   }, [collectionId]);
 
-  const batchOps = useCollectionLocationBatchOperations({
-    source: "collections",
-    onRefresh: () => {
-      selection.clearSelection();
-      refreshCollection();
-    },
-    onJobCreated: () => {
-      showToast({ title: "Generating itinerary..." });
-    },
-  });
-
-  const { jobs: planningJobs } = useJobsQueue({
+  const { jobs: planningJobs, upsertJob: upsertPlanningJob } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       const itineraryId = (job.result as Record<string, unknown> | undefined)
         ?.itinerary_id as string | undefined;
@@ -142,6 +132,22 @@ export default function CollectionDetailPage() {
     },
     onJobFailed: () => {
       setIsGenerating(false);
+    },
+  });
+
+  // Declared after the queue because it seeds it: `upsertJob` is the only way an
+  // id enters, and without this the overlay below rendered `job={null}` — a
+  // progress bar that never moved and a plan that never redirected when it
+  // landed.
+  const batchOps = useCollectionLocationBatchOperations({
+    source: "collections",
+    onRefresh: () => {
+      selection.clearSelection();
+      refreshCollection();
+    },
+    onJobCreated: (job) => {
+      upsertPlanningJob(job);
+      showToast({ title: "Generating itinerary..." });
     },
   });
 

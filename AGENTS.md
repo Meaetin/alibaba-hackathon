@@ -93,13 +93,46 @@ navbar still has a sign-out that calls `supabase.auth.signOut()` and pushes to
 `/home` — it's a stub. `useSessionUserId()` returns `null` until a session
 exists.
 
-### The job queue is client-tracked, and it does not survive a reload
+### The job queue is client-tracked, and the browser holds the pointer
 `useJobsQueue` polls `GET /api/jobs/:id` through TanStack Query at 2s per job
 and stops the moment a job reads `completed` or `failed` — a poll that never
 stops is a bug you find on the bill. The watched ids live in React state and
-enter only through `upsertJob`; with auth gone there is no user to re-query the
-list by, so a refresh mid-plan loses the queue card (the job itself keeps
-running). Restoring it means a server-side list endpoint, not a client change.
+enter only through `upsertJob`.
+
+**Per-mount state alone was not enough, and the symptom was a card that only
+appeared once the work was already done.** A plan queued on `/collections/[id]`
+was invisible on `/home`: that page mounts with an empty list and nothing ever
+told it the job existed. Pass `restoreFor: userId` and the hook mirrors its ids
+into `localStorage` under that traveller (`src/lib/jobs/tracked.ts`) and seeds
+from them on mount, so the card survives a navigation and a reload. All six call
+sites pass it.
+
+**Ids and types, never rows** — same rule `src/lib/persona/storage.ts` keeps
+about the persona, and for the same reason: a stored copy would out-live the run
+it describes. Keyed by traveller, because one browser can sign into two accounts.
+Entries expire after an hour: a job whose Node process died mid-plan never
+reaches a terminal status, so nothing else would ever stop the polling.
+
+A terminal job is forgotten, **failures included**. The failed card stays on the
+page that watched it fail — it carries the retry — but restoring it everywhere
+would re-announce a failure the traveller has already read. `removeJob` forgets
+it too, which is what makes dismissing a card stick; there is no detach endpoint
+in this repo and `detachJob` was deleted, having only ever raised "Couldn't
+dismiss that" over a dismissal that had already worked.
+
+**Vitest's jsdom ships no `localStorage`**, so `tracked.ts` reads it off
+`globalThis` and both test files stub a real `Map` behind the four methods it
+calls. A "did not write" assertion has to count writes: storing the same list
+back is byte-identical, so comparing the value before and after passes either
+way. That one was caught by mutation.
+
+The other half of the same bug was upstream. `handleGenerateItinerary` in
+`useCollectionLocationBatchOperations` returns the `jobs` row, and `/links/[id]`
+threw it away while `/collections/[id]` only toasted — so both pages rendered
+`ItineraryLoadingScreen` with `job={null}`, a progress bar that never moved and
+a plan that never redirected when it landed. It announces to the layout queue
+itself now, and both pages seed their own `upsertJob`. Same lesson as the link
+queue card: check the seam, not the component.
 
 `QueueJob` is the Drizzle `jobs` row verbatim. `user_id`, `detached`, and the
 `pending`/`cancelled` statuses are gone. `content_id` and `completed_at` stay on

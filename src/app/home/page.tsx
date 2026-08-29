@@ -17,7 +17,7 @@ import { AddToDestinationModal } from "@/components/ui/modals/AddToDestinationMo
 import { ConfirmDeleteModal } from "@/components/ui/modals/ConfirmDeleteModal";
 import { createItineraryRouted, ItineraryQuotaError } from "@/lib/api/itineraries";
 import { useToast } from "@/contexts/ToastContext";
-import { AlreadyAnalyzedError, LinkQuotaError, createJob, detachJob, retryJob } from "@/lib/api/client";
+import { AlreadyAnalyzedError, LinkQuotaError, createJob, retryJob } from "@/lib/api/client";
 import { addLocationsToCollection, createCollection } from "@/lib/api/collections";
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
@@ -195,6 +195,7 @@ export default function DashboardPage() {
   // "Link finished analyzing" toast below could never fire.
   const { upsertJob: upsertLinkJob } = useJobsQueue({
     type: "content-analysis",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       refresh();
       showToast({
@@ -227,6 +228,7 @@ export default function DashboardPage() {
     upsertJob: upsertPlanningJob,
   } = useJobsQueue({
     type: "itinerary-planning",
+    restoreFor: userId,
     // No "Itinerary ready" toast here — MainLayout's persistent local queue
     // owns it, and raising it in both places shows it twice.
     onJobCompleted: (job) => {
@@ -258,16 +260,15 @@ export default function DashboardPage() {
     });
   }, [realItemIdsKey]);
 
+  // Dismissal is local: there is no detach endpoint in this repo, and a card is
+  // not a job. `removeJob` also forgets the id in `localStorage`, so it stays
+  // gone on the next page rather than being restored there. The plan itself
+  // keeps running and the trip still lands in the grid when it finishes.
   const handleRemovePlanningJob = useCallback(
-    async (jobId: string) => {
+    (jobId: string) => {
       removePlanningJob(jobId);
-      try {
-        await detachJob(jobId);
-      } catch {
-        showToast({ title: "Couldn't dismiss that, try again later.", variant: "error" });
-      }
     },
-    [removePlanningJob, showToast],
+    [removePlanningJob],
   );
 
   const handleRetryPlanningJob = useCallback(

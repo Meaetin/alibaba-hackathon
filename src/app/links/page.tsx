@@ -139,6 +139,7 @@ export default function LinksPage() {
 
   const { jobs: queueJobs, upsertJob } = useJobsQueue({
     type: "content-analysis",
+    restoreFor: userId,
     onJobCompleted: (job) => {
       const result = (job.result ?? {}) as ContentResult;
       showToast({
