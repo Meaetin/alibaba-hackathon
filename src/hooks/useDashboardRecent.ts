@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { getContent } from "@/lib/api/content";
 import { getItineraries } from "@/lib/api/itineraries";
 import { type FilterType, type RecentContentItem } from "@/lib/domain-types";
 
@@ -28,16 +29,21 @@ interface UseDashboardRecentReturn {
 /**
  * The dashboard grid on `/home` and `/profile`.
  *
- * ## It shows itineraries and nothing else, and that is the honest shape
+ * ## It shows itineraries and analyzed links
  *
  * It used to merge five kinds of thing — links, collections, locations,
  * favourites, archived — out of Supabase tables this build does not have, so it
- * resolved to an empty array on every call. Itineraries are the one kind that
- * has a backend, so that is what it returns.
+ * resolved to an empty array on every call. Two of the five have a backend now:
+ * `GET /api/itineraries` and `GET /api/content`.
  *
- * `filter` therefore selects between "itineraries" and "nothing". The parameter
- * stays because the filter chips are still on the page and still work; the
- * other filters simply have nothing to list.
+ * `recent` shows both, interleaved by date, which is what a dashboard called
+ * "recent" should mean. `itinerary` and `links` narrow to one kind each. The
+ * remaining chips — collections, locations, favourites, archived — still name
+ * backends that are gone and still list nothing.
+ *
+ * **The two reads are independent.** One failing must not empty the grid of
+ * the other kind: a link library that cannot be read is not a reason to hide
+ * somebody's trips.
  *
  * ## Pagination is a no-op, deliberately
  *
@@ -57,8 +63,9 @@ function sortItems(data: RecentContentItem[], sortOption: SortOption): RecentCon
   return copy;
 }
 
-/** Only these two list itineraries. The rest name backends that are gone. */
+/** Which filters list which kind. Everything else lists nothing. */
 const ITINERARY_FILTERS: ReadonlySet<FilterType> = new Set<FilterType>(["recent", "itinerary"]);
+const LINK_FILTERS: ReadonlySet<FilterType> = new Set<FilterType>(["recent", "links"]);
 
 export function useDashboardRecent({
   userId,
@@ -72,31 +79,58 @@ export function useDashboardRecent({
   filterRef.current = filter;
 
   const load = useCallback(async () => {
-    if (!userId || !ITINERARY_FILTERS.has(filterRef.current)) {
+    const filter = filterRef.current;
+    const wantsItineraries = ITINERARY_FILTERS.has(filter);
+    const wantsLinks = LINK_FILTERS.has(filter);
+
+    if (!userId || (!wantsItineraries && !wantsLinks)) {
       setRawItems([]);
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    try {
-      const itineraries = await getItineraries();
-      setRawItems(
-        itineraries.map((itinerary) => ({
-          id: itinerary.id,
-          type: "itinerary" as const,
-          name: itinerary.name,
-          thumbnail_url: itinerary.thumbnail_url ?? null,
-          updated_at: itinerary.updated_at,
-        })),
-      );
-    } catch (error) {
-      // The grid's empty state is the right answer to a failed read; a thrown
-      // error here would take the whole dashboard down with it.
-      console.error("[dashboard] the recent list could not be loaded", error);
-      setRawItems([]);
-    } finally {
-      setIsLoading(false);
+
+    // `allSettled`, not `all`: the grid's empty state is the right answer to a
+    // failed read, but only for the kind that failed. One broken endpoint
+    // emptying the other kind's cards would look like data loss.
+    const [trips, links] = await Promise.allSettled([
+      wantsItineraries ? getItineraries() : Promise.resolve([]),
+      wantsLinks ? getContent() : Promise.resolve([]),
+    ]);
+
+    if (trips.status === "rejected") {
+      console.error("[dashboard] the itinerary list could not be loaded", trips.reason);
     }
+    if (links.status === "rejected") {
+      console.error("[dashboard] the link library could not be loaded", links.reason);
+    }
+
+    const items: RecentContentItem[] = [
+      ...(trips.status === "fulfilled" ? trips.value : []).map((itinerary) => ({
+        id: itinerary.id,
+        type: "itinerary" as const,
+        name: itinerary.name,
+        thumbnail_url: itinerary.thumbnail_url ?? null,
+        updated_at: itinerary.updated_at,
+      })),
+      ...(links.status === "fulfilled" ? links.value : []).map((item) => ({
+        id: item.id,
+        type: "link" as const,
+        // A link with no title still needs a name on its card; the URL is the
+        // most useful thing left to call it.
+        name: item.content_title ?? item.content_url,
+        thumbnail_url: item.content_thumbnail,
+        updated_at: item.updated_at,
+        metadata: {
+          platform: item.platform,
+          location_count: item.location_count,
+          content_url: item.content_url,
+        },
+      })),
+    ];
+
+    setRawItems(items);
+    setIsLoading(false);
   }, [userId]);
 
   useEffect(() => {

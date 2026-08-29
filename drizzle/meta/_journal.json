@@ -71,6 +71,13 @@
       "when": 1787900315583,
       "tag": "0009_faithful_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787958632033,
+      "tag": "0010_eager_stryfe",
+      "breakpoints": true
     }
   ]
 }

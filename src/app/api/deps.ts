@@ -14,6 +14,7 @@
 
 import OpenAI from "openai";
 
+import { createContentStore, type ContentStore } from "@/lib/db/content";
 import { getDb, type Database } from "@/lib/db/client";
 import { createPlanStore, type PlanStore } from "@/lib/db/itineraries";
 import { createPersonaStore, type PersonaStore } from "@/lib/db/personas";
@@ -21,6 +22,10 @@ import { createUserStore, type UserRow, type UserStore } from "@/lib/db/users";
 import { createEnrichmentStore, createLocationStore, createSearchCache } from "@/lib/db/stores";
 import type { EnrichmentStore } from "@/lib/planner/enrich";
 import type { FetchLike } from "@/lib/planner/http";
+import { createWhisperTranscriber, type Transcriber } from "@/lib/links/audio";
+import { createRapidApiMediaSource } from "@/lib/links/media";
+import { analyzeLink } from "@/lib/links/pipeline";
+import type { MediaSource } from "@/lib/links/media";
 import { createResponsesClient, type ResponsesClient } from "@/lib/planner/openai";
 import { createS3PhotoBlobStore, s3ConfigFromEnv } from "@/lib/planner/photo-blobs";
 import type { PhotoBlobStore } from "@/lib/planner/photos";
@@ -120,6 +125,79 @@ export const preferencesRouteDeps: {
   create: () => {
     const db = getDb();
     return { users: createUserStore(db), personas: createPersonaStore(db), now: () => new Date() };
+  },
+};
+
+/**
+ * `POST /api/links/analyze`.
+ *
+ * It carries more than the other routes because the link pipeline reaches four
+ * things a plan does not — yt-dlp, ffmpeg, Whisper and the local filesystem —
+ * and every one of them is behind a parameter so `route.test.ts` can drive the
+ * whole handler with none of them installed.
+ *
+ * `analyzeLink` is injected rather than imported by the handler for the same
+ * reason `runPlan` is: importing it at the call site makes the handler
+ * untestable without a mocking framework, and there isn't one in this repo.
+ */
+export interface LinkRouteDeps {
+  store: PlanStore;
+  users: UserStore;
+  /** The library the finished analysis lands in. */
+  content: ContentStore;
+  analyzeLink: typeof analyzeLink;
+  media: MediaSource;
+  transcriber: Transcriber;
+  responses: ResponsesClient;
+  googleApiKey: string;
+  cache: SearchCache;
+  locations: LocationStore;
+  fetch?: FetchLike;
+  now: () => Date;
+}
+
+function defaultLinkRouteDeps(): LinkRouteDeps {
+  const db = getDb();
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (!openaiKey) throw new Error("OPENAI_API_KEY is not set — link analysis cannot run.");
+  const googleApiKey = process.env.GOOGLE_PLACES_API_KEY;
+  if (!googleApiKey) throw new Error("GOOGLE_PLACES_API_KEY is not set — link analysis cannot run.");
+  const rapidApiKey = process.env.RAPIDAPI_KEY;
+  if (!rapidApiKey) throw new Error("RAPIDAPI_KEY is not set — link analysis cannot run.");
+
+  const openai = new OpenAI({ apiKey: openaiKey });
+  return {
+    store: createPlanStore(db),
+    users: createUserStore(db),
+    content: createContentStore(db),
+    analyzeLink,
+    media: createRapidApiMediaSource({ apiKey: rapidApiKey }),
+    transcriber: createWhisperTranscriber(openai),
+    responses: createResponsesClient(openai),
+    googleApiKey,
+    cache: createSearchCache(db),
+    locations: createLocationStore(db),
+    now: () => new Date(),
+  };
+}
+
+export const linkRouteDeps: { create: () => LinkRouteDeps } = {
+  create: defaultLinkRouteDeps,
+};
+
+/**
+ * `GET /api/content`, `GET`/`DELETE /api/content/[id]`.
+ *
+ * Lighter than `linkRouteDeps` because reading the library needs none of the
+ * pipeline — no RapidAPI, no ffmpeg, no OpenAI, no Google. Just the rows and
+ * the person asking for them.
+ */
+export const contentRouteDeps: {
+  create: () => { content: ContentStore; users: UserStore; now: () => Date };
+} = {
+  create: () => {
+    const db = getDb();
+    return { content: createContentStore(db), users: createUserStore(db), now: () => new Date() };
   },
 };
 

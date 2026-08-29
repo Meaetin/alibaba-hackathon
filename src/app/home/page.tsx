@@ -197,8 +197,9 @@ export default function DashboardPage() {
         title: "Link finished analyzing",
         variant: "success",
         thumbnail: job.progress?.thumbnail,
-        action: job.content_id
-          ? { label: "View", href: `/links/${job.content_id}` }
+        // On `job.result`, not on the row — `jobs` has no `content_id` column.
+        action: (job.result as { content_id?: string } | undefined)?.content_id
+          ? { label: "View", href: `/links/${(job.result as { content_id: string }).content_id}` }
           : undefined,
       });
     },
