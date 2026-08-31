@@ -13,6 +13,8 @@
  * personalisation on the next plan, not the screen they are looking at.
  */
 
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
+
 import type { QuizAnswers, TravelPersona } from "./types";
 
 /** Namespaced so it is obvious in devtools which app wrote it. */
@@ -106,5 +108,34 @@ export async function fetchPersona(): Promise<TravelPersona | null> {
   } catch (error) {
     console.error("[persona] the saved persona could not be read", error);
     return null;
+  }
+}
+
+/**
+ * Clears the signed-in traveller's persona and returns the preferences left
+ * after the server removes that archetype's preset tags.
+ *
+ * `undefined` means the reset did not land. Like the other persistence helpers
+ * here, this logs the technical detail and leaves user-facing wording to the
+ * surface that initiated the action.
+ */
+export async function resetPersona(): Promise<SavedTravelPreferences | null | undefined> {
+  try {
+    const response = await fetch("/api/persona", {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!response.ok) {
+      console.error("[persona] the saved persona could not be reset", response.status);
+      return undefined;
+    }
+    const body = (await response.json()) as {
+      preferences?: SavedTravelPreferences | null;
+    };
+    clearPersonaId();
+    return body.preferences ?? null;
+  } catch (error) {
+    console.error("[persona] the saved persona could not be reset", error);
+    return undefined;
   }
 }

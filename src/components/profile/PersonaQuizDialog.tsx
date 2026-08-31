@@ -2,7 +2,7 @@
 
 import { Dialog } from "@base-ui/react/dialog";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/primitives/Button";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
@@ -26,6 +26,7 @@ interface PersonaQuizDialogProps {
   onOpenChange: (open: boolean) => void;
   persona?: PersonaResult | null;
   onComplete?: (result: PersonaResult) => void;
+  onRetake?: () => void;
 }
 
 /**
@@ -38,6 +39,7 @@ function PersonaQuizDialog({
   onOpenChange,
   persona,
   onComplete,
+  onRetake,
 }: PersonaQuizDialogProps) {
   const { isPhone } = useBreakpoint();
   const prefersReducedMotion = useReducedMotion();
@@ -48,6 +50,7 @@ function PersonaQuizDialog({
     Array(QUESTIONS.length).fill(null),
   );
   const [result, setResult] = useState<PersonaResult | null>(null);
+  const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useEffect(() => {
     if (!open || !persona) return;
@@ -67,13 +70,49 @@ function PersonaQuizDialog({
     onOpenChange(next);
   };
 
-  const selectOption = (optionIndex: number) => {
+  const selectOption = useCallback((optionIndex: number) => {
     setAnswers((prev) => {
       const next = [...prev];
       next[currentQ] = optionIndex;
       return next;
     });
-  };
+  }, [currentQ]);
+
+  useEffect(() => {
+    if (!open || stage !== "questions") return;
+
+    const handleNumberShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const optionIndex = Number(event.key) - 1;
+      if (!Number.isInteger(optionIndex) || !QUESTIONS[currentQ]?.options[optionIndex]) return;
+
+      event.preventDefault();
+      selectOption(optionIndex);
+      optionRefs.current[optionIndex]?.focus();
+    };
+
+    window.addEventListener("keydown", handleNumberShortcut);
+    return () => window.removeEventListener("keydown", handleNumberShortcut);
+  }, [currentQ, open, selectOption, stage]);
 
   const handleNext = () => {
     if (currentQ < QUESTIONS.length - 1) {
@@ -82,12 +121,13 @@ function PersonaQuizDialog({
     }
     const nextResult = calculatePersona(answers);
     setResult(nextResult);
-    onComplete?.(nextResult);
     setStage("result");
-    // Deliberately not awaited, and it never throws. The result screen is
-    // already rendered from the local calculation; the round trip only decides
-    // whether the *next* trip this browser plans knows who took the quiz.
-    void savePersona(answers);
+    // The result screen renders immediately from the local calculation. Notify
+    // the profile only after the write settles, so its invalidation cannot race
+    // the POST and briefly re-read the persona being replaced.
+    void savePersona(answers).then((id) => {
+      if (id) onComplete?.(nextResult);
+    });
   };
 
   const handleBack = () => {
@@ -98,6 +138,11 @@ function PersonaQuizDialog({
       return;
     }
     setCurrentQ((q) => q - 1);
+  };
+
+  const handleRetake = () => {
+    reset();
+    onRetake?.();
   };
 
   const question = QUESTIONS[currentQ];
@@ -229,7 +274,18 @@ function PersonaQuizDialog({
                 </div>
 
                 {/* Options */}
-                <div className="mt-4 flex flex-col gap-2" role="radiogroup" aria-label={question.label}>
+                <p
+                  id={`persona-quiz-shortcut-hint-${currentQ}`}
+                  className={cn("mt-4 text-center type-body-4 text-content-tertiary")}
+                >
+                  Press 1, 2, or 3 to choose an answer
+                </p>
+                <div
+                  className={cn("mt-2 flex flex-col gap-2")}
+                  role="radiogroup"
+                  aria-label={question.label}
+                  aria-describedby={`persona-quiz-shortcut-hint-${currentQ}`}
+                >
                   {question.options.map((option, index) => {
                     const isSelected = selected === index;
                     return (
@@ -238,11 +294,15 @@ function PersonaQuizDialog({
                         type="button"
                         role="radio"
                         aria-checked={isSelected}
+                        aria-keyshortcuts={`${index + 1}`}
+                        ref={(node) => {
+                          optionRefs.current[index] = node;
+                        }}
                         onClick={() => selectOption(index)}
                         className={cn(
-                          "persona-quiz-option flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors",
+                          "persona-quiz-option flex w-full items-start gap-3 rounded-xl border p-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-edge-brand",
                           isSelected
-                            ? "border-edge bg-surface-alt"
+                            ? "border-edge-brand bg-surface-alt"
                             : "border-transparent hover:bg-surface-alt",
                         )}
                       >
@@ -387,7 +447,7 @@ function PersonaQuizDialog({
 
               {/* Actions */}
               <div className="mt-5 flex items-center justify-center gap-3">
-                <Button type="button" variant="ghost" size="md" onClick={reset}>
+                <Button type="button" variant="ghost" size="md" onClick={handleRetake}>
                   Retake
                 </Button>
                 <Dialog.Close

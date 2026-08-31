@@ -27,9 +27,10 @@ export type QuotaType = 'link' | 'itinerary'
  * but the card components are typed against these, so the types outlive the
  * backend exactly as `Surface` and `QuotaType` above outlived PostHog.
  *
- * Only `itinerary` is wired to anything today. The rest name features whose
- * backend left with the old REST API and are kept because the filter chips,
- * empty states and card variants still reference them.
+ * `itinerary`, `collection` and `links` are wired into the dashboard today.
+ * The remaining values name features whose backend left with the old REST API
+ * and are kept because the filter chips, empty states and card variants still
+ * reference them.
  */
 export type FilterType =
   | 'recent'

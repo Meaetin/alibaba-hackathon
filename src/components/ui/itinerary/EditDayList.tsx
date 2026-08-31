@@ -8,6 +8,7 @@ import { Layers, Plus, Minus, PlaneTakeoff, House } from "lucide-react";
 import { Button } from "@/components/ui/primitives/Button";
 import { ItineraryEditDayColumn } from "./ItineraryEditDayColumn";
 import { FlightActivityCard } from "./FlightActivityCard";
+import { InlineFlightRow } from "./InlineFlightRow";
 import { EditDaySelector } from "./EditDaySelector";
 import { CompactActivityCard } from "./CompactActivityCard";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
@@ -17,10 +18,6 @@ import type { ItineraryPanelVariant } from "./ItinerarySidePanel";
 import { motionPresets, motionTransitions } from "@/lib/motion/presets";
 
 const FLIGHT_CATEGORIES = new Set(["flight", "flights"]);
-
-// The Flight tab header already provides the canonical add-flight entry point.
-// Keep the bookend prompt implemented so it can be restored without rebuilding it.
-const SHOW_FLIGHT_BOOKEND_PROMPT = false;
 
 function isFlightActivity(a: ItineraryActivityDetail): boolean {
   const cat = a.category?.toLowerCase() ?? "";
@@ -276,20 +273,6 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
         <div className={cn("flight-mode-header", "sticky top-0 z-20 bg-surface px-3 flex items-center justify-between py-3")}>
           <div className="flight-mode-title flex items-center gap-2 px-3">
             <span className="flight-mode-label type-h4 type-secondary font-bold text-content">Flight</span>
-            <Button variant="ghost" size="sm" icon="only" className="flight-mode-add-button" onClick={onAddFlight} aria-label={isAddingFlight ? "Cancel adding flight" : "Add flight"}>
-              <span className="relative size-4">
-                <AnimatePresence initial={false}>
-                  <motion.span
-                    key={isAddingFlight ? "minus" : "plus"}
-                    className="absolute inset-0"
-                    {...(prefersReducedMotion ? {} : motionPresets.iconSwap)}
-                    transition={prefersReducedMotion ? motionTransitions.instant : motionTransitions.iconSwap}
-                  >
-                    {isAddingFlight ? <Minus className="flight-mode-add-icon size-4" /> : <Plus className="flight-mode-add-icon size-4" />}
-                  </motion.span>
-                </AnimatePresence>
-              </span>
-            </Button>
           </div>
           <Button
             variant={isCollectionActive ? "primary" : "secondary"}
@@ -313,8 +296,8 @@ export const EditDayList = forwardRef<EditDayListHandle, EditDayListProps>(funct
             />
           )}
 
-          {!flight && SHOW_FLIGHT_BOOKEND_PROMPT && flightActivities.length === 0 && (
-            <FlightActivityCard date={days[0]?.date} onAction={onAddFlight ?? (() => {})} />
+          {!flight && flightActivities.length === 0 && (
+            <InlineFlightRow onClick={onAddFlight ?? (() => {})} />
           )}
 
           {flightActivities.map((activity) => (

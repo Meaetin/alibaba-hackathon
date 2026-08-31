@@ -6,7 +6,7 @@ import { Link } from "lucide-react";
 
 import { LinkCard } from "@/components/ui";
 import { CreateCard } from "@/components/ui/dashboard/CreateCard";
-import { LinkQueueCard } from "@/components/ui/links/LinkQueueCard";
+import { LinkQueueCardItem } from "@/components/ui/links/LinkQueueCardItem";
 import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { useToast } from "@/contexts/ToastContext";
@@ -18,62 +18,14 @@ import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
 import { usePaginatedContent } from "@/hooks/usePaginatedContent";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
-import { useProgressAnimation } from "@/hooks/useProgressAnimation";
-import { LINK_STUCK_MS } from "@/lib/links/progress";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
 import { useQuotaGate } from "@/hooks/useQuotaGate";
 import { useLinkUsageQuery } from "@/hooks/queries/useLinkUsageQuery";
 import { motionPresets, motionTransitions } from "@/lib/motion/presets";
 import type { CompletedContent } from "@/hooks/usePaginatedContent";
+import { announceLinkJob, LINK_JOB_CREATED_EVENT } from "@/lib/jobs/events";
 
 type SortOption = "modified" | "alphabetical";
-
-function QueueCardItem({
-  job,
-  onRetry,
-}: {
-  job: QueueJob;
-  onRetry: (job: QueueJob) => Promise<void>;
-}) {
-  const visualProgress = useProgressAnimation(job);
-  const [isRetrying, setIsRetrying] = useState(false);
-  const url = (job.payload?.url as string | undefined) ?? "";
-  const isFailed = job.status === "failed";
-  const isStuckInFlight =
-    ["processing", "queued"].includes(job.status) &&
-    Date.now() - new Date(job.updated_at).getTime() > LINK_STUCK_MS;
-  const canRetry = isFailed || isStuckInFlight;
-
-  // Clear the retrying state once the backend acks the retry (job leaves "failed").
-  // Without this, a retry that succeeds via API but fails again in the worker
-  // would render the next failed-state card with a stuck spinner.
-  useEffect(() => {
-    if (job.status !== "failed") setIsRetrying(false);
-  }, [job.status]);
-
-  const handleRetry = async () => {
-    if (isRetrying) return;
-    setIsRetrying(true);
-    try {
-      await onRetry(job);
-    } catch {
-      setIsRetrying(false);
-    }
-  };
-
-  return (
-    <LinkQueueCard
-      url={url}
-      state={canRetry ? "failed" : job.status === "processing" ? "processing" : "queued"}
-      progress={visualProgress}
-      thumbnailUrl={job.progress?.thumbnail ?? undefined}
-      errorMessage="Couldn't analyze this link. Click retry to try again."
-      className="h-full"
-      onRetry={canRetry ? handleRetry : undefined}
-      isRetrying={isRetrying}
-    />
-  );
-}
 
 // Subset of the worker's ContentAnalysisResult that the link card reads.
 type ContentResult = {
@@ -141,16 +93,6 @@ export default function LinksPage() {
     type: "content-analysis",
     restoreFor: userId,
     onJobCompleted: (job) => {
-      const result = (job.result ?? {}) as ContentResult;
-      showToast({
-        title: "Link finished analyzing",
-        variant: "success",
-        thumbnail: result.thumbnail ?? job.progress?.thumbnail,
-        // On `job.result`, not on the row — `jobs` has no `content_id` column.
-        action: (job.result as { content_id?: string } | undefined)?.content_id
-          ? { label: "View", href: `/links/${(job.result as { content_id: string }).content_id}` }
-          : undefined,
-      });
       const optimistic = buildOptimisticContent(job);
       if (optimistic) {
         setOptimisticCompleted((prev) =>
@@ -158,18 +100,6 @@ export default function LinksPage() {
         );
       }
       refreshContent();
-    },
-    onJobFailed: () => {
-      showToast({
-        title: "Couldn't analyze this link.",
-        variant: "error",
-      });
-    },
-    onJobRejected: () => {
-      showToast({
-        title: "No travel locations found in this link.",
-        variant: "error",
-      });
     },
   });
   const {
@@ -184,6 +114,14 @@ export default function LinksPage() {
     filter: "links",
     sortOption,
   });
+
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(LINK_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(LINK_JOB_CREATED_EVENT, track);
+  }, [upsertJob]);
 
   const { sentinelRef } = useInfiniteScroll(loadMore, {
     enabled: hasMore && !isLoadingMore,
@@ -214,10 +152,9 @@ export default function LinksPage() {
   };
 
   const handleLinkSubmit = async (linkUrl: string) => {
-    // The created row goes straight into the queue. `useJobsQueue` starts
-    // watching an id only through `upsertJob`, so throwing this row away — which
-    // is what happened before — meant no queue card, no polling and no
-    // completion toast: the link was analyzed and nothing on the page said so.
+    // The created row is announced to the page queue and persistent layout
+    // queue together. Throwing this row away would mean no progress card, no
+    // polling and no completion notification.
     let job: QueueJob;
     try {
       job = await createJob<QueueJob>("content-analysis", { url: linkUrl });
@@ -244,7 +181,7 @@ export default function LinksPage() {
       }
       throw err;
     }
-    upsertJob(job);
+    announceLinkJob(job);
     if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
     setNewLinkModalOpen(false);
     setLinkValue("");
@@ -337,7 +274,7 @@ export default function LinksPage() {
                 data-region="links-queue-card"
                 className="h-full"
               >
-                <QueueCardItem job={job} onRetry={handleRetryJob} />
+                <LinkQueueCardItem job={job} onRetry={handleRetryJob} />
               </motion.div>
             ))}
 

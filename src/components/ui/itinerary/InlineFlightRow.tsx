@@ -28,7 +28,7 @@ export function InlineFlightRow({ flight, onClick, className }: InlineFlightRowP
       aria-label={flight ? `Open Flight tab for ${flight.flightNumber}` : "Open Flight tab to add a flight"}
       data-region="itinerary-inline-flight"
       className={cn(
-        "group flex h-11 w-full items-center justify-between rounded-xl border border-edge bg-surface px-4 text-left shadow-xs",
+        "group flex h-11 w-full items-center justify-between rounded-xl border border-edge bg-surface pl-2 pr-4 text-left shadow-xs",
         "transition-[border-color,box-shadow] duration-[var(--motion-duration-fast)] ease-[var(--motion-ease-standard)]",
         "hover:border-edge-strong hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-edge-brand",
         className,
@@ -47,4 +47,3 @@ export function InlineFlightRow({ flight, onClick, className }: InlineFlightRowP
     </button>
   );
 }
-

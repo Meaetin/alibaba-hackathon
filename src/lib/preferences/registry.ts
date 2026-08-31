@@ -1,5 +1,5 @@
 import type { Interest, Pace, PreferenceProfile } from "@/lib/planner/types";
-import type { PersonaResult } from "@/lib/persona/types";
+import type { PersonaResult, TravelArchetypeId } from "@/lib/persona/types";
 import { ARCHETYPE_PRESETS } from "@/lib/persona/presets";
 import { deriveBudget, derivePace } from "@/lib/persona/profile";
 
@@ -90,9 +90,15 @@ const TAG_TO_INTEREST: Record<string, Interest> = {
   shopping: "shopping", local_markets: "shopping", artisan_shops: "shopping",
 };
 
+export function getArchetypePreferenceIds(
+  archetypeId?: TravelArchetypeId | null,
+): string[] {
+  if (!archetypeId) return [];
+  return ARCHETYPE_PRESETS[archetypeId].tags.filter((id) => PREFERENCE_BY_ID.has(id));
+}
+
 export function getPersonaPreferenceIds(persona?: PersonaResult | null): string[] {
-  if (!persona) return [];
-  return ARCHETYPE_PRESETS[persona.archetype.id].tags.filter((id) => PREFERENCE_BY_ID.has(id));
+  return getArchetypePreferenceIds(persona?.archetype.id);
 }
 
 export function buildPreferenceProfile(
@@ -151,4 +157,3 @@ export function isSavedTravelPreferences(value: unknown): value is SavedTravelPr
   const candidate = value as Partial<SavedTravelPreferences>;
   return Array.isArray(candidate.selectedIds) && Array.isArray(candidate.confirmedConstraintIds);
 }
-

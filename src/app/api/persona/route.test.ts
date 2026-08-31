@@ -11,10 +11,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createInMemoryPersonaStore } from "@/lib/db/personas";
 import { calculatePersona, QUESTIONS } from "@/lib/persona/quiz";
+import {
+  PREFERENCE_REGISTRY,
+  createSavedPreferences,
+  getPersonaPreferenceIds,
+} from "@/lib/preferences/registry";
 
 import { personaRouteDeps } from "../deps";
 import { signedIn } from "../session-fixture";
-import { GET, POST } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 const NOW = new Date("2026-08-25T09:00:00.000Z");
 const LATER = new Date("2026-08-26T09:00:00.000Z");
@@ -42,6 +47,15 @@ function post(body: unknown, cookie: string = session.cookie): Promise<Response>
       method: "POST",
       headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(body),
+    }),
+  );
+}
+
+function remove(cookie: string | null = session.cookie): Promise<Response> {
+  return DELETE(
+    new Request("http://localhost/api/persona", {
+      method: "DELETE",
+      headers: cookie ? { cookie } : {},
     }),
   );
 }
@@ -284,6 +298,91 @@ describe("GET /api/persona", () => {
     const response = await get();
     expect(response.status).toBe(500);
     expect(JSON.stringify(await response.json())).not.toMatch(/relation/);
+    expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /api/persona", () => {
+  it("persists the empty persona state and removes only its preset preference tags", async () => {
+    const personas = await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    const result = calculatePersona(FIRST_OPTIONS);
+    const personaIds = getPersonaPreferenceIds(result);
+    const manualId = PREFERENCE_REGISTRY.find(({ id }) => !personaIds.includes(id))?.id;
+    expect(manualId).toBeDefined();
+
+    const preferences = createSavedPreferences(
+      [...personaIds, manualId!],
+      [],
+      undefined,
+      result,
+      NOW,
+    );
+    await session.users.writePreferences({
+      userId: session.user.id,
+      preferences,
+      now: NOW,
+    });
+
+    const response = await remove();
+    expect(response.status).toBe(200);
+    expect(await personas.getByUser(session.user.id)).toBeUndefined();
+
+    const body = (await response.json()) as {
+      preferences: { selectedIds: string[]; profile: { budget?: number } };
+    };
+    expect(body.preferences.selectedIds).toEqual([manualId]);
+    expect(body.preferences.profile.budget).toBeUndefined();
+    expect((await session.users.readPreferences(session.user.id))?.selectedIds).toEqual([
+      manualId,
+    ]);
+  });
+
+  it("is idempotent when the traveller already has no persona", async () => {
+    const personas = await install();
+
+    const response = await remove();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ preferences: null });
+    expect(personas.rows.size).toBe(0);
+  });
+
+  it("refuses a signed-out caller without deleting anything", async () => {
+    const personas = await install();
+    await post({ answers: FIRST_OPTIONS });
+
+    expect((await remove(null)).status).toBe(401);
+    expect(await personas.getByUser(session.user.id)).toBeDefined();
+  });
+
+  it("keeps the persona when preference cleanup fails", async () => {
+    const personas = await install();
+    await post({ answers: FIRST_OPTIONS });
+    const result = calculatePersona(FIRST_OPTIONS);
+    const preferences = createSavedPreferences(
+      getPersonaPreferenceIds(result),
+      [],
+      undefined,
+      result,
+      NOW,
+    );
+    await session.users.writePreferences({ userId: session.user.id, preferences, now: NOW });
+
+    personaRouteDeps.create = () => ({
+      personas,
+      users: {
+        ...session.users,
+        writePreferences: () => Promise.reject(new Error("database unavailable")),
+      },
+      now: () => NOW,
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await remove();
+    expect(response.status).toBe(500);
+    expect(await personas.getByUser(session.user.id)).toBeDefined();
+    expect(JSON.stringify(await response.json())).not.toMatch(/database unavailable/);
     expect(errors).toHaveBeenCalled();
   });
 });

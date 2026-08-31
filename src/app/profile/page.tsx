@@ -24,9 +24,13 @@ import {
   ARCHETYPE_ILLUSTRATIONS,
   INTRO_ILLUSTRATION,
 } from "@/lib/persona/illustrations";
-import type { PersonaResult } from "@/lib/persona/types";
-import { PREFERENCE_BY_ID } from "@/lib/preferences/registry";
-import { fetchPersona } from "@/lib/persona/storage";
+import type { PersonaResult, TravelPersona } from "@/lib/persona/types";
+import {
+  PREFERENCE_BY_ID,
+  createSavedPreferences,
+  getPersonaPreferenceIds,
+} from "@/lib/preferences/registry";
+import { fetchPersona, resetPersona } from "@/lib/persona/storage";
 import { fetchTravelPreferences, saveTravelPreferences } from "@/lib/api/preferences";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
@@ -96,7 +100,13 @@ export default function ProfilePage() {
     : "Not signed in";
   const avatarHash = profile?.id ?? profile?.email ?? userId ?? "argo-guest";
   const banner = TRAVEL_PROFILE_BANNERS[bannerIndex];
-  const savedPreferenceDefinitions = (travelPreferences?.selectedIds ?? [])
+  const visiblePreferenceIds = [
+    ...new Set([
+      ...(travelPreferences?.selectedIds ?? []),
+      ...getPersonaPreferenceIds(persona),
+    ]),
+  ];
+  const savedPreferenceDefinitions = visiblePreferenceIds
     .flatMap((id) => {
       const preference = PREFERENCE_BY_ID.get(id);
       return preference ? [preference] : [];
@@ -122,25 +132,78 @@ export default function ProfilePage() {
     }
   }, [avatarHash]);
 
-  // Takes no argument on purpose: the dialog hands back the result it just
-  // computed, and using it would be caching the scores again.
-  const handlePersonaComplete = () => {
+  const handlePersonaComplete = (result: PersonaResult) => {
     // `PersonaQuizDialog` has already POSTed the answers. Re-reading rather
     // than caching `result` here is the whole point: the server rebuilds the
     // scores from the answers, so what this page shows is what the planner
     // will use, not a copy that can drift from it.
     void queryClient.invalidateQueries({ queryKey: queryKeys.persona() });
 
-    // A retake changes the pace and budget the preference profile derives, so
-    // the same ids have to be re-saved. The server rebuilds the profile from
-    // its own copy of the persona, which is why nothing is recomputed here.
-    if (travelPreferences) {
-      void persistPreferences(travelPreferences).catch((error: unknown) => {
-        // Not worth a toast: the quiz result the traveller just saw is correct,
-        // and the next preferences save will pick the new pace up anyway.
-        console.error("Failed to update preferences for the travel persona:", error);
+    // Persona presets are real preferences, not decoration. Merge them into
+    // the saved set after the quiz POST settles so they follow the traveller
+    // across devices and reach the planner-ready profile.
+    const personaPreferenceIds = getPersonaPreferenceIds(result);
+    void persistPreferences({
+      selectedIds: [
+        ...new Set([
+          ...(travelPreferences?.selectedIds ?? []),
+          ...personaPreferenceIds,
+        ]),
+      ],
+      confirmedConstraintIds: travelPreferences?.confirmedConstraintIds ?? [],
+      preferredEndTime: travelPreferences?.preferredEndTime,
+    }).catch((error: unknown) => {
+      console.error("Failed to save preferences for the travel persona:", error);
+      showToast({
+        title: "Persona preferences couldn't be saved",
+        description: "Your persona is saved. Please try editing your preferences again.",
+        variant: "error",
       });
-    }
+    });
+  };
+
+  const handleQuizOpenChange = (next: boolean) => {
+    setQuizOpen(next);
+  };
+
+  const handlePersonaRetake = () => {
+    const previousPersona = queryClient.getQueryData<TravelPersona | null>(
+      queryKeys.persona(),
+    );
+    const previousPreferences = queryClient.getQueryData<SavedTravelPreferences | null>(
+      queryKeys.travelPreferences(),
+    );
+    const personaPreferenceIds = new Set(getPersonaPreferenceIds(persona));
+    const optimisticPreferences = travelPreferences
+      ? createSavedPreferences(
+          travelPreferences.selectedIds.filter((id) => !personaPreferenceIds.has(id)),
+          travelPreferences.confirmedConstraintIds.filter(
+            (id) => !personaPreferenceIds.has(id),
+          ),
+          travelPreferences.preferredEndTime,
+          null,
+        )
+      : null;
+
+    // Retake is a persisted empty state. Update the two visible surfaces now;
+    // closing the dialog does not restore either cache entry.
+    queryClient.setQueryData(queryKeys.persona(), null);
+    queryClient.setQueryData(queryKeys.travelPreferences(), optimisticPreferences);
+
+    void resetPersona().then((storedPreferences) => {
+      if (storedPreferences !== undefined) {
+        queryClient.setQueryData(queryKeys.travelPreferences(), storedPreferences);
+        return;
+      }
+
+      queryClient.setQueryData(queryKeys.persona(), previousPersona ?? null);
+      queryClient.setQueryData(queryKeys.travelPreferences(), previousPreferences ?? null);
+      showToast({
+        title: "Persona couldn't be reset",
+        description: "Please try again.",
+        variant: "error",
+      });
+    });
   };
 
   /** Saves and puts the **server's** answer in the cache, never the sent one —
@@ -277,7 +340,7 @@ export default function ProfilePage() {
             </Button>
           </div>
 
-          <div className="profile-header-body relative flex flex-col gap-4 pl-0 md:pl-16">
+          <div className={cn("profile-header-body relative flex w-full flex-col gap-4")}>
             {/* Avatar */}
             <Avatar
               type={profile?.avatar_url ? "image" : "generated"}
@@ -286,11 +349,13 @@ export default function ProfilePage() {
               name={displayName}
               alt={displayName}
               size="xl"
-              className="profile-avatar border-edge-subtle bg-surface-muted-hover text-glyph-secondary"
+              className={cn(
+                "profile-avatar border-edge-subtle bg-surface-muted-hover text-glyph-secondary md:ml-16",
+              )}
               data-region="profile-avatar"
             />
 
-            <div className="flex flex-col items-start justify-between gap-4 md:flex-row">
+            <div className={cn("flex w-full flex-col items-start justify-between gap-4 md:flex-row")}>
               {/* Profile Info */}
               <div
                 className="profile-info flex flex-col gap-4"
@@ -388,13 +453,6 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* Description */}
-            <p
-              className="profile-description type-body-2 text-content"
-              data-region="profile-description"
-            >
-              No description yet.
-            </p>
           </div>
         </motion.div>
 
@@ -443,9 +501,10 @@ export default function ProfilePage() {
       {/* Persona Quiz Dialog */}
       <PersonaQuizDialog
         open={quizOpen}
-        onOpenChange={setQuizOpen}
+        onOpenChange={handleQuizOpenChange}
         persona={persona}
         onComplete={handlePersonaComplete}
+        onRetake={handlePersonaRetake}
       />
 
       {/* Preferences Dialog */}

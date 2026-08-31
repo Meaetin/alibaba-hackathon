@@ -62,7 +62,8 @@ function CompactDayColumn({
   }, [day.activities]);
 
   const flightInsertionIndex = useMemo(() => {
-    if (!flight || !onFlightOpen) return -1;
+    if (!onFlightOpen) return -1;
+    if (!flight) return 0;
     if (!flight.departTime) return 0;
     const flightMinutes = parseTimeMins(flight.departTime);
     const index = sortedActivities.findIndex((activity) =>
@@ -93,7 +94,7 @@ function CompactDayColumn({
       <div className="compact-day-activities flex flex-col gap-2">
         {sortedActivities.length === 0 ? (
           <>
-            {flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+            {onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
             <div className="compact-day-empty flex items-center justify-center py-6 text-content-secondary type-body-2">
               No activities planned
             </div>
@@ -112,7 +113,7 @@ function CompactDayColumn({
 
             return (
               <div key={activity.id} data-activity-id={activity.id} className="compact-day-activity-item flex flex-col gap-2">
-                {i === flightInsertionIndex && flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+                {i === flightInsertionIndex && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
                 {showTransportBefore && (
                   <TransportDetailRow
                     distanceMeters={prevActivity.travel_distance_meters ?? null}
@@ -135,7 +136,7 @@ function CompactDayColumn({
               </div>
             );
           })}
-          {flightInsertionIndex === sortedActivities.length && flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+          {flightInsertionIndex === sortedActivities.length && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
           </>
         )}
       </div>

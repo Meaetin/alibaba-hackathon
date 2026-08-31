@@ -15,6 +15,8 @@ interface AuthInputProps
   trailingIcon?: ReactNode;
   /** Stable identity for contextual trailing-icon swaps. */
   trailingIconKey?: string;
+  /** Accessible name for an interactive trailing icon. */
+  trailingIconLabel?: string;
   onTrailingClick?: () => void;
   value?: string;
   defaultValue?: string;
@@ -40,6 +42,7 @@ const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
       icon,
       trailingIcon,
       trailingIconKey,
+      trailingIconLabel,
       onTrailingClick,
       value,
       defaultValue,
@@ -169,6 +172,7 @@ const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
             type="button"
             tabIndex={-1}
             onClick={onTrailingClick}
+            aria-label={trailingIconLabel}
             className={cn(
               "flex shrink-0 items-center justify-center size-5 text-content-secondary",
               "[&_svg]:size-4 [&_svg]:shrink-0",
