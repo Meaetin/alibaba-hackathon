@@ -104,7 +104,12 @@ export function PreferencesDialog({
 
   useEffect(() => {
     if (!open) return;
-    setSelectedIds(new Set(preferences?.selectedIds ?? getPersonaPreferenceIds(persona)));
+    setSelectedIds(
+      new Set([
+        ...(preferences?.selectedIds ?? []),
+        ...getPersonaPreferenceIds(persona),
+      ]),
+    );
     setConfirmedIds(new Set(preferences?.confirmedConstraintIds ?? []));
     setPreferredEndTime(preferences?.preferredEndTime ?? "21:00");
     setQuery("");

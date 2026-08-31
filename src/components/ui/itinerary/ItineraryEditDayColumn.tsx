@@ -520,7 +520,8 @@ export function ItineraryEditDayColumn({
   );
 
   const flightInsertionIndex = useMemo(() => {
-    if (!flight || !onFlightOpen) return -1;
+    if (!onFlightOpen) return -1;
+    if (!flight) return 0;
     if (!flight.departTime) return 0;
     const flightMinutes = parseTimeMins(flight.departTime, resolvedTimezone);
     const index = sortedActivities.findIndex((activity) =>
@@ -677,7 +678,7 @@ export function ItineraryEditDayColumn({
       <div className={cn("edit-day-activities", "flex flex-col gap-2")}> 
         {sortedActivities.length === 0 ? (
           <>
-            {flight && onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
+            {onFlightOpen ? <InlineFlightRow flight={flight} onClick={onFlightOpen} /> : null}
             {/* Keep the full empty card registered as index 0 so both activity and
                 external-location drags can reliably target an otherwise empty day. */}
             <EmptyDayDropTarget
@@ -727,7 +728,7 @@ export function ItineraryEditDayColumn({
 
               return (
                 <React.Fragment key={activity.id}>
-                  {i === flightInsertionIndex && flight && onFlightOpen ? (
+                  {i === flightInsertionIndex && onFlightOpen ? (
                     <InlineFlightRow flight={flight} onClick={onFlightOpen} />
                   ) : null}
                   {/* Gap: before transport row (or directly before card if transport hidden) */}
@@ -832,7 +833,7 @@ export function ItineraryEditDayColumn({
               );
               })}
             </SortableContext>
-            {flightInsertionIndex === sortedActivities.length && flight && onFlightOpen ? (
+            {flightInsertionIndex === sortedActivities.length && onFlightOpen ? (
               <InlineFlightRow flight={flight} onClick={onFlightOpen} />
             ) : null}
             {/* Drop gap after the last card. It used to be hidden when a lodging

@@ -3,12 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
-import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useToast } from "@/contexts/ToastContext";
 import { Button } from "@/components/ui/primitives/Button";
 import { cn } from "@/lib/utils";
 import { motionTransitions } from "@/lib/motion/presets";
+
+/**
+ * Toast thumbnails come from analyzed third-party links, whose signed CDN
+ * hosts are not known at build time. A native image is intentional here:
+ * `next/image` rejects an unlisted host during render and turns a successful
+ * analysis notification into a page-level runtime error.
+ */
+export function ToastThumbnailImage({ src }: { src: string }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- Runtime-provided CDN hosts cannot be safely allowlisted in Next config.
+    <img
+      src={src}
+      alt=""
+      width={40}
+      height={40}
+      className={cn("toast-thumbnail-image size-full object-cover")}
+      referrerPolicy="no-referrer"
+    />
+  );
+}
 
 // Auto-dismiss indicator: a thin neutral bar that drains along the bottom edge.
 function ProgressBar({ duration, paused }: { duration: number; paused: boolean }) {
@@ -115,13 +134,7 @@ export function ToastContainer() {
                   <div className="toast-thumbnail-wrapper flex shrink-0 items-center justify-center size-11">
                     <div className="rotate-6">
                       <div className="toast-thumbnail relative size-10 overflow-hidden rounded-lg bg-surface-muted shadow-[0px_2px_8px_0px_rgba(0,0,0,0.12)]">
-                        <Image
-                          src={toast.thumbnail}
-                          alt=""
-                          fill
-                          sizes="40px"
-                          className="toast-thumbnail-image object-cover"
-                        />
+                        <ToastThumbnailImage src={toast.thumbnail} />
                       </div>
                     </div>
                   </div>

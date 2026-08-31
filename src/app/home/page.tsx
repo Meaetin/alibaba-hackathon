@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { motion, useReducedMotion } from "motion/react";
 import { FolderOpen } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { LinkCard, CollectionCard, ItineraryCard, LocationCard } from "@/components/ui";
+import { PersonaQuizDialog } from "@/components/profile/PersonaQuizDialog";
+import { PersonaCard } from "@/components/ui/dashboard/PersonaCard";
 import { UsageCard } from "@/components/ui/primitives/UsageCard";
 import { NewLinkModal } from "@/components/ui/modals/NewLinkModal";
 import { NewCollectionModal } from "@/components/ui/modals/NewCollectionModal";
@@ -22,8 +25,14 @@ import { addLocationsToCollection, createCollection } from "@/lib/api/collection
 import { useDashboardRecent } from "@/hooks/useDashboardRecent";
 import { useJobsQueue } from "@/hooks/useJobsQueue";
 import type { QueueJob } from "@/lib/jobs/types";
-import { announcePlanningJob } from "@/lib/jobs/events";
+import {
+  announceLinkJob,
+  announcePlanningJob,
+  LINK_JOB_CREATED_EVENT,
+  PLANNING_JOB_CREATED_EVENT,
+} from "@/lib/jobs/events";
 import { ItineraryQueueCardItem } from "@/components/ui/itinerary/ItineraryQueueCardItem";
+import { LinkQueueCardItem } from "@/components/ui/links/LinkQueueCardItem";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { useMapClusters } from "@/hooks/useMapClusters";
 import { useSessionUserId } from "@/hooks/useSessionUserId";
@@ -40,6 +49,14 @@ import { useLinkUsageQuery } from "@/hooks/queries/useLinkUsageQuery";
 import { FilterPill } from "@/components/ui/navbar/FilterPill";
 import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
+import { fetchTravelPreferences, saveTravelPreferences } from "@/lib/api/preferences";
+import { fetchPersona, resetPersona } from "@/lib/persona/storage";
+import type { PersonaResult, TravelPersona } from "@/lib/persona/types";
+import {
+  createSavedPreferences,
+  getPersonaPreferenceIds,
+} from "@/lib/preferences/registry";
+import type { SavedTravelPreferences } from "@/lib/preferences/types";
 import { useBreakpoint } from "@/hooks/useMediaQuery";
 import { CategoryBadge } from "@/components/ui/primitives/CategoryBadge";
 import { cn } from "@/lib/utils";
@@ -78,6 +95,7 @@ const MOBILE_CREATE_SLIDES = [
   { key: "link", label: "Add a link" },
   { key: "collection", label: "Create a collection" },
   { key: "itinerary", label: "Plan an itinerary" },
+  { key: "persona", label: "Travel persona" },
 ] as const;
 
 function getItemHref(item: RecentContentItem): string {
@@ -113,6 +131,48 @@ function buildOptimisticItineraryItem(job: QueueJob): RecentContentItem | null {
   };
 }
 
+/** Gives a finished analysis its Home card immediately while the refreshed
+ * content list catches up, so the progress card never leaves an empty slot. */
+function buildOptimisticLinkItem(job: QueueJob): RecentContentItem | null {
+  const result = (job.result ?? {}) as {
+    content_id?: string;
+    url?: string;
+    title?: string;
+    thumbnail?: string;
+    platform?: string;
+    location_count?: number;
+  };
+  if (!result.content_id) return null;
+
+  const contentUrl = result.url ?? (job.payload?.url as string | undefined) ?? "";
+  return {
+    id: result.content_id,
+    type: "link",
+    name: result.title?.trim() || contentUrl,
+    thumbnail_url: result.thumbnail ?? job.progress?.thumbnail ?? null,
+    updated_at: job.completed_at ?? job.updated_at,
+    is_bookmarked: false,
+    is_archived: false,
+    metadata: {
+      platform: result.platform,
+      location_count: result.location_count ?? 0,
+      content_url: contentUrl,
+    },
+  };
+}
+
+type HomeQueueItem = {
+  kind: "link" | "itinerary";
+  job: QueueJob;
+};
+
+function compareHomeQueueItems(a: HomeQueueItem, b: HomeQueueItem): number {
+  const aFailed = a.job.status === "failed" ? 0 : 1;
+  const bFailed = b.job.status === "failed" ? 0 : 1;
+  if (aFailed !== bFailed) return aFailed - bFailed;
+  return new Date(b.job.created_at).getTime() - new Date(a.job.created_at).getTime();
+}
+
 const typeGradients: Record<string, string> = {
   link: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
   collection: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
@@ -132,13 +192,14 @@ export default function DashboardPage() {
   const [newCollectionModalOpen, setNewCollectionModalOpen] = useState(false);
   const [isCreatingCollection, setIsCreatingCollection] = useState(false);
   const [newItineraryModalOpen, setNewItineraryModalOpen] = useState(false);
+  const [personaQuizOpen, setPersonaQuizOpen] = useState(false);
   const [linkValue, setLinkValue] = useState("");
   const [collectionValue, setCollectionValue] = useState("");
   const [tripNameValue, setTripNameValue] = useState("");
   const [locationFilter, setLocationFilter] = useState<string | null>(null);
   const [mobileContentFilter, setMobileContentFilter] = useState<MobileContentFilter>("all");
-  // Finished planning jobs held as feed items until the refresh catches up.
-  const [optimisticItineraries, setOptimisticItineraries] = useState<RecentContentItem[]>([]);
+  // Finished background jobs held as feed items until the refresh catches up.
+  const [optimisticItems, setOptimisticItems] = useState<RecentContentItem[]>([]);
   const cardsSectionRef = useRef<HTMLDivElement>(null);
   const createCarouselRef = useRef<HTMLDivElement>(null);
   const [activeCreateSlide, setActiveCreateSlide] = useState(0);
@@ -168,6 +229,19 @@ export default function DashboardPage() {
 
   const { data: profile } = useProfileQuery(userId);
   const { data: linkUsage } = useLinkUsageQuery(userId);
+  const { data: personaRecord = null, isLoading: isPersonaLoading } = useQuery({
+    queryKey: queryKeys.persona(),
+    queryFn: fetchPersona,
+    enabled: Boolean(userId),
+    staleTime: 5 * 60 * 1000,
+  });
+  const persona: PersonaResult | null = personaRecord?.result ?? null;
+  const { data: travelPreferences = null } = useQuery<SavedTravelPreferences | null>({
+    queryKey: queryKeys.travelPreferences(),
+    queryFn: fetchTravelPreferences,
+    enabled: Boolean(userId),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { items, isLoading, isLoadingMore, hasMore, loadMore, removeItem, prependItem, refresh } = useDashboardRecent({
     userId,
@@ -189,38 +263,31 @@ export default function DashboardPage() {
     return () => window.removeEventListener("argo:content-prepended", handler);
   }, [prependItem]);
 
-  // Home shows no queue card for a link — the grid is itineraries and recent
-  // content — so this instance exists for its toasts. It still has to be seeded:
-  // `upsertJob` is the only way an id enters the queue, so before this the
-  // "Link finished analyzing" toast below could never fire.
-  const { upsertJob: upsertLinkJob } = useJobsQueue({
+  const {
+    jobs: linkJobs,
+    removeJob: removeLinkJob,
+    upsertJob: upsertLinkJob,
+  } = useJobsQueue({
     type: "content-analysis",
     restoreFor: userId,
     onJobCompleted: (job) => {
+      const optimistic = buildOptimisticLinkItem(job);
+      if (optimistic) {
+        setOptimisticItems((prev) =>
+          prev.some((item) => item.id === optimistic.id) ? prev : [optimistic, ...prev],
+        );
+      }
       refresh();
-      showToast({
-        title: "Link finished analyzing",
-        variant: "success",
-        thumbnail: job.progress?.thumbnail,
-        // On `job.result`, not on the row — `jobs` has no `content_id` column.
-        action: (job.result as { content_id?: string } | undefined)?.content_id
-          ? { label: "View", href: `/links/${(job.result as { content_id: string }).content_id}` }
-          : undefined,
-      });
-    },
-    onJobFailed: () => {
-      showToast({
-        title: "Error analyzing link, try again later.",
-        variant: "error",
-      });
-    },
-    onJobRejected: () => {
-      showToast({
-        title: "No travel locations found in this link.",
-        variant: "error",
-      });
     },
   });
+
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertLinkJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(LINK_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(LINK_JOB_CREATED_EVENT, track);
+  }, [upsertLinkJob]);
 
   const {
     jobs: planningJobs,
@@ -236,7 +303,7 @@ export default function DashboardPage() {
       if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.upcomingItineraries(userId) });
       const optimistic = buildOptimisticItineraryItem(job);
       if (optimistic) {
-        setOptimisticItineraries((prev) =>
+        setOptimisticItems((prev) =>
           prev.some((i) => i.id === optimistic.id) ? prev : [optimistic, ...prev],
         );
       }
@@ -246,6 +313,14 @@ export default function DashboardPage() {
     // layout queue's toast — a third announcement here shows it twice.
   });
 
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertPlanningJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(PLANNING_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(PLANNING_JOB_CREATED_EVENT, track);
+  }, [upsertPlanningJob]);
+
   // Hand off to the canonical row once the refresh lands (same key → no remount).
   // Keyed on the id list rather than the array identity: a refetch that returns
   // the same rows must not re-enter this effect, or its own setState feeds the
@@ -253,7 +328,7 @@ export default function DashboardPage() {
   const realItemIdsKey = items.map((i) => i.id).join(",");
   useEffect(() => {
     const realIds = new Set(realItemIdsKey ? realItemIdsKey.split(",") : []);
-    setOptimisticItineraries((prev) => {
+    setOptimisticItems((prev) => {
       if (prev.length === 0) return prev;
       const next = prev.filter((i) => !realIds.has(i.id));
       return next.length === prev.length ? prev : next;
@@ -271,6 +346,13 @@ export default function DashboardPage() {
     [removePlanningJob],
   );
 
+  const handleRemoveLinkJob = useCallback(
+    (jobId: string) => {
+      removeLinkJob(jobId);
+    },
+    [removeLinkJob],
+  );
+
   const handleRetryPlanningJob = useCallback(
     async (job: QueueJob) => {
       try {
@@ -282,6 +364,19 @@ export default function DashboardPage() {
       }
     },
     [upsertPlanningJob, showToast],
+  );
+
+  const handleRetryLinkJob = useCallback(
+    async (job: QueueJob) => {
+      try {
+        const updated = (await retryJob(job.id)) as QueueJob | null;
+        if (updated?.id) upsertLinkJob(updated);
+      } catch (err) {
+        showToast({ title: "Couldn't requeue link, try again later.", variant: "error" });
+        throw err;
+      }
+    },
+    [upsertLinkJob, showToast],
   );
 
   const { sentinelRef } = useInfiniteScroll(loadMore, {
@@ -385,10 +480,10 @@ export default function DashboardPage() {
   }, []);
 
   const mergedItems = useMemo(() => {
-    if (optimisticItineraries.length === 0) return items;
+    if (optimisticItems.length === 0) return items;
     const realIds = new Set(items.map((i) => i.id));
-    return [...optimisticItineraries.filter((i) => !realIds.has(i.id)), ...items];
-  }, [items, optimisticItineraries]);
+    return [...optimisticItems.filter((i) => !realIds.has(i.id)), ...items];
+  }, [items, optimisticItems]);
 
   const locationFilteredContent = useMemo(() => {
     if (!locationFilter) return mergedItems;
@@ -402,23 +497,35 @@ export default function DashboardPage() {
     return locationFilteredContent.filter((item) => item.type === mobileContentFilter);
   }, [isPhone, locationFilteredContent, mobileContentFilter]);
 
-  // In-flight itineraries follow the mobile type filter, but not the locality
-  // filter — the job has no locality until it resolves, and silently hiding a
-  // running job would recreate the very blind spot these cards exist to fix.
+  // In-flight jobs follow the mobile type filter, but not the locality filter —
+  // they have no resolved locality yet, and silently hiding a running job would
+  // recreate the very blind spot these cards exist to fix.
   const visiblePlanningJobs = useMemo(() => {
     if (isPhone && mobileContentFilter !== "all" && mobileContentFilter !== "itinerary") return [];
     return planningJobs;
   }, [planningJobs, isPhone, mobileContentFilter]);
 
-  // The "Latest Viewed" tile is explicitly placed (col2/row2), so an auto-placed
-  // queue card can never land in it — which is why a running job appeared below
-  // older content despite being the newest thing the user has. Give the tile to
-  // the newest in-flight job when there is one and demote the latest item into
-  // the feed, so "newest first" holds for jobs too.
-  const featuredJob = visiblePlanningJobs[0] ?? null;
-  const trailingJobs = featuredJob ? visiblePlanningJobs.slice(1) : visiblePlanningJobs;
-  const featuredItem = featuredJob ? null : filteredContent[0];
-  const feedItems = featuredJob ? filteredContent : filteredContent.slice(1);
+  const visibleLinkJobs = useMemo(() => {
+    if (isPhone && mobileContentFilter !== "all" && mobileContentFilter !== "link") return [];
+    return linkJobs;
+  }, [linkJobs, isPhone, mobileContentFilter]);
+
+  const visibleQueueItems = useMemo(
+    () =>
+      [
+        ...visiblePlanningJobs.map((job): HomeQueueItem => ({ kind: "itinerary", job })),
+        ...visibleLinkJobs.map((job): HomeQueueItem => ({ kind: "link", job })),
+      ].sort(compareHomeQueueItems),
+    [visiblePlanningJobs, visibleLinkJobs],
+  );
+
+  // The first feed tile belongs to the highest-priority in-flight job when one
+  // exists; the latest finished item moves down one slot so failed work stays
+  // visible and recency holds otherwise.
+  const featuredQueueItem = visibleQueueItems[0] ?? null;
+  const trailingQueueItems = featuredQueueItem ? visibleQueueItems.slice(1) : visibleQueueItems;
+  const featuredItem = featuredQueueItem ? null : filteredContent[0];
+  const feedItems = featuredQueueItem ? filteredContent : filteredContent.slice(1);
 
   const handleLinkSubmit = async (linkUrl: string) => {
     let job: QueueJob;
@@ -447,7 +554,7 @@ export default function DashboardPage() {
       }
       throw err;
     }
-    upsertLinkJob(job);
+    announceLinkJob(job);
     if (userId) queryClient.invalidateQueries({ queryKey: queryKeys.linkUsage(userId) });
     setNewLinkModalOpen(false);
     setLinkValue("");
@@ -514,7 +621,6 @@ export default function DashboardPage() {
       // AI-only itinerary (no locations + AI on) → async job; the
       // itinerary-planning queue below surfaces a "View" toast on completion.
       if (result.kind === "planning") {
-        upsertPlanningJob(result.job);
         announcePlanningJob(result.job);
         showToast({ title: "Generating itinerary…", variant: "success" });
         return;
@@ -553,6 +659,71 @@ export default function DashboardPage() {
         });
       }
     }
+  };
+
+  const handlePersonaComplete = (result: PersonaResult) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.persona() });
+
+    const personaPreferenceIds = getPersonaPreferenceIds(result);
+    void saveTravelPreferences({
+      selectedIds: [
+        ...new Set([
+          ...(travelPreferences?.selectedIds ?? []),
+          ...personaPreferenceIds,
+        ]),
+      ],
+      confirmedConstraintIds: travelPreferences?.confirmedConstraintIds ?? [],
+      preferredEndTime: travelPreferences?.preferredEndTime,
+    })
+      .then((stored) => {
+        queryClient.setQueryData(queryKeys.travelPreferences(), stored);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to save preferences for the travel persona:", error);
+        showToast({
+          title: "Persona preferences couldn't be saved",
+          description: "Your persona is saved. Please try editing your preferences again.",
+          variant: "error",
+        });
+      });
+  };
+
+  const handlePersonaRetake = () => {
+    const previousPersona = queryClient.getQueryData<TravelPersona | null>(
+      queryKeys.persona(),
+    );
+    const previousPreferences = queryClient.getQueryData<SavedTravelPreferences | null>(
+      queryKeys.travelPreferences(),
+    );
+    const personaPreferenceIds = new Set(getPersonaPreferenceIds(persona));
+    const optimisticPreferences = travelPreferences
+      ? createSavedPreferences(
+          travelPreferences.selectedIds.filter((id) => !personaPreferenceIds.has(id)),
+          travelPreferences.confirmedConstraintIds.filter(
+            (id) => !personaPreferenceIds.has(id),
+          ),
+          travelPreferences.preferredEndTime,
+          null,
+        )
+      : null;
+
+    queryClient.setQueryData(queryKeys.persona(), null);
+    queryClient.setQueryData(queryKeys.travelPreferences(), optimisticPreferences);
+
+    void resetPersona().then((storedPreferences) => {
+      if (storedPreferences !== undefined) {
+        queryClient.setQueryData(queryKeys.travelPreferences(), storedPreferences);
+        return;
+      }
+
+      queryClient.setQueryData(queryKeys.persona(), previousPersona ?? null);
+      queryClient.setQueryData(queryKeys.travelPreferences(), previousPreferences ?? null);
+      showToast({
+        title: "Persona couldn't be reset",
+        description: "Please try again.",
+        variant: "error",
+      });
+    });
   };
 
   // ── Helpers to resolve context menu target from a card item ──────────────────
@@ -686,6 +857,22 @@ export default function DashboardPage() {
     );
   };
 
+  const renderQueueCardInner = ({ kind, job }: HomeQueueItem) =>
+    kind === "link" ? (
+      <LinkQueueCardItem
+        job={job}
+        onRemove={handleRemoveLinkJob}
+        onRetry={handleRetryLinkJob}
+      />
+    ) : (
+      <ItineraryQueueCardItem
+        job={job}
+        gradient={typeGradients.itinerary}
+        onRemove={handleRemovePlanningJob}
+        onRetry={handleRetryPlanningJob}
+      />
+    );
+
   return (
     <div className="dashboard-page flex flex-col min-h-full pt-[var(--navbar-height)]" data-region="home-page">
       {/* Header Section — greeting + usage, shares the shell with the bento grid so edges align */}
@@ -740,6 +927,14 @@ export default function DashboardPage() {
             </div>
             <div className="flex-[0_0_88%] snap-start">
               <CreateCard type="itinerary" className="h-[260px]" onAction={() => setNewItineraryModalOpen(true)} />
+            </div>
+            <div className={cn("flex-[0_0_88%] snap-start")}>
+              <PersonaCard
+                persona={persona}
+                isLoading={isPersonaLoading}
+                className="h-[260px]"
+                onAction={() => setPersonaQuizOpen(true)}
+              />
             </div>
           </div>
 
@@ -807,9 +1002,7 @@ export default function DashboardPage() {
             data-region="home-bento-grid"
             className="bento-grid [--cols:2] [--ratio:calc(320/243)] md:[--cols:2] md:[--ratio:0.72] lg:[--cols:4] lg:[--ratio:calc(292/243)] xl:[--cols:5]"
           >
-            {/* Create Cards — fixed L-shaped block, breakpoint-invariant placement.
-                The fourth cell (col 2, row 2) is left to the feed: flights are
-                reached from inside an itinerary now, not from here. */}
+            {/* Action Cards — fixed 2×2 block, breakpoint-invariant placement. */}
             <div data-region="home-create-link" className="hidden md:block lg:col-start-1 lg:row-start-1">
               <CreateCard type="link" className="h-full" onAction={() => setNewLinkModalOpen(true)} />
             </div>
@@ -818,6 +1011,17 @@ export default function DashboardPage() {
             </div>
             <div data-region="home-create-itinerary" className="hidden md:block lg:col-start-1 lg:row-start-2">
               <CreateCard type="itinerary" className="h-full" onAction={() => setNewItineraryModalOpen(true)} />
+            </div>
+            <div
+              data-region="home-persona-card"
+              className={cn("hidden md:block lg:col-start-2 lg:row-start-2")}
+            >
+              <PersonaCard
+                persona={persona}
+                isLoading={isPersonaLoading}
+                className="h-full"
+                onAction={() => setPersonaQuizOpen(true)}
+              />
             </div>
 
             {/* Map Tile — pinned top-right (3×2 at xl, 2×2 at lg, full-width banner below) */}
@@ -839,11 +1043,11 @@ export default function DashboardPage() {
             </div>
 
             {/* Latest Viewed — newest content follows the create group and map. An
-                in-flight itinerary outranks any existing card, so it takes this
+                in-flight job outranks any existing card, so it takes this
                 position and the latest item drops into the feed. */}
-            {featuredJob && (
+            {featuredQueueItem && (
               <motion.div
-                key={featuredJob.id}
+                key={featuredQueueItem.job.id}
                 data-region="home-latest-viewed"
                 className="h-full"
                 // Keyed on the job this tile renders, the way every other card
@@ -852,7 +1056,7 @@ export default function DashboardPage() {
                 // which by definition is *not* what it renders once a job takes
                 // it, and which is undefined outright when there is no content.
                 initial={
-                  newItemIdsRef.current.has(featuredJob.id) && !shouldReduceMotion
+                  newItemIdsRef.current.has(featuredQueueItem.job.id) && !shouldReduceMotion
                     ? motionPresets.completionHandoff.initial
                     : false
                 }
@@ -861,15 +1065,10 @@ export default function DashboardPage() {
                   shouldReduceMotion ? motionTransitions.instant : motionTransitions.spatial
                 }
                 onAnimationComplete={() => {
-                  newItemIdsRef.current.delete(featuredJob.id);
+                  newItemIdsRef.current.delete(featuredQueueItem.job.id);
                 }}
               >
-                <ItineraryQueueCardItem
-                  job={featuredJob}
-                  gradient={typeGradients.itinerary}
-                  onRemove={handleRemovePlanningJob}
-                  onRetry={handleRetryPlanningJob}
-                />
+                {renderQueueCardInner(featuredQueueItem)}
               </motion.div>
             )}
             {featuredItem && (
@@ -887,20 +1086,15 @@ export default function DashboardPage() {
               </motion.div>
             )}
 
-            {/* Queue Cards — any further in-flight itineraries, ahead of the feed */}
-            {trailingJobs.map((job) => (
+            {/* Queue Cards — any further in-flight work, ahead of the feed */}
+            {trailingQueueItems.map((queueItem) => (
               <motion.div
-                key={job.id}
+                key={queueItem.job.id}
                 layout
-                data-region="home-itinerary-queue-card"
+                data-region={`home-${queueItem.kind}-queue-card`}
                 className="h-full"
               >
-                <ItineraryQueueCardItem
-                  job={job}
-                  gradient={typeGradients.itinerary}
-                  onRemove={handleRemovePlanningJob}
-                  onRetry={handleRetryPlanningJob}
-                />
+                {renderQueueCardInner(queueItem)}
               </motion.div>
             ))}
 
@@ -938,7 +1132,7 @@ export default function DashboardPage() {
           )}
 
           {/* Empty State */}
-          {!isLoading && filteredContent.length === 0 && visiblePlanningJobs.length === 0 && (
+          {!isLoading && filteredContent.length === 0 && visibleQueueItems.length === 0 && (
             <div data-region="home-empty-state" className="dashboard-empty-state flex w-full flex-col items-center justify-center gap-3 py-16">
               <div className="dashboard-empty-icon-wrapper flex size-14 items-center justify-center rounded-2xl bg-surface-muted">
                 <FolderOpen className="size-7 text-content-secondary" />
@@ -1012,6 +1206,15 @@ export default function DashboardPage() {
         selectedLocationIds={[]}
         onSubmit={handleItinerarySubmit}
         onCancel={() => setNewItineraryModalOpen(false)}
+      />
+
+      {/* Persona Quiz Dialog */}
+      <PersonaQuizDialog
+        open={personaQuizOpen}
+        onOpenChange={setPersonaQuizOpen}
+        persona={persona}
+        onComplete={handlePersonaComplete}
+        onRetake={handlePersonaRetake}
       />
     </div>
   );

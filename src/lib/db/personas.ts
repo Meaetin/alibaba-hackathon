@@ -51,6 +51,8 @@ export interface PersonaStore {
   /** The traveller's persona, which is what every read after sign-in wants. */
   getByUser(userId: string): Promise<PersonaRow | undefined>;
   upsert(input: PersonaWrite): Promise<PersonaRow>;
+  /** Removes the traveller's current persona. Retake uses this before a new result exists. */
+  deleteByUser(userId: string): Promise<boolean>;
 }
 
 export function createPersonaStore(db: Database): PersonaStore {
@@ -105,6 +107,15 @@ export function createPersonaStore(db: Database): PersonaStore {
         .returning();
       return row;
     },
+
+    async deleteByUser(userId) {
+      if (!isUuid(userId)) return false;
+      const deleted = await db
+        .delete(travel_personas)
+        .where(eq(travel_personas.user_id, userId))
+        .returning({ id: travel_personas.id });
+      return deleted.length > 0;
+    },
   };
 }
 
@@ -156,6 +167,15 @@ export function createInMemoryPersonaStore(seed?: {
       };
       rows.set(key, row);
       return row;
+    },
+
+    async deleteByUser(userId) {
+      for (const [id, row] of rows) {
+        if (row.user_id !== userId) continue;
+        rows.delete(id);
+        return true;
+      }
+      return false;
     },
   };
 }

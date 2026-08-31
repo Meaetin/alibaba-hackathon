@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import {
-  AlertTriangle,
   ArrowLeft,
   BaggageClaim,
   Check,
@@ -11,7 +10,6 @@ import {
   Loader2,
   LockKeyhole,
   Plane,
-  ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -391,10 +389,6 @@ export function FlightBookingFlow({ offer, search, selectedSeatId, onSeatSelecti
               </div>
             ))}
           </dl>
-          <div className={cn("flex items-start gap-2 rounded-xl bg-surface-warning-subtle p-3 text-content-warning")}>
-            <AlertTriangle className={cn("mt-0.5 size-4 shrink-0")} aria-hidden="true" />
-            <p className={cn("type-body-3")}>Atlas creates a time-limited order. Complete payment promptly to keep the fare.</p>
-          </div>
           <div className={cn("grid grid-cols-2 gap-2")}>
             <Button variant="secondary" size="md" icon="leading" onClick={() => setStep("seat")}><ArrowLeft className={cn("size-4")} />Back</Button>
             <Button variant="primary" size="md" onClick={() => setStep("payment")}>Continue to payment</Button>
@@ -416,10 +410,6 @@ export function FlightBookingFlow({ offer, search, selectedSeatId, onSeatSelecti
           <div className={cn("grid grid-cols-2 gap-3")}>
             <FormField label="Expiry" value={expiry} onChange={setExpiry} autoComplete="cc-exp" placeholder="MM/YY" />
             <FormField label="Security code" value={securityCode} onChange={setSecurityCode} autoComplete="cc-csc" placeholder="123" />
-          </div>
-          <div className={cn("flex items-start gap-2 rounded-xl bg-surface-success-subtle p-3 text-content-success")}>
-            <ShieldCheck className={cn("mt-0.5 size-4 shrink-0")} aria-hidden="true" />
-            <p className={cn("type-body-3")}>The sandbox simulates Atlas order, payment and ticketing responses.</p>
           </div>
           <div className={cn("grid grid-cols-2 gap-2")}>
             <Button type="button" variant="secondary" size="md" icon="leading" onClick={() => setStep("review")}><ArrowLeft className={cn("size-4")} />Back</Button>

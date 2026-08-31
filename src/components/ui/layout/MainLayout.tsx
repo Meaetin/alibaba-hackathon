@@ -31,7 +31,12 @@ import { queryClient } from "@/lib/query/queryClient";
 import { queryKeys } from "@/lib/query/queryKeys";
 import { getFriendlyApiError } from "@/lib/errors/userMessages";
 import { motionTransitions } from "@/lib/motion/presets";
-import { PLANNING_JOB_CREATED_EVENT } from "@/lib/jobs/events";
+import {
+  announceLinkJob,
+  announcePlanningJob,
+  LINK_JOB_CREATED_EVENT,
+  PLANNING_JOB_CREATED_EVENT,
+} from "@/lib/jobs/events";
 import type { QueueJob } from "@/lib/jobs/types";
 
 function MainLayoutContent({ children }: { children: React.ReactNode }) {
@@ -123,6 +128,28 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const { upsertJob: upsertLinkJob } = useJobsQueue({
+    type: "content-analysis",
+    restoreFor: userId,
+    onJobCompleted: (job) => {
+      const result = (job.result ?? {}) as { content_id?: string; thumbnail?: string };
+      showToast({
+        title: "Link finished analyzing",
+        variant: "success",
+        thumbnail: result.thumbnail ?? job.progress?.thumbnail,
+        action: result.content_id
+          ? { label: "View", href: `/links/${result.content_id}` }
+          : undefined,
+      });
+    },
+    onJobFailed: () => {
+      showToast({ title: "Couldn't analyze this link.", variant: "error" });
+    },
+    onJobRejected: () => {
+      showToast({ title: "No travel locations found in this link.", variant: "error" });
+    },
+  });
+
   useEffect(() => {
     const track = (event: Event) => {
       upsertPlanningJob((event as CustomEvent<QueueJob>).detail);
@@ -130,6 +157,14 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
     window.addEventListener(PLANNING_JOB_CREATED_EVENT, track);
     return () => window.removeEventListener(PLANNING_JOB_CREATED_EVENT, track);
   }, [upsertPlanningJob]);
+
+  useEffect(() => {
+    const track = (event: Event) => {
+      upsertLinkJob((event as CustomEvent<QueueJob>).detail);
+    };
+    window.addEventListener(LINK_JOB_CREATED_EVENT, track);
+    return () => window.removeEventListener(LINK_JOB_CREATED_EVENT, track);
+  }, [upsertLinkJob]);
 
   // The signed-in user, for the navbar avatar and the queue's user-scoped
   // invalidations. One shared query, so this costs no extra request.
@@ -140,8 +175,9 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
   }, [currentUser]);
 
   const handleLinkSubmit = async (linkUrl: string) => {
+    let job: QueueJob;
     try {
-      await createJob("content-analysis", { url: linkUrl });
+      job = await createJob<QueueJob>("content-analysis", { url: linkUrl });
     } catch (err) {
       if (err instanceof AlreadyAnalyzedError) {
         setLinkModalOpen(false);
@@ -154,6 +190,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
       }
       throw err;
     }
+    announceLinkJob(job);
     setLinkModalOpen(false);
     showToast({
       title: "Link sent to queue",
@@ -234,7 +271,7 @@ function MainLayoutContent({ children }: { children: React.ReactNode }) {
       // AI-only itinerary (no locations + AI on) → async job. This persistent
       // layout queue survives page navigation and surfaces completion.
       if (result.kind === "planning") {
-        upsertPlanningJob(result.job);
+        announcePlanningJob(result.job);
         showToast({ variant: "success", title: "Generating itinerary…" });
         return;
       }

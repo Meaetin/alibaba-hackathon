@@ -20,6 +20,10 @@ import { z } from "zod";
 
 import { calculatePersona, isScorableAnswers } from "@/lib/persona/quiz";
 import type { QuizAnswers } from "@/lib/persona/types";
+import {
+  createSavedPreferences,
+  getArchetypePreferenceIds,
+} from "@/lib/preferences/registry";
 
 import { personaRouteDeps, userFor } from "../deps";
 
@@ -30,6 +34,7 @@ const BAD_REQUEST_MESSAGE = "We couldn't read those quiz answers. Please try aga
 const SAVE_FAILED_MESSAGE = "We couldn't save your travel persona. Please try again.";
 const SIGNED_OUT_MESSAGE = "Please sign in to see your travel persona.";
 const READ_FAILED_MESSAGE = "We couldn't load your travel persona. Please try again.";
+const RESET_FAILED_MESSAGE = "We couldn't reset your travel persona. Please try again.";
 
 /**
  * Shape only. Whether each index names a real option is `isScorableAnswers`'
@@ -124,5 +129,43 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     console.error("[POST /api/persona] the persona could not be saved", error);
     return Response.json({ error: SAVE_FAILED_MESSAGE }, { status: 500 });
+  }
+}
+
+/**
+ * `DELETE /api/persona` — starts a genuine retake.
+ *
+ * Retake is not a temporary dialog mode: the current persona stops describing
+ * the traveller the moment they choose it. Its preset preference tags leave
+ * with it, while every preference they added independently stays saved.
+ */
+export async function DELETE(request: Request): Promise<Response> {
+  const deps = personaRouteDeps.create();
+  const user = await userFor(request, deps);
+  if (!user) return Response.json({ error: SIGNED_OUT_MESSAGE }, { status: 401 });
+
+  try {
+    const row = await deps.personas.getByUser(user.id);
+    const currentPreferences = await deps.users.readPreferences(user.id);
+    let preferences = currentPreferences ?? null;
+
+    if (row && currentPreferences) {
+      const now = deps.now();
+      const personaIds = new Set(getArchetypePreferenceIds(row.archetype));
+      preferences = createSavedPreferences(
+        currentPreferences.selectedIds.filter((id) => !personaIds.has(id)),
+        currentPreferences.confirmedConstraintIds.filter((id) => !personaIds.has(id)),
+        currentPreferences.preferredEndTime,
+        null,
+        now,
+      );
+      await deps.users.writePreferences({ userId: user.id, preferences, now });
+    }
+
+    await deps.personas.deleteByUser(user.id);
+    return Response.json({ preferences });
+  } catch (error) {
+    console.error("[DELETE /api/persona] the persona could not be reset", error);
+    return Response.json({ error: RESET_FAILED_MESSAGE }, { status: 500 });
   }
 }
